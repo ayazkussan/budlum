@@ -1,0 +1,58 @@
+From 34d1abb354e34beaf39d7cca4f5453c5bcb497a2 Mon Sep 17 00:00:00 2001
+From: Lubo's Ruler <ayazkussann@gmail.com>
+Date: Wed, 9 Sep 2026 17:18:23 +0000
+Subject: [PATCH] workspace: merge yasaagi karni + orphan fork main bulgusu +
+ sandbox yenileme
+
+---
+ BAGLANTILIK-LOG.md | 11 ++++++++---
+ memory/hafiza.md   | 17 +++++++++++++++++
+ 2 files changed, 25 insertions(+), 3 deletions(-)
+
+diff --git a/BAGLANTILIK-LOG.md b/BAGLANTILIK-LOG.md
+index 4c653dd..3d1712c 100644
+--- a/BAGLANTILIK-LOG.md
++++ b/BAGLANTILIK-LOG.md
+@@ -76,6 +76,11 @@ doğrulayıcı (run numaraları PR #1 check-runs'da).
+ 3. VerifyMerkle açma: 64-derinlik soundness kanıtı + ceremony — harici bağımlılık.
+ 4. ~~Zamanlayıcı~~ — KARAR (2026-09-09): kalıcı Arena oturumu yeter; cron kurulmaz.
+ 5. Model kaynağı (fine-tune / sıfırdan) — direktif açık noktası.
+-6. ~~Fork Actions / CI kaynağı~~ — KARAR (2026-09-09): fork'ta Actions açılmaz;
+-   kullanıcı UPSTREAM PR açacak (budlum-xyz/budlum) — orijinal CI orada koşar,
+-   kanıt numaraları o PR'dan alınacak. Fork PR #1 oturum kaydı + denetim yüzeyi.
++6. CI kaynağı — DURUM (2026-09-09, güncel): kullanıcı fork'ta "Allow all
++   actions"i AÇTI. Ancak fork'un `main`i ORPHAN kök commit (685caca
++   "Create rust.yml" — soyu yok, tüm repo ağacının tek commit'lik
++   anası; basit rust.yml: cargo build+test, push+PR tetikli). Dal (usl
++   soyu) ile soybağı yok → PR `CONFLICTING`, merge ref üretilmiyor →
++   PR workflow'ları KOŞMUYOR. KULLANICI KARARI (sert): MERGE YASAK;
++   workflow'ları kullanıcı SONRA çalıştıracak. Agent merge/rebase/fork-
++   main müdahalesi yapmaz. (Upstream PR seçeneği hâlâ açık.)
+diff --git a/memory/hafiza.md b/memory/hafiza.md
+index a0223e6..f546c4a 100644
+--- a/memory/hafiza.md
++++ b/memory/hafiza.md
+@@ -6927,3 +6927,20 @@ Tek commit; CI dogrular. E4 sirada.
+   circuit), BNS BAĞLI (4 tx + arm'lar + RPC), B.U.D. BAĞLI (perception content_id
+   + asset binding; byte off-chain tasarım). Sapma: "src/lubot" modülü canlı repoda
+   yok (ürün yüzeyi = AI katmanı). Model kaynağı kararı hâlâ AÇIK.
++
++## 2026-09-09 — MERGE YASAĞI + orphan fork main + sandbox yenileme
++
++- KULLANICI KARARI (sert): MERGE YAPMA (yasak). Workflow'ları kullanıcı SONRA
++  çalıştıracak. Ben merge/rebase/fork-main müdahalesi yapmayacağım.
++- BULGU: fork'un main'i ORPHAN kök commit (685caca "Create rust.yml", soyu yok,
++  tam repo ağacı + basit rust.yml). Dal usl soyundan → soybağı yok → PR
++  CONFLICTING, merge ref yok → PR workflow'ları koşmuyor (Actions açık olmasına
++  rağmen). Fork main düzeltilene dek kanıt standardı karşılanamaz.
++- OLAY: merge denemesi başladı, kullanıcı durdurdu; commit oluşmadan durduruldu,
++  şube remote'dan (729f540) geri yüklendi. Uzak dal hiç etkilenmedi.
++- DERS: (1) uzak refspec yalnız main'i takip ediyor — remote durumu
++  `git ls-remote` ile doğrula; (2) sandbox yenilendi: workspace+lubot klonları
++  silindi; workspace 11 patch'ten yeniden kurdum (git am, committer env ile);
++  TEKLİ KAYNAK = tek PR dalı (repo-lubot + repo-workspace patch'leri ağaçta).
++- LUBOT klonu bu turla yeniden kurulmadı (gerektiğinde repo-lubot patch'lerinden
++  kurdurulur; base 12bc9ac).
+-- 
+2.39.5
+
