@@ -1,7 +1,7 @@
 From de625bb015ecafa8f83fe864981101b60e0e5977 Mon Sep 17 00:00:00 2001
 From: Lubo's Ruler <ayazkussann@gmail.com>
 Date: Wed, 9 Sep 2026 16:47:33 +0000
-Subject: [PATCH 7/7] workspace: tam direktif kaydi + BAGLANTILIK-LOG
+Subject: [PATCH 07/10] workspace: tam direktif kaydi + BAGLANTILIK-LOG
  (VerifyMerkle canli tefit) + CI bulgusu
 
 ---

@@ -1,0 +1,27 @@
+From e178334c9f2eef0579d46c6ffbccb406d8c126be Mon Sep 17 00:00:00 2001
+From: Lubo's Ruler <ayazkussann@gmail.com>
+Date: Wed, 9 Sep 2026 16:55:49 +0000
+Subject: [PATCH 09/10] workspace: Lubot cagri zincirleri canli dogrulama
+ (AiRegistry/Pollen/BNS/B.U.D.) + src/lubot sapmasi
+
+---
+ memory/hafiza.md | 6 ++++++
+ 1 file changed, 6 insertions(+)
+
+diff --git a/memory/hafiza.md b/memory/hafiza.md
+index e84bb3e..a0223e6 100644
+--- a/memory/hafiza.md
++++ b/memory/hafiza.md
+@@ -6921,3 +6921,9 @@ Tek commit; CI dogrular. E4 sirada.
+ - KARARLAR (kullanici): (1) fork Actions ACILMAYACAK — upstream PR kullanicinin
+   isareti; CI kanitlari upstream PR'dan gelecek (fork PR = kayit + denetim).
+   (2) Zamanlayici: KALICI ARENA OTURUMU yeter; cron workflow kurulmayacak.
++- LUBOT ÇAĞRI ZİNCİRLERİ CANLI DOĞRULANDI (mock değil; hepsi executor transaction
++  arm'larında): AiRegistry BAĞLI (account state + AiInferenceRequest/Result arm'ları),
++  Pollen AccessGrant BAĞLI (validate_ai_read_ref → consume_ai_read_grant, closed
++  circuit), BNS BAĞLI (4 tx + arm'lar + RPC), B.U.D. BAĞLI (perception content_id
++  + asset binding; byte off-chain tasarım). Sapma: "src/lubot" modülü canlı repoda
++  yok (ürün yüzeyi = AI katmanı). Model kaynağı kararı hâlâ AÇIK.
+-- 
+2.39.5
+
