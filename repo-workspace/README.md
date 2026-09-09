@@ -12,7 +12,7 @@ git -C <workspace-klonu> am patches/000*.patch
 Patch sirasi 0001..0005 (sira kritik; hafiza.md append'lari birbiri
 uzerine yazilir).
 
-## Icerik (6 commit)
+## Icerik (7 commit)
 1. DENETIM-2026-09-09G: AR-GE-6 F-12 + Lubot izolasyon raporu + hafiza.
 2. DENETIM-2026-09-09H: AR-GE-6 production writer + larva bulgusu +
    Lubot denetim + hafiza.
@@ -21,3 +21,5 @@ uzerine yazilir).
 5. Surekli denetim direktifi + tek PR modeli (kullanici kararlari).
 6. DENETIM-2026-09-09I: B.U.D. entegrasyon denetimi (canli repoda
    UNWIRED durumlarin yeniden dogrulanmasi) + hafiza.
+7. Tam surekli-denetim direktifi kaydi + BAGLANTILIK-LOG (modul
+   durumlari SHA'li; VerifyMerkle canli tefidi) + CI bulgusu.
