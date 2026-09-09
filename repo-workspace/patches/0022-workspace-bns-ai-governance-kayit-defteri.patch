@@ -1,0 +1,61 @@
+From cabd82b6d2b3a6f7a4e992a9ef3c04eac73884e2 Mon Sep 17 00:00:00 2001
+From: ayazkussan <149924814+ayazkussan@users.noreply.github.com>
+Date: Wed, 9 Sep 2026 19:32:26 +0000
+Subject: [PATCH] denetim-2026-09-09N 5d: BNS/AI/governance/constitution clean
+ + built-but-unwired kayit defteri
+
+---
+ ...A4-KONSENSUS-FINALITY-DOMAIN-COMMITMENT.md | 37 +++++++++++++++++++
+ 1 file changed, 37 insertions(+)
+
+diff --git a/DENETIM-2026-09-09N-DALGA4-KONSENSUS-FINALITY-DOMAIN-COMMITMENT.md b/DENETIM-2026-09-09N-DALGA4-KONSENSUS-FINALITY-DOMAIN-COMMITMENT.md
+index 7f4a984..1832e2e 100644
+--- a/DENETIM-2026-09-09N-DALGA4-KONSENSUS-FINALITY-DOMAIN-COMMITMENT.md
++++ b/DENETIM-2026-09-09N-DALGA4-KONSENSUS-FINALITY-DOMAIN-COMMITMENT.md
+@@ -155,6 +155,43 @@ dokümante değil.
+   regresyon; log EOF nedeniyle ayrım yapılamadı. İzle: Determinism sonucu
+   + sonraki log erişimi.
+ 
++## 5d. BNS, AI registry, governance, constitution — clean + entegrasyon boşluğu kayıt defteri
++
++- **BNS (435)**: register = Unicode char sayımı (3..=32), duration>0,
++  **grace period (F14)** — süresi dolan isimde eski sahibin yenileme penceresi
++  (front-running squatter bloklu), MAX_NAMES fail-closed + expired eviction.
++  **`renew`/`transfer` hiçbir tx type'ta yok** — kodda açıkça dokümante edilmiş
++  wiring gap ("recorded here rather than smuggled into a hardening pass"):
++  canlı zincirde sahip isim yenileyemez/devredemez; güvenli hareket (erken
++  renew) ile ucuz hareket (bekle) zıt yönlü. Güvenlik deliki değil (grace
++  period sahibin korunuyor), fonksiyonel gap.
++- **AI registry (2035, örneklem)**: submit_result sert — verifier yetkilendirme
++  (stake threshold + whitelist modu; HIGH security review fix'i dokümante),
++  submitted_at_block = konsensüs bloku (u64::MAX prune-ezici bug'ı
++  dokümante), output_ref limit, çift deadline (request + spec), nonce≥1,
++  **equivocation** (aynı verifier farklı commitment → on-chain event + QoS
++  kaydı + dispute flag), cancel/fee-reclaim terminal state.
++- **governance (1322)**: add_vote tek oy (voters map) + window gate;
++  `reduce_vote_weight` slash ağırlığı düşürür ama adres voters'da kalır
++  (re-stake ile ikinci oy yok — dokümante); finalize epoch gate
++  (early-finalize attack dokümante) + u128 quorum; proposer epoch count
++  exponential fee (2^count spam koruması, pruning).
++- **constitution (347)**: hard guardrail'lar (AI default-deny, read-override
++  yasağı, permissionless-core admin-whitelist yasağı, PoA island isolation,
++  private-key custody yasağı, evidence-API no-plaintext) governance ile
++  **değiştirilemez** (validate_update reject); bounded parametreler +
++  rationale_hash zorunlu + canonical root.
++
++### Entegrasyon boşluğu kayıt defteri (built-but-unwired, pre-mainnet)
++
++| # | Bileşen | Durum | Referans |
++|---|---|---|---|
++| 1 | **F-4**: BridgeRelayerPipeline event tree + commitment event_root anchoring | ağaç test-only, root çapasız, relay proof kapısı decorative | §4 |
++| 2 | ProofMarketState | AccountState'te dormant slot, üretim yazarı yok | §5c |
++| 3 | BNS renew/transfer | tx type yok, yalnız test çağırıyor | §5d |
++| 4 | `expired_relays()` slashing consumer | üretim çağıranı yok | 09K notu |
++| 5 | Model kaynağı kararı | kullanıcı kararı AÇIK | hafiza |
++
+ ## 6. Döngü durumu
+ 
+ - W1 ✅ (F-1 e4f472b) · W2 ✅ (E-7 fe5461e, E-1 a8b45e1) · W3 ✅ (F-3 8ba7eab)
+-- 
+2.39.5
+
