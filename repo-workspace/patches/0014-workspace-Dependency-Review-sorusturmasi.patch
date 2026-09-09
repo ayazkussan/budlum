@@ -1,0 +1,71 @@
+From 3957f05219e6a6c3e2967c7b73e863c881cc2922 Mon Sep 17 00:00:00 2001
+From: Lubo's Ruler <ruler@lubot.local>
+Date: Wed, 9 Sep 2026 17:42:48 +0000
+Subject: [PATCH] workspace: Dependency Review sorusturmasi (upstream kontrolu,
+ hipotezlerin elenmesi, fork log altyapisi bulgusu)
+
+---
+ DENETIM-2026-09-09J-STATE-ROOT-KAPSAMI.md | 45 +++++++++++++++++++++++
+ 1 file changed, 45 insertions(+)
+
+diff --git a/DENETIM-2026-09-09J-STATE-ROOT-KAPSAMI.md b/DENETIM-2026-09-09J-STATE-ROOT-KAPSAMI.md
+index 63566b6..c579916 100644
+--- a/DENETIM-2026-09-09J-STATE-ROOT-KAPSAMI.md
++++ b/DENETIM-2026-09-09J-STATE-ROOT-KAPSAMI.md
+@@ -75,8 +75,53 @@ vektörünü kapatır (savunma derinliği).
+ sandbox silinmiş). Dependency Review failure (run 34382738375) ayrı
+ takip: log alıcı geçici `EOF`, ayrıntı bu turun dışına kaldı.
+ 
++## CI kapısı soruşturması — Dependency Review (3/3 push failure)
++
++**Enfra altyapı bulgusu (KANITLI):** fork'ta TÜM run'ların logları
++(success dahi: 34382738367, 34382738375, 34384249098, 34384294555,
++34384294708, 34384294747) `results-receiver ... EOF` ile alınamıyor;
++check-run output + annotation API'leri de boş. Fork log altyapısı
++bu turda işlevsiz → CI kanıtı yalnız run-ID + status.
++
++**Hareket eden delil (yalnızca bu PR'a özgü):**
++- Upstream kontrolü: `budlum-xyz/budlum` PR 57'de AYNİ workflow + AYNİ
++  ağaç içeriği (bud/fuzz lock'suzluk upstream'de de var) → **success**.
++  → içerik/lock'suz manifest tek başına fail nedeni değil.
++- Kök manifest diff = yalnız yorum (bağımlılık yok); kök lock değişmemiş.
++- fuzz/, kani/, bud/fuzz/ manifest diff'leri = license+yorum (dep yok).
++- Gerçek dep delta = yalnız `bud-core`: `rand_core` dev-dep → production
++  (`bud/Cargo.toml`); `bud/Cargo.lock` diff'i yalnız versiyon satırı
++  (0.1.0→0.2.0) — "rand_core 0.6.4" satırı BASE lock'ta ZATEN mevcut
++  (base manifest=dev-dep ile tutarsız orphan base).
++- rand_core'a karşı GH Advisory DB'de moderate+ advisory YOK (API ile
++  doğrulandı).
++- rand_core 0.6.5 MEVCUT DEĞİL (crates.io API) → "lock'u gerçekten
++  değiştiren patch bump" yolu kapalı.
++- Merge sonrası orphan, head'in ATA'SI → PR diff'i normal
++  ata-torun diff'i (soybağı mekanizması ölü).
++
++**Kalan hipotez (doğrulanamadı — log yok):** action'ın `verify` modu,
++manifest delta'sındaki `rand_core` terfiyi lock DIFF'inde arıyor
++(diff-backing) ve bulamıyor. Alternatif: action'ın orphan-base kökenli
++tutarsız base state'i (base manifest≠base lock) üzerindeki davranışı.
++**Karar:** bu turda yarım yamalak lock manipülasyonu yapılmadı
++(0.6.5 yok; 0.10'a geçiş = API kırımı, yerel cargo'suz tehlikeli).
++Log altyapısı toparlanınca (veya kullanıcı Checks UI'ından hata
++metnini paylaşırsa) kesin neden + düzeltme. Aday düzeltmeler:
++(a) `bud/Cargo.lock`'u rand_core satırı diff'le gerçekleştirecek
++meşru bir lock yenilemesi (cargo ile, log doğrulamasından sonra);
++(b) workflow'a `verify: false` geçici istisnası — red değil.
++
++**40-run durumu (7e04e3f itibarıyla):** success 4 (OSV, Semver,
++bud2-skill-runner x2), failure 5 (Dependency Review x3, Miri, Diverse,
++Benchmark), cancelled 12 (e4f472b seti, 7e04e3f ile stale), aktif 19
++(CI ana workflow, Determinism, Grype, Security Audit, Supply Chain,
++Extra Tooling, Cargo Vet, Docker Smoke, Typos, Semgrep...).
++
+ ## Sonraki dalga
+ 
+ 2. executor tx kolları: bakiye/nonce/burn hesapları satır satırı.
+ 3. `sweep_retired_relays` + `relay_ledger_root` bloğa bağlanması.
+ 4. consensus/finality yolu.
++5. CI failure'larının log detayları (altyapı toparlanınca): Miri,
++   Benchmark, Diverse Double Compiling, Dependency Review.
+-- 
+2.39.5
+
