@@ -353,6 +353,18 @@ pub enum ChainCommand {
         storage_root: Option<crate::domain::Hash32>,
         response: oneshot::Sender<Result<u64, String>>,
     },
+    AcceptStorageReallocation {
+        ticket_id: u64,
+        replacement_operator: crate::core::address::Address,
+        payer: crate::core::address::Address,
+        start_epoch: u64,
+        end_epoch: u64,
+        economics: crate::domain::storage_deal::StorageEconomicsParams,
+        domain_params: crate::domain::storage_params::StorageDomainParams,
+        merkle_proof: Option<Vec<u8>>,
+        storage_root: Option<crate::domain::Hash32>,
+        response: oneshot::Sender<Result<u64, String>>,
+    },
     RegisterStorageManifest {
         manifest: crate::storage::ContentManifest,
         response: oneshot::Sender<Result<crate::storage::ContentId, String>>,
@@ -953,6 +965,38 @@ impl ChainHandle {
                 operator,
                 payer,
                 replica_index,
+                start_epoch,
+                end_epoch,
+                economics,
+                domain_params,
+                merkle_proof,
+                storage_root,
+                response: tx,
+            })
+            .await;
+        rx.await
+            .unwrap_or_else(|_| Err("Actor dropped".to_string()))
+    }
+
+    pub async fn accept_storage_reallocation(
+        &self,
+        ticket_id: u64,
+        replacement_operator: crate::core::address::Address,
+        payer: crate::core::address::Address,
+        start_epoch: u64,
+        end_epoch: u64,
+        economics: crate::domain::storage_deal::StorageEconomicsParams,
+        domain_params: crate::domain::storage_params::StorageDomainParams,
+        merkle_proof: Option<Vec<u8>>,
+        storage_root: Option<crate::domain::Hash32>,
+    ) -> Result<u64, String> {
+        let (tx, rx) = oneshot::channel();
+        let _ = self
+            .tx
+            .send(ChainCommand::AcceptStorageReallocation {
+                ticket_id,
+                replacement_operator,
+                payer,
                 start_epoch,
                 end_epoch,
                 economics,
@@ -3741,6 +3785,36 @@ impl ChainActor {
                         merkle_proof,
                         storage_root,
                     ));
+                }
+                ChainCommand::AcceptStorageReallocation {
+                    ticket_id,
+                    replacement_operator,
+                    payer,
+                    start_epoch,
+                    end_epoch,
+                    economics,
+                    domain_params,
+                    merkle_proof,
+                    storage_root,
+                    response,
+                } => {
+                    if self.storage_economics_disabled_on_mainnet() {
+                        let _ = response.send(Err(Self::mainnet_storage_disabled_error()));
+                        continue;
+                    }
+                    let _ = response.send(
+                        self.blockchain.accept_storage_reallocation_with_escrow(
+                            ticket_id,
+                            replacement_operator,
+                            payer,
+                            start_epoch,
+                            end_epoch,
+                            economics,
+                            &domain_params,
+                            merkle_proof,
+                            storage_root,
+                        ),
+                    );
                 }
                 ChainCommand::RegisterStorageManifest { manifest, response } => {
                     if self.storage_economics_disabled_on_mainnet() {
