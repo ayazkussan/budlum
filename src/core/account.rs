@@ -1796,6 +1796,40 @@ impl AccountState {
         self.registry.set_params(params);
         Ok(())
     }
+    /// Anchor the latest *finalized* external state root for a domain into the
+    /// consensus-owned [`Self::external_roots`] registry.
+    ///
+    /// This is the **create / supersede** step of the external-root anchor
+    /// lifecycle (AR-GE-6 / F-11). `external_roots` is the only source the
+    /// relayer gate consults: a `RelayerResult` is accepted only when its
+    /// declared `external_state_root` equals a finalized anchor. The write path
+    /// is **consensus-only** — it is driven by a light-client-verified finality
+    /// fact for the domain (AR-GE-6 / F-12) — and a relayer transaction can
+    /// never reach this method: the executor gate only reads `external_roots`.
+    /// Keeping the write here, out of the relayer path, is what closes the
+    /// relayer-data-to-open trap.
+    ///
+    /// Semantics:
+    /// - One finalized root per domain; re-anchoring **supersedes** the prior
+    ///   root, so the anchor tracks the domain's latest finality.
+    /// - The zero root is rejected: it encodes "no state commitment" and must
+    ///   not stand in for a real one, mirroring the relayer gate's own
+    ///   zero-root rejection.
+    ///
+    /// Returns `true` when an anchor was written, `false` when the root was
+    /// rejected (zero).
+    pub fn anchor_external_root(
+        &mut self,
+        domain_id: crate::domain::types::DomainId,
+        root: crate::domain::types::Hash32,
+    ) -> bool {
+        if root == [0u8; 32] {
+            return false;
+        }
+        self.external_roots.insert(domain_id, root);
+        true
+    }
+
     pub fn add_balance(&mut self, public_key: &Address, amount: u64) {
         let account = self.get_or_create(public_key);
         account.balance = account.balance.saturating_add(amount);
@@ -3251,6 +3285,66 @@ mod tests {
         state.external_roots.insert(7, [0x77; 32]);
         let root_after = state.calculate_state_root();
         assert_ne!(root_before, root_after);
+    }
+
+    /// AR-GE-6 / F-11: anchoring a finalized external root (the registry's
+    /// create step) must move the state root, exactly like a direct insert.
+    #[test]
+    fn anchor_external_root_changes_state_root() {
+        let mut state = AccountState::new();
+        state.add_balance(&test_addr_from_byte(9u8), 1);
+        let root_before = state.calculate_state_root();
+        assert!(state.anchor_external_root(7, [0x77; 32]));
+        assert_eq!(state.external_roots.get(&7), Some(&[0x77; 32]));
+        assert_ne!(state.calculate_state_root(), root_before);
+    }
+
+    /// AR-GE-6 / F-11: the zero root encodes "no state commitment" and must be
+    /// refused, so an empty anchor can never stand in for a real one.
+    #[test]
+    fn anchor_external_root_rejects_zero_root() {
+        let mut state = AccountState::new();
+        state.add_balance(&test_addr_from_byte(9u8), 1);
+        let root_before = state.calculate_state_root();
+        assert!(!state.anchor_external_root(7, [0u8; 32]));
+        assert!(state.external_roots.is_empty());
+        assert_eq!(state.calculate_state_root(), root_before);
+    }
+
+    /// AR-GE-6 / F-11: one finalized root per domain; re-anchoring supersedes
+    /// the prior root (the anchor tracks the domain's latest finality).
+    #[test]
+    fn anchor_external_root_supersedes_prior_anchor() {
+        let mut state = AccountState::new();
+        assert!(state.anchor_external_root(7, [0x11; 32]));
+        assert!(state.anchor_external_root(7, [0x22; 32]));
+        assert_eq!(state.external_roots.get(&7), Some(&[0x22; 32]));
+        assert_eq!(state.external_roots.len(), 1);
+    }
+
+    /// AR-GE-6 / F-12 (lifecycle pin): the relayer gate accepts a declared
+    /// `external_state_root` only when it equals a root already anchored
+    /// through the consensus path. A relayer transaction has no write path
+    /// into `external_roots`, so it cannot open an anchor for itself. This
+    /// models the executor gate invariant (the gate reads `external_roots`;
+    /// the relayer cannot populate it).
+    #[test]
+    fn relayer_gate_depends_on_consensus_anchor_not_relayed_root() {
+        let mut state = AccountState::new();
+        let domain: u32 = 42;
+        let declared_root: [u8; 32] = [0xab; 32];
+
+        // executor.rs, `RelayerResult` arm: `external_roots.get(&domain) ==
+        // Some(&declared_root)`.
+        let gate_holds =
+            |s: &AccountState| s.external_roots.get(&domain) == Some(&declared_root);
+
+        // Unanchored: a relayer-declared root must not be accepted.
+        assert!(!gate_holds(&state));
+
+        // Only the consensus anchor can open it; the relayer path cannot.
+        assert!(state.anchor_external_root(domain, declared_root));
+        assert!(gate_holds(&state));
     }
 
     #[test]
