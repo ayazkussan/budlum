@@ -1543,25 +1543,35 @@ impl Blockchain {
         proof: FinalityProof,
     ) -> Result<(), String> {
         self.verify_domain_commitment_finality(&commitment, &proof)?;
-        // AR-GE-6: the only production writer of the consensus-owned
-        // external-root registry. The anchor lands only after the domain's
-        // own adapter has proven finality, and before the commitment
-        // advances the domain registry. The executor's relayer gate reads
-        // `external_roots` exclusively, so a relayer transaction can never
-        // mint the anchor it relies on (the relayer-data-to-open trap stays
-        // closed).
-        //
-        // A zero state root is refused outright (fail-closed): it anchors
-        // nothing, and the relayer gate already rejects zero roots on the
-        // result side, so accepting such a commitment could only advance a
-        // domain that can never satisfy the gate.
-        if !self.state.anchor_external_root(commitment.domain_id, commitment.state_root) {
+        let domain_id = commitment.domain_id;
+        let domain_height = commitment.domain_height;
+        let state_root = commitment.state_root;
+        // AR-GE-6: a zero state root anchors nothing, and the relayer gate
+        // already rejects zero roots on the result side, so such a
+        // commitment could only advance a domain that can never satisfy the
+        // gate. Refused before anything moves (fail-closed).
+        if state_root == [0u8; 32] {
             return Err(format!(
-                "Domain {} height {}: zero state root, no external-root anchor written (fail-closed)",
-                commitment.domain_id, commitment.domain_height
+                "Domain {domain_id} height {domain_height}: zero state root, no external-root anchor written (fail-closed)"
             ));
         }
-        self.accept_domain_commitment(commitment)
+        self.accept_domain_commitment(commitment)?;
+        // AR-GE-6: the only production writer of the consensus-owned
+        // external-root registry. The anchor lands only after the domain's
+        // own adapter has proven finality AND the commitment was accepted,
+        // so a rejected or equivocal commitment never leaves an orphan
+        // anchor behind. The executor's relayer gate reads `external_roots`
+        // exclusively, so a relayer transaction can never mint the anchor
+        // it relies on (the relayer-data-to-open trap stays closed).
+        if !self.state.anchor_external_root(domain_id, state_root) {
+            // Unreachable: the zero root was refused above. If this were
+            // ever reached, the commitment advanced without its anchor —
+            // fail loud instead of trusting the invariant.
+            return Err(format!(
+                "Domain {domain_id} height {domain_height}: anchor write failed after acceptance (invariant broken)"
+            ));
+        }
+        Ok(())
     }
 
     /// Build the signed `StateUpdateTx` that carries a verified commitment's
