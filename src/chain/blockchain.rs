@@ -4207,11 +4207,17 @@ impl Blockchain {
             merkle_root(&settlement_window)
         };
         committed_state.settlement_root = settlement_root;
-        committed_state.global_header_summary = self
-            .global_headers
-            .last()
-            .map(|h| h.calculate_hash_bytes())
-            .unwrap_or([0u8; 32]);
+        // Canonical (zero) global header summary in the state root (audit
+        // 2026-09-09, F-3): the last sealed header is node-local operator
+        // state. Until H-10 carries the commitment into the L1 block,
+        // hashing the node's own seal into the root made the root
+        // irreproducible by every other node - a guaranteed self-fork the
+        // moment an operator seals. The validation paths
+        // (validate_candidate_chain / try_reorg) already use the empty
+        // canonical value; production now matches them. The sealed chain
+        // stays committed via its own previous_global_hash chain +
+        // persistence.
+        committed_state.global_header_summary = [0u8; 32];
         block.state_root = committed_state.calculate_state_root();
         if self.sharding.is_active_at(block.index) {
             block.shards_root = Some(crate::sharding::shards_commitment(
@@ -4520,11 +4526,11 @@ impl Blockchain {
                 merkle_root(&settlement_window)
             };
             commit_state.settlement_root = settlement_root;
-            commit_state.global_header_summary = self
-                .global_headers
-                .last()
-                .map(|h| h.calculate_hash_bytes())
-                .unwrap_or([0u8; 32]);
+            // Canonical (zero) global header summary - the same rule the
+            // producer applies (audit 2026-09-09, F-3): the sealed header is
+            // node-local operator state and must not enter the reproducible
+            // state root until H-10 carries the commitment in the block.
+            commit_state.global_header_summary = [0u8; 32];
             let computed_root = commit_state.calculate_state_root();
             if computed_root != block.state_root {
                 return Err(format!(
@@ -7421,6 +7427,35 @@ mod tests {
         receiver
             .validate_and_add_block(block)
             .expect("peer must accept a self-produced mainnet block");
+    }
+
+    /// Audit 2026-09-09, F-3: an operator sealing global headers must not
+    /// fork the node. The last sealed header is node-local operator state;
+    /// hashing it into the state root made the producer's root irreproducible
+    /// by unsealed peers (and inconsistent with the reorg paths, which
+    /// validate against the empty canonical value). Regression: a producer
+    /// that has sealed produces a block an unsealed peer accepts.
+    #[test]
+    fn sealed_global_header_does_not_fork_peer_state_root() {
+        let chain_id = crate::core::chain_config::Network::Mainnet
+            .chain_id()
+            .value();
+        let producer = Address::from([0xABu8; 32]);
+        let mut producer_chain = Blockchain::new(Arc::new(PoWEngine::new(0)), None, chain_id, None);
+
+        // The operator exercises the seal path (bud_sealGlobalHeader).
+        producer_chain.seal_global_header(None).expect("first seal");
+        producer_chain.seal_global_header(None).expect("second seal");
+        assert_eq!(producer_chain.global_headers.len(), 2);
+
+        let (block, _) = producer_chain
+            .produce_block(producer)
+            .expect("producer should create a block after sealing");
+
+        let mut receiver = Blockchain::new(Arc::new(PoWEngine::new(0)), None, chain_id, None);
+        receiver
+            .validate_and_add_block(block)
+            .expect("peer without any sealed global header must accept the block");
     }
 
     #[test]
