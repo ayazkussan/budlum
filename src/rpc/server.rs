@@ -1851,6 +1851,15 @@ impl BudlumApiServer for RpcServer {
         proof: crate::cross_domain::event_tree::MerkleProof,
         source_domain: crate::domain::types::DomainId,
     ) -> Result<serde_json::Value, ErrorObjectOwned> {
+        // Audit 2026-09-09 (E-7): this RPC applies consensus state changes
+        // OUTSIDE block execution (bridge mint/unlock + balance credits via
+        // Blockchain::submit_relay_proof), so a public-listener caller would
+        // fork the node against the network. All five sibling bridge-mutating
+        // RPCs (mint/burn/unlock x3) carry this operator gate; this one did
+        // not. The consensus-correct rework (verify + ledger record only, with
+        // settlement via the on-chain RelayerResult transaction) is logged as
+        // an open design item; until it lands the gate is the minimum.
+        self.require_operator("bud_submitRelayProof")?;
         let clean_addr = relayer.strip_prefix("0x").unwrap_or(&relayer);
         let relayer_addr = Address::from_hex(clean_addr).map_err(|e| {
             ErrorObjectOwned::owned(-32602, format!("Invalid relayer address: {e}"), None::<()>)
