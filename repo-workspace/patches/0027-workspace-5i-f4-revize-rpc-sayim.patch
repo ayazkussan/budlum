@@ -1,0 +1,69 @@
+From aa9a2ac77da21283a01b8a7f1a4100ab0a8f0cc7 Mon Sep 17 00:00:00 2001
+From: ayazkussan <149924814+ayazkussan@users.noreply.github.com>
+Date: Wed, 9 Sep 2026 20:29:38 +0000
+Subject: [PATCH] denetim-2026-09-09N 5i: F-4 kapsam duzeltmesi (finality proof
+ yolu) + RPC kapi sayimi
+
+---
+ ...A4-KONSENSUS-FINALITY-DOMAIN-COMMITMENT.md | 48 +++++++++++++++++++
+ 1 file changed, 48 insertions(+)
+
+diff --git a/DENETIM-2026-09-09N-DALGA4-KONSENSUS-FINALITY-DOMAIN-COMMITMENT.md b/DENETIM-2026-09-09N-DALGA4-KONSENSUS-FINALITY-DOMAIN-COMMITMENT.md
+index 514a00d..fb7d36e 100644
+--- a/DENETIM-2026-09-09N-DALGA4-KONSENSUS-FINALITY-DOMAIN-COMMITMENT.md
++++ b/DENETIM-2026-09-09N-DALGA4-KONSENSUS-FINALITY-DOMAIN-COMMITMENT.md
+@@ -316,3 +316,51 @@ Yeni bulgu: **F-4 (MEDIUM)** yalnız; built-but-unwired kayıt defteri 6 madde.
+ Kod tabanı tutarlı bir self-audit kültürü taşıyor (kritik path'lerin çoğu
+ geçmiş bulgu + fix + dokümantasyon içeriyor); denetim bu dokümantasyonu
+ bağımsız doğruladı, çelişki bulunmadı.
++
++## 5i. F-4 KAPSAM DÜZELTMESİ + RPC kapı sayımı (150 metod)
++
++**F-4 revizyonu (MEDIUM → LOW-MEDIUM)**: §4'teki analiz, raw
++`submit_domain_commitment` yolunu varsayıyordu; o yol RPC'de **kapalı**
++("Raw domain commitment submission is disabled; use
++bud_submitVerifiedDomainCommitment with a finality proof"). Üretim yolu:
++`submit_verified_domain_commitment` =
++1. `verify_domain_commitment_finality`: proof-hash binding
++   (commitment.finality_proof_hash == hash(proof)) + ConsensusKind'e göre
++   adapter (PoW: bounded header chain, PoS: QC, PoA: imza, BFT: adapter,
++   Zk: ProofClaimRegistry claim binding — "trait always rejects" tuzağı
++   dokümante, Custom: plugin adapter),
++2. zero state root red (AR-GE-6 fail-closed),
++3. `accept_domain_commitment` (sequency/equivocation/freeze),
++4. `anchor_external_root` — anchor YALNIZCA kabul sonrası; "relayer
++   transaction can never mint the anchor it relies on (relayer-data-to-
++   open trap stays closed)".
++
++Kalan gap: `event_root`, finality-commit edilmiş block'un alanı olarak
++güvenilir (adapter soundness'i kadar); L1'de bağımsız event tree aynası
++yok (BridgeRelayerPipeline wired değil) — dolayısıyla option A
++(pipeline wire + root anchoring) **zorunlu düzeltme değil, hardening**
++(statü: opsiyonel; kayıt defteri maddesi 1 revize edildi).
++
++**RPC kapı sayımı (6161 satır, ~150 metod)**:
++- GATED (15): register_consensus_domain, register_sovereign_template,
++  register_bridge_asset, mint/burn/burn_with_event/unlock/
++  unlock_verified_bridge_transfer, submit_relay_proof, seal_global_header,
++  registry_bond_relayer/prover, registry_begin_role_bond_unbonding,
++  registry_withdraw_role_bond, request_prune.
++- State-changing OPEN — doğrulanan örnekler:
++  - `submit_cross_domain_message` → `submit_relayed_cross_domain_message`
++    (active-relayer gate, bypass yok).
++  - `submit_domain_commitment` → RPC'de kapalı (bkz. yukarı).
++  - `storage_open_deal` → **çift imza** (payer escrow + operator bond);
++    signed preimage tüm debit parametresini bağlar (shard size + manifest
++    identity dahil — HIGH CWE-347 replay fix'i dokümante: forged manifest
++    ile replay, signer'ın onayladığından fazla debit edebilirdi);
++    challenge RPC'leri aynı pattern (tagged preimage).
++  - `submit_slashing_report` → provenance Unverified'e eziliyor (§5c).
++  - `submit_verified_domain_commitment` → finality proof zorunlu.
++- Kalan OPEN'ler: read-only (get_*/resolve/list/stats) veya
++  signature-carrying tx basan "prepare" endpoint'leri (bns/social/
++  market/pollen prepare_*) veya chain-layer doğrulamalı evidence
++  (submit_qc_fault_proof → kayıtlı blob'a karşı, submit_zk_proof,
++  ai_submit_result → verifier yetki kapısı §5d).
++- Sonuç: E-7, sistematik bir pattern değil; tekil atlanmış kapıydı.
+-- 
+2.39.5
+
