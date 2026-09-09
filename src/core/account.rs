@@ -2440,6 +2440,18 @@ impl AccountState {
             final_hasher.update(self.governance.root());
         }
         final_hasher.update(self.global_header_summary);
+        // Governance-unfreeze queue: applied at block close after the commit
+        // (blockchain.rs), so at root time it can be non-empty and is
+        // consensus state. Without this binding a restored snapshot could
+        // smuggle in an arbitrary unfreeze queue (tampered domain
+        // permissioning) while presenting an honest state root.
+        if !self.pending_domain_unfreezes.is_empty() {
+            final_hasher.update(b"domain_unfreeze_v1");
+            final_hasher.update(
+                bincode::serialize(&self.pending_domain_unfreezes)
+                    .unwrap_or_else(|_| STATE_SERIALIZE_FAILED.to_vec()),
+            );
+        }
         final_hasher.update(b"gov_disabled"); // governance version/enabled flags
 
         let final_root = final_hasher.finalize();
@@ -3285,6 +3297,40 @@ mod tests {
         state.external_roots.insert(7, [0x77; 32]);
         let root_after = state.calculate_state_root();
         assert_ne!(root_before, root_after);
+    }
+
+    /// Holistic audit (2026-09-09, "her satır sorgula"): the governance
+    /// unfreeze queue is applied at block close AFTER the commit, so at
+    /// root time it can be non-empty and is consensus state. It MUST be
+    /// bound to the state root: otherwise a restored snapshot could carry a
+    /// smuggled queue (tampered domain permissioning) behind an honest root.
+    #[test]
+    fn pending_domain_unfreezes_change_account_state_root() {
+        let mut state = AccountState::new();
+        state.add_balance(&test_addr_from_byte(11u8), 1);
+        let root_before = state.calculate_state_root();
+
+        state.pending_domain_unfreezes.push(PendingDomainUnfreeze {
+            domain_id: 3,
+            expected_validator_set_hash: [0xab; 32],
+            justification_hash: [0xcd; 32],
+        });
+        let root_with_queue = state.calculate_state_root();
+        assert_ne!(root_before, root_with_queue);
+
+        // Field-level fidelity: different domain id must not collide.
+        let mut state2 = AccountState::new();
+        state2.add_balance(&test_addr_from_byte(11u8), 1);
+        state2.pending_domain_unfreezes.push(PendingDomainUnfreeze {
+            domain_id: 4,
+            expected_validator_set_hash: [0xab; 32],
+            justification_hash: [0xcd; 32],
+        });
+        assert_ne!(root_with_queue, state2.calculate_state_root());
+
+        // Determinism: clearing the queue returns to the exact prior root.
+        state.pending_domain_unfreezes.clear();
+        assert_eq!(root_before, state.calculate_state_root());
     }
 
     /// AR-GE-6 / F-11: anchoring a finalized external root (the registry's
