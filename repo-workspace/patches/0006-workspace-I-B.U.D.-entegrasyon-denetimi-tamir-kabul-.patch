@@ -1,0 +1,125 @@
+From 81017ccf901946323f67a2cd1e806377367ab9ae Mon Sep 17 00:00:00 2001
+From: Lubo's Ruler <ayazkussann@gmail.com>
+Date: Wed, 9 Sep 2026 16:17:01 +0000
+Subject: [PATCH 6/6] workspace I: B.U.D. entegrasyon denetimi + tamir kabul
+ yolu raporu
+
+---
+ ...M-2026-09-09I-BUD-ENTTEGRASYON-DENETIMI.md | 76 +++++++++++++++++++
+ memory/hafiza.md                              | 20 +++++
+ 2 files changed, 96 insertions(+)
+ create mode 100644 DENETIM-2026-09-09I-BUD-ENTTEGRASYON-DENETIMI.md
+
+diff --git a/DENETIM-2026-09-09I-BUD-ENTTEGRASYON-DENETIMI.md b/DENETIM-2026-09-09I-BUD-ENTTEGRASYON-DENETIMI.md
+new file mode 100644
+index 0000000..8931b88
+--- /dev/null
++++ b/DENETIM-2026-09-09I-BUD-ENTTEGRASYON-DENETIMI.md
+@@ -0,0 +1,76 @@
++# DENETIM-2026-09-09I — B.U.D. modül entegrasyon doğrulaması (canlı repo)
++
++**Tarih:** 2026-09-09 · **Yazar:** Lubo's Ruler
++**Kaynak:** Sürekli denetim direktifi, döngü 2 (modül entegrasyon doğrulaması),
++ilk kalem: B.U.D. "son bilinen durum kodlanmış ve test edilmiş ama UNWIRED".
++**Zemin:** `ayazkussan/budlum:arena/01a08674-budlum` @ `07dd372` (tek PR #1).
++
++## Yöntem
++
++Her mekanizma için canlı repoda production call-site izleme (test modülleri
++hariç; `WIRING:` başlık deklarasyonları ile çapraz doğrulama). CI = tek
++yetkili doğrulayıcı; bu rapor bir kanıt talebi değil, kanıt konumudur.
++
++## Bulgular (son bilinen durum → canlı durum)
++
++| mekanizma | son bilinen | canlı durum | kanıt |
++|---|---|---|---|
++| erasure kodlama (üretim) | UNWIRED | **tasarım gereği client tarafı**: zincir kodlamaz, doğrular; `encode_object`'in zincir içi tek kullanıcısı doğrulama fonksiyonu | `erasure.rs:664,735` |
++| coding audit (kodlama doğrulaması) | UNWIRED | **BAĞLI**: `verify_object_encoding` ← RPC yüzeyi (manifest iddiasını yeniden kodlayıp karşılaştırır) | `rpc/server.rs:2284` |
++| shard yerleşimi `assign_shard` | UNWIRED | **BAĞLI**: `annotate_expected_holders` (`storage_deal.rs:3077`, production) ← `chain_actor.rs:2866`; modül WIRING bildirimiyle tutarlı | `assignment.rs:56` |
++| `assign_object` | — | **hâlâ test-only** (modül WIRING yalnız `assign_shard` için doğru) | `assignment.rs:212` |
++| deal açma | — | **BAĞLI**: `open_storage_deal_with_escrow` ← `chain_actor.rs:3730` (RPC `bud_storageOpenDeal`; BUD_OPEN_DEAL_V1 imzası, CWE-294 replay koruması) | `blockchain.rs:5554` |
++| manifest kayıt | — | **BAĞLI**: `chain_actor.rs:3793` | |
++| tamir tetikleyici (tespit + bilet) | UNWIRED | **BAĞLI**: bakım süpürmesi (block işleme): `objects_below_own_repair_margin()` → `open_expiry_reallocation` / `open_never_placed_ticket`; F-16 semantiği: bilet yalnız zero-replica shard'a, degrade-canlı yalnız log | `chain_actor.rs:2675-2760` |
++| tamir kabulü (replacement) | UNWIRED | **BU OTURUMDA KAPATILDI**: `accept_reallocation_ticket` yalnız testten çağrılıyordu; bilet açılıyor ama on-chain doldurulamıyordu. Fix aşağıda. | fix `07dd372` |
++| rekonstrüksiyon `reconstruct_object` | UNWIRED | **HALE UNWIRED** — canlı shard'lardan veri kurtarma yolu yok; replacement operatör byte'ları zincir dışı getiriyor, zincir merkle zarfını zorluyor (MerkleProofRequired) ama tam STARK doğrulaması VerifyMerkle 64-derinlik kapısına ertelenmiş | `erasure.rs:780` |
++| LRC / MSR | — | bildirimle tutarlı UNWIRED (`msr.rs:3` "WIRING: unwired"; `LrcLayout` yalnız msr + test) | `msr.rs`, `lrc.rs` |
++
++**Sonuç:** "UNWIRED" son bilinen durumu kısmen AŞILMIŞ: tetikleyici (tespit +
++bilet) bağlı; kabul adımı bağlı değilmiş. Döngü bunu kapattı.
++
++## Fix `07dd372` — tamir biletinin kabul yolu (escrow'lu)
++
++`Blockchain::accept_storage_reallocation_with_escrow` — `open_storage_deal_with_escrow`'un
++economic aynası, yerleşimi biletin kendisi belirler (manifest/shard/replica
++registry kaydından; çağrı seçim hakkı yok):
++
++- cooldown kontrolü (challenge kaçıran operatör 6 saat dışarıda) — open yoluyla aynı.
++- bilet durumu `Pending|UnderReplicated` olmalı; slashed operator kendisini
++  yerine koyamaz; manifest/shard biletten türetilir.
++- escrow (payer) + bond (replacement operator) open yoluyla aynı katmanda
++  çekilir; REDDEDİLİRSE iade edilir (refusal hiçbir denge hareketi bırakmaz).
++- registry `accept_reallocation_ticket` tek-atış garantisini korur (dolu bilet
++  ikinci kabulü reddeder) ve merkle zarfı zorunlu — replacement, kanıtlayamadığı
++  shard'ı iddia edemez.
++- katmanlar: chain fonksiyonu → `ChainCommand::AcceptStorageReallocation`
++  (mainnet gate'li, open arm'ı kalıbı) → RPC `bud_storageAcceptReallocation`
++  (BUD_ACCEPT_REALLOCATION_V1 ön-görünümü; hem payer hem operator imzası —
++  hangi denge hareketi edilecekse ikisi de kanıtlanır).
++- 4 test (`storage_economics_tests`): replacement açılır + escrow/bond çekilir +
++  bilet ActiveReplacement; slashed operator reddedilir (denge dokunulmaz);
++  tek-atış (ikinci kabul reddi, ikinci çekim yok); merkle zarfsız kabul →
++  tam iade + bilet Pending kalır.
++
++CI doğrulaması tek PR'da (fork PR trigger: PR to main).
++
++## Kalan boşluklar (döngü devamı için, öncelik sırasız envanter)
++
++1. `reconstruct_object` bağlı değil — tasarım sorusu: rekonstrüksiyon kabul
++   adımının doğrulaması mı olmalı (replacement byte'ları kalan shard'lara
++   karşı re-encode/reconstruct ile doğrulanır) yoksa ayrı RPC mi? Karar
++   gerek; uygulama kararını izler.
++2. Merkle zarfının TAM STARK doğrulaması ertelenmiş (VerifyMerkle 64-derinlik)
++   — BudZKVM hattı (direktif kapsamı; direktif metni bu parçada kesik —
++   tam metin bekleniyor).
++3. `assign_object` test-only (object-seviye yerleşim önerisi kimse okumuyor).
++4. `check_self_host_allowed` open yoluna bağlı ama beyan yolu
++   (`declare_self_host_policy`) hâlâ transaction'sız — kodun kendi yorumu da
++   bunu belirtiyor ("the half that is still missing"); canlı zincirde boş
++   policy = her zaman Ok.
++
++## README olgunluk sinyali (döngü 1, spot kontrol)
++
++`src/storage/README.md` var. Spot: `src/storage/` modülleri WIRING başlık
++disiplini taşıyor (envanter raporun tablosundaki `WIRING:` satırları).
++Bütünsel README taraması döngü 1'in kendi turunda.
+diff --git a/memory/hafiza.md b/memory/hafiza.md
+index 541f902..6739dd6 100644
+--- a/memory/hafiza.md
++++ b/memory/hafiza.md
+@@ -6876,3 +6876,23 @@ Tek commit; CI dogrular. E4 sirada.
+   (lubot:/workspace:/budlum: onegi).
+ - AYNA MIMARISI: budlum dalinda repo-lubot/ + repo-workspace/ (format-patch
+   dosyalari + base sha + uygulama notu). Patches /home/user/arena-backup/.
++
++## 2026-09-09 — B.U.D. entegrasyon denetimi + tamir kabul yolu (döngü 2, ilk kalem)
++
++- DIREKTİF DÖNGÜSÜ BAŞLADI (yetki: charter tek basına yeterli).
++- B.U.D. CANLI DENETİM (rapor DENETIM-2026-09-09I):
++  - "UNWIRED" son durum KISMEN AŞILMIŞ: tamir tetikleyici (tespit+bilet) BAĞLI
++    (bakım süpürmesi, F-16), deal açma BAĞLI, coding audit BAĞLI (RPC),
++    shard yerleşimi BAĞLI (annotate_expected_holders).
++  - Gerçek boşluk: tamir biletinin KABULÜ bağlı değilmiş (accept_reallocation_ticket
++    yalnız test) → 07dd372 ile kapatıldı: accept_storage_reallocation_with_escrow
++    (escrow+bond+cooldown+iade) + actor komutu (mainnet gate) + RPC
++    bud_storageAcceptReallocation (BUD_ACCEPT_REALLOCATION_V1, çift imza) + 4 test.
++  - HALE UNWIRED: reconstruct_object (veri kurtarma yolu yok — tasarım kararı
++    gerekir), assign_object (test-only), merkle zarfı TAM STARK doğrulaması
++    (VerifyMerkle 64 — BudZKVM hattı; direktif metni o parçada kesik).
++- TEK PR (ayazkussan/budlum#1) commit sırası (hepsi repo-önekli):
++  e5f5c9d, a435726, fa1d4a6, d0a2a9b (budlum AR-GE-6), db7dec9 (lubot aynası),
++  6d860ce (workspace aynası), 07dd372 (budlum B.U.D. tamir kabulü).
++- DİREKTİF METNİ KESİK: "VerifyMerkle'ın STARK/AIR tarafı sağlam kabul..."
++  cümlesinin devamı + sonraki bölümler alınamadı → kullanıcıdan tam metin.
+-- 
+2.39.5
+
