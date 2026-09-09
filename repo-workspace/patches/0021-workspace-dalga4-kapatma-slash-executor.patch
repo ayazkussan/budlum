@@ -1,0 +1,57 @@
+From 0277397e69416cdf7c5589a97eb9590271e1cc2e Mon Sep 17 00:00:00 2001
+From: ayazkussan <149924814+ayazkussan@users.noreply.github.com>
+Date: Wed, 9 Sep 2026 19:31:37 +0000
+Subject: [PATCH] denetim-2026-09-09N kapatma:
+ slashing/executor/settlement/gateway clean + CI 42df5df Rust failure notu
+
+---
+ ...A4-KONSENSUS-FINALITY-DOMAIN-COMMITMENT.md | 33 +++++++++++++++++++
+ 1 file changed, 33 insertions(+)
+
+diff --git a/DENETIM-2026-09-09N-DALGA4-KONSENSUS-FINALITY-DOMAIN-COMMITMENT.md b/DENETIM-2026-09-09N-DALGA4-KONSENSUS-FINALITY-DOMAIN-COMMITMENT.md
+index aa627a0..7f4a984 100644
+--- a/DENETIM-2026-09-09N-DALGA4-KONSENSUS-FINALITY-DOMAIN-COMMITMENT.md
++++ b/DENETIM-2026-09-09N-DALGA4-KONSENSUS-FINALITY-DOMAIN-COMMITMENT.md
+@@ -122,6 +122,39 @@ dokümante değil.
+   (domain,height)→tekil commitment garantilediği için bugünkü registry semantiğinde
+   ambigüite yok; F-4'ün bir alt notu olarak izleniyor.
+ 
++## 5c. Slashing evidence akışı, executor, settlement, gateway — clean
++
++- **registry slashing (CWE-347 modeli)**: `is_actionable` = shape + provenance;
++  yalnız `ConsensusVerified` icra edilir. RPC `submit_slashing_report`
++  **caller provenance'ını ezerek `Unverified`e sabitler** (server.rs:2134
++  "never trust caller-supplied provenance") → dış raporla slash zorlanamaz;
++  reporter zorunlu (anti-spam fee). İkinci yol `submit_slashing_evidence`:
++  tam kripto doğrulama (aynı index, aynı producer, farklı hash, iki imza) +
++  dedup. `verify_double_sign` (raw sig-over-2-hashes) CWE-347 fix'ten beri
++  test-only. `slash_from_report` hata semantiği dokümante (Ok(None) sessiz
++  değil — warn log; block application abort etmez; zero-penalty slash da
++  kayıtta — G0 2026-08-22). Liveness yolunda Cosmos #1867 shape fix'i
++  (jailed/slashed validatör absentee sayılmaz) + jail_until term.
++- **executor (apply_transaction_checked)**: zero-address sender yasağı
++  (finding #65/#171), burn-reserve kilidi, Unstake/Vote fee-floor,
++  Transfer+Stake vesting gate (E-1), tüm balance yolları checked aritmetik
++  (underflow/overflow). 2.2k satırlık per-type switch örneklemede tutarlı.
++- **settlement**: proof_verifier binding zinciri eksiksiz (index↔proof,
++  leaf↔event, root↔commitment, opsiyonel expected_block_hash);
++  proof_market state machine sert (Assigned→Completed, prover binding,
++  epoch window, reward_claimed∈(0,reward], mark_paid one-shot,
++  CWE-345 hook-with-verification + "error path'te task kaybı" fix'i
++  dokümante) — ama **üretimde wired değil** (AccountState'te dormant slot,
++  yazar yok). BridgeRelayerPipeline ile aynı "built-but-unwired" deseni.
++- **gateway**: atlas EvidenceRecord (event_root nonzero doğrulaması) +
++  wallet context — read katmanı, commitment yazarı değil.
++- **CI notu (42df5df, docs-only mirror commit)**: "Rust" workflow **failure**
++  + "Miri UB Check" failure; Determinism/Docker Smoke in-progress.
++  Docs-only commit'te Rust failure → ya pre-existing test/infra hatası ya
++  önceki code commit'lerden (e4f472b/fe5461e/a8b45e1/8ba7eab) deterministik
++  regresyon; log EOF nedeniyle ayrım yapılamadı. İzle: Determinism sonucu
++  + sonraki log erişimi.
++
+ ## 6. Döngü durumu
+ 
+ - W1 ✅ (F-1 e4f472b) · W2 ✅ (E-7 fe5461e, E-1 a8b45e1) · W3 ✅ (F-3 8ba7eab)
+-- 
+2.39.5
+
