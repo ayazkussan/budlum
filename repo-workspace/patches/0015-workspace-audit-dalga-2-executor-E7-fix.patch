@@ -1,0 +1,100 @@
+From 200dec2d873609a38d1ac91b586ccd72a3e8a971 Mon Sep 17 00:00:00 2001
+From: Lubo's Ruler <ruler@lubot.local>
+Date: Wed, 9 Sep 2026 18:05:09 +0000
+Subject: [PATCH] workspace: audit dalga 2 (executor para yolu): E-7 HIGH
+ (off-block consensus mutasyonu, public RPC) + fix fe5461e + E-1..E-4
+
+---
+ DENETIM-2026-09-09K-EXECUTOR-PARA-YOLU.md | 80 +++++++++++++++++++++++
+ 1 file changed, 80 insertions(+)
+ create mode 100644 DENETIM-2026-09-09K-EXECUTOR-PARA-YOLU.md
+
+diff --git a/DENETIM-2026-09-09K-EXECUTOR-PARA-YOLU.md b/DENETIM-2026-09-09K-EXECUTOR-PARA-YOLU.md
+new file mode 100644
+index 0000000..46f7a63
+--- /dev/null
++++ b/DENETIM-2026-09-09K-EXECUTOR-PARA-YOLU.md
+@@ -0,0 +1,80 @@
++# DENETIM-2026-09-09K — Bütünsel sorgulama, dalga 2: executor tx kolları (para yolu)
++
++**Tarih:** 2026-09-09 · **Yazar:** Lubo's Ruler
++**Mandat:** Kullanıcı: "her bir satır kod hatalı olabilir."
++**Zemin:** `arena/01a08674-budlum` @ `e4f472b` → fix `fe5461e`.
++**Kapsam:** `src/execution/executor.rs` 2485 satır — `apply_transaction_checked`
++tüm dispatch (28 tx tipi) + `apply_block_checked` (fee settlement) uçtan uca
++okundu. Kanıt = satır referansları; CI = doğrulayıcı.
++
++## Ham bulgular (satır kanıtlı, yargısız)
++
++**Para koruması (doğru bulunanlar):**
++- Her kol `checked_sub/checked_add` kullanıyor; underflow/overflow = blok reddi.
++- Fee settlement tek yetkili: `apply_block_checked` (executor.rs:2289+) —
++  producer'a `fee - metabolic_burn(fee)`; `tokenomics.block_reward` MINT
++  ETMİYOR (account.rs:1593'de governance ile sıfırlanabiliyor; mint call-site
++  yok — E-6 OK).
++- Transfer: vesting-gate (`spendable_balance`) + receiver overflow guard.
++- RelayerResult köprü kolu: replay-id, payload-hash bağlama (B2),
++  correlation_id zorunlu, domain eşleşmesi, money-typed fee split,
++  mint-headroom — derinlemesine sertleştirilmiş (comment'ler geçmiş
++  audit turlarını anlatıyor).
++- AI kolları: escrow vesting-gate'li, equivocation kanıt commitment,
++  ödül dağıtımında tam sayı kalanı korunuyor, reclaim/cancel yetki
++  kontrolü, `u64::MAX` gas tavanının NEDENLI açık beyanı (unit error
++  tespiti: max_fee balans, gas birim — ölçülmüş).
++- Privacy yüzeyi: mainnet'te KAPALI (fail-closed; ownership/conservation/
++  membership proof bağlı değil — doğru).
++- StateUpdate (C3 karar 50): tavan + monotonluk + near-MAX nonce kontrolü.
++- Governance badge double-writer'a karşı kol BİLİNLİ olarak reddediyor
++  (`hub_verify_wrong_path`) — "sessizce hiçbir şey yapmaktan daha kötü"
++  ilkesi.
++
++**Bulgular:**
++
++| id | ciddi | ham bulgu | satır |
++|---|---|---|---|
++| E-7 | **HIGH** | `bud_submitRelayProof` RPC'si `require_operator` GATESİ OLMADAN (public listener'dan) `Blockchain::submit_relay_proof` → **blok DIŞINDA `self.state` consensus mutasyonu** (bridge mint/unlock + `try_mint_balance` recipient + relayer fee credit + persist). 5 kardeş bridge RPC (mint/burn/unlock ×3) hepsi gate'li; bu tek istisna. Relayer binary (budlum-relayer.rs:811) public listener'ı "no identity or authorisation" diye BELGELİYOR ve akışına bunu dayatıyor. | rpc/server.rs:1847 (önceki), blockchain.rs:2790+ |
++| E-1 | MED | Vesting `spendable_balance` gate'i tutarsız: top-level check RAW balance (`executor.rs:141`); sadece bazı kollar arm içinde spendable'i tekrar soruyor (Transfer, AiOperatorBond, ContractCall escrow, AiPurchaseData, AiInferenceRequest, AiAgentPayment). **Stake, BnsRegister(cost), BudlumxyzRegisterApp, AiModelRegister, NftBoost** — miktar hareketi yapan, spendable SORMAYAN. ContractCall comment'i "the class is closed on all of them" diyor — bu beş yol için YANLIŞ. Etki: team_vesting adresi kilitli $BUD'ı bu kollarla hareket ettirir. Consensus güvenli (tüm node'lar aynı sonucu üretir) — ekonomik tasarım hatası. | executor.rs:141, 207-256(Stake), 600-650(Bns), 1230-1290(Hub), 1300-1330(AiModel), 820-880(Boost) |
++| E-2 | LOW | `NftTag` kolü: `let _ = (nft_id, tag);` — fee alıp Hiçbir state yazmıyor (pure fee sink; ürün yüzeyi ölü). | executor.rs:~895 |
++| E-3 | LOW | `UniversalRelay` kolü: fee + log; `ext_tx` state'e yazılmıyor (relay ledger'ı Blockchain-level `universal_relayer` — RPC/worker yollarından yazılıyor; köprü kuyruğu `relay_ledger_root` sadece testlerde okunuyor, bloğa/STATE ROOT'a bağlı değil — operational ledger olarak tutarlı ama "for on-chain commitment" yorumu iddia ediyor, commitment yok). | executor.rs:~905, relayer.rs:156 |
++| E-4 | INFO | `submit_relay_proof` hata yolunda kısmi yan etki: `process_relay` (ledger kaydı + persist) ÖNCE, bridge state geçişi SONRA; geçiş hata verirse ledger "relay edildi" der ama mint/unlock olmadı — tekrar çağrı "no pending relay" ile ölür. | blockchain.rs:2826-2840 |
++| E-5 | OK | `block_reward` mint edilmiyor (yukarıda). | |
++
++## Yorum (analiz)
++
++**E-7 analizi (neden fork):** RPC node X'te mint → X'in state'i = dürüst
++state + mint. Dürüst ağ: (a) RelayerResult tx yoksa → X'in ürettiği
++bloğun state_root'u kimse yeniden üretemez → X'in blokları reddedilir;
++(b) RelayerResult tx ise → X'te blok-içi `bridge_state.mint` replay-id'yi
++RPC'nin tükettiğini görür → kol hata → blok X'te uygulanamaz, diğer
++node'larda geçerli → X ağdan ayrılır. `save_bridge_state` kontamine
++state'i persist eder → restart'ta da kalıcı. Değer aktarımı sınırlı
++(relayer fee ancak ACTIVE bonded RELAYER adresine gider —
++`ensure_active_relayer`), asıl etki = **dışarıdan çağrılabilen,
++anonim consensus-state fork/DoS + kalıcı diverjence**.
++**Fix `fe5461e`**: `require_operator` gate'i (kardeşlerle hizala; anonim
++vektör kapanır). **KALAN (açık, tasarım)**: mutasyonun kendisi blok
++dışı — doğru form: RPC doğrula + ledger kaydet + döndür; yerleşimi
++on-chain `RelayerResult` tx ile (zaten aynı kontrolleri yapan yol).
++Relayer binary akışı buna göçmeli (budlum-relayer.rs:629). Bu refactor
++`cargo` gerektiren test yüzeyi taşıyor (relayer_e2e) — ayrı tur,
++tasarımla.
++
++**E-1 analizi:** düzeltme = beş kola spendable yeniden kontrolü
++tek satırlık desen (mevcut arm'lardaki aynısı); ya da top-level
++`liquid_cost` check'ini spendable'e çekmek (Unstake/Vote edge'i:
++tam kilitli team'in fee ödeyememesi — tasarım kararı). İkisi de
++consensus-değiştiren → test + CI ile. Kuyrukta.
++
++## Kanıtlar
++
++Fix SHAs: `fe5461e` (E-7 gate). E-1 düzeltmesi + E-3 commitment kararı
++yok (açık). CI = tek doğrulayıcı (fork log altyapısı EOF — önceki rapor).
++
++## Sonraki
++
++- E-1 fix (5 kol) + test.
++- E-7 refactor tasarımı (off-block mutasyon → on-chain).
++- Dalga 3: consensus/finality + `sweep_retired_relays` state-root bağı.
+-- 
+2.39.5
+

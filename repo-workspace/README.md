@@ -12,7 +12,7 @@ git -C <workspace-klonu> am patches/000*.patch
 Patch sirasi 0001..0005 (sira kritik; hafiza.md append'lari birbiri
 uzerine yazilir).
 
-## Icerik (14 commit)
+## Icerik (16 commit)
 1. DENETIM-2026-09-09G: AR-GE-6 F-12 + Lubot izolasyon raporu + hafiza.
 2. DENETIM-2026-09-09H: AR-GE-6 production writer + larva bulgusu +
    Lubot denetim + hafiza.
@@ -36,3 +36,6 @@ uzerine yazilir).
 14. Dependency Review sorusturmasi: upstream kontrolu (PR 57 pass),
     hipotezlerin elenmesi, fork log altyapisi EOF bulgusu, kalan
     hipotez + aday duzeltmeler.
+15. Audit dalga 2: executor para yolu (E-7 HIGH: public RPC off-block
+    consensus mutasyonu — fix fe5461e operator gate; E-1..E-4).
+16. E-1 fix kaydi: a8b45e1 (beas kola vesting spend gate'i + test).

@@ -1,0 +1,65 @@
+From 5f1cb398ef7424db864b34678f58a46cf68a2e81 Mon Sep 17 00:00:00 2001
+From: Lubo's Ruler <ruler@lubot.local>
+Date: Wed, 9 Sep 2026 18:12:21 +0000
+Subject: [PATCH] =?UTF-8?q?workspace:=20E-1=20fix=20kaydi=20(a8b45e1:=20be?=
+ =?UTF-8?q?as=20kol=20+=20test)=20=E2=80=94=20dalga=202=20raporu=20tamamla?=
+ =?UTF-8?q?ndi?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+---
+ DENETIM-2026-09-09K-EXECUTOR-PARA-YOLU.md | 25 +++++++++++++++--------
+ 1 file changed, 16 insertions(+), 9 deletions(-)
+
+diff --git a/DENETIM-2026-09-09K-EXECUTOR-PARA-YOLU.md b/DENETIM-2026-09-09K-EXECUTOR-PARA-YOLU.md
+index 46f7a63..990bc4d 100644
+--- a/DENETIM-2026-09-09K-EXECUTOR-PARA-YOLU.md
++++ b/DENETIM-2026-09-09K-EXECUTOR-PARA-YOLU.md
+@@ -54,7 +54,7 @@ state'i persist eder → restart'ta da kalıcı. Değer aktarımı sınırlı
+ (relayer fee ancak ACTIVE bonded RELAYER adresine gider —
+ `ensure_active_relayer`), asıl etki = **dışarıdan çağrılabilen,
+ anonim consensus-state fork/DoS + kalıcı diverjence**.
+-**Fix `fe5461e`**: `require_operator` gate'i (kardeşlerle hizala; anonim
++**Fix `fe5461e` (E-7)**: `require_operator` gate'i (kardeşlerle hizala; anonim
+ vektör kapanır). **KALAN (açık, tasarım)**: mutasyonun kendisi blok
+ dışı — doğru form: RPC doğrula + ledger kaydet + döndür; yerleşimi
+ on-chain `RelayerResult` tx ile (zaten aynı kontrolleri yapan yol).
+@@ -62,19 +62,26 @@ Relayer binary akışı buna göçmeli (budlum-relayer.rs:629). Bu refactor
+ `cargo` gerektiren test yüzeyi taşıyor (relayer_e2e) — ayrı tur,
+ tasarımla.
+ 
+-**E-1 analizi:** düzeltme = beş kola spendable yeniden kontrolü
+-tek satırlık desen (mevcut arm'lardaki aynısı); ya da top-level
+-`liquid_cost` check'ini spendable'e çekmek (Unstake/Vote edge'i:
+-tam kilitli team'in fee ödeyememesi — tasarım kararı). İkisi de
+-consensus-değiştiren → test + CI ile. Kuyrukta.
++**E-1 FIX `a8b45e1` (bu tur uygulandı):** beş kola spendable gate'i
++(meçut arm deseninin aynısı: spendable okuma mutable borrow ÖNCESİ,
++E0502): Stake (`stake_vesting_locked`), BnsRegister (fee+cost,
++`bns_vesting_locked`), BudlumxyzRegisterApp, AiModelRegister, NftBoost
++(tümü `insufficient_funds` spendable varyantı). Regresyon testi
++`stake_arm_refuses_vesting_locked_funds`: pre-cliff team hesabı,
++spendable=0, stake denemesi reddedilir, bakiye/stake değişmez.
++Alternatif (top-level check'i spendable'e çekmek) REDDEDİLDİ:
++Unstake/Vote edge'i — tam kilitli team'in fee ödeyememesi ayrı
++tasarım kararı; arm-bazlı gate mevcut kod tabanının beyan edilmiş
++deseni (Transfer/escrow arm'ları).
+ 
+ ## Kanıtlar
+ 
+-Fix SHAs: `fe5461e` (E-7 gate). E-1 düzeltmesi + E-3 commitment kararı
+-yok (açık). CI = tek doğrulayıcı (fork log altyapısı EOF — önceki rapor).
++Fix SHAs: `fe5461e` (E-7 gate), `a8b45e1` (E-1 beş kol + test).
++Kalan: E-7 refactor (off-block mutasyon → on-chain), E-2 (NftTag ölü kol),
++E-3 (relay ledger commitment kararı), E-4 (kısmi yan etki). CI = tek doğrulayıcı (fork log altyapısı EOF — önceki rapor).
+ 
+ ## Sonraki
+ 
+-- E-1 fix (5 kol) + test.
++- ~~E-1 fix (5 kol) + test~~ — KAPANDI `a8b45e1` (CI doğrulaması bekleniyor).
+ - E-7 refactor tasarımı (off-block mutasyon → on-chain).
+ - Dalga 3: consensus/finality + `sweep_retired_relays` state-root bağı.
+-- 
+2.39.5
+
