@@ -1,0 +1,270 @@
+From e9b0a7a28a0c71a24a17b5590527192950eeaf87 Mon Sep 17 00:00:00 2001
+From: Lubo's Ruler <ayazkussann@gmail.com>
+Date: Wed, 9 Sep 2026 15:46:38 +0000
+Subject: [PATCH 1/5] lubot yetenek: izolasyon crate (arcbox -> izolasyon
+ siniri)
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Ajan session izolasyon siniri, checkable contract olarak (arcbox'in sandbox
+yaklasiminin Lubot'a uyarlamasi — runtime degil, sinirin kendisi ortamdir).
+
+- SessionBoundary: bos workspace + oturumluk kimlik + TEK sozlesme (tip seviyesinde
+  tek alan). open() invariant'lari zorlar; verify() bir gate canary hedefi.
+- IsolationError: NonEmptyWorkspace / NoContract / EmptyIdentity.
+- Fail-closed: production'da unwrap/expect yok (workspace lint).
+- 4 test: clean open, bos-olmayan workspace reddi, bos contract/identity, verify canary.
+
+Arcbox'tan ad/kod alinmadi; izolasyon siniri deseni uyarlandi. CI'da dogrulanir
+(ratchet 0 pedantic + gates; yerel toolchain yok).
+---
+ Cargo.toml                  |   1 +
+ crates/izolasyon/Cargo.toml |  12 +++
+ crates/izolasyon/src/lib.rs | 203 ++++++++++++++++++++++++++++++++++++
+ 3 files changed, 216 insertions(+)
+ create mode 100644 crates/izolasyon/Cargo.toml
+ create mode 100644 crates/izolasyon/src/lib.rs
+
+diff --git a/Cargo.toml b/Cargo.toml
+index f38d862..72185ee 100644
+--- a/Cargo.toml
++++ b/Cargo.toml
+@@ -9,6 +9,7 @@ members = [
+     "crates/cli",
+     "crates/doc",
+     "crates/sikistir",
++    "crates/izolasyon",
+ ]
+ 
+ # The panic limit: a reader that panics is a reader that stops answering.
+diff --git a/crates/izolasyon/Cargo.toml b/crates/izolasyon/Cargo.toml
+new file mode 100644
+index 0000000..07bec79
+--- /dev/null
++++ b/crates/izolasyon/Cargo.toml
+@@ -0,0 +1,12 @@
++[package]
++name = "lubot-izolasyon"
++version.workspace = true
++edition.workspace = true
++rust-version.workspace = true
++license-file.workspace = true
++
++# Self-contained: models the isolation boundary as a pure, checkable
++# contract. It takes no dependencies and performs no filesystem access.
++
++[lints]
++workspace = true
+diff --git a/crates/izolasyon/src/lib.rs b/crates/izolasyon/src/lib.rs
+new file mode 100644
+index 0000000..b970b97
+--- /dev/null
++++ b/crates/izolasyon/src/lib.rs
+@@ -0,0 +1,203 @@
++//! Isolation boundary for a Lubot agent session.
++//!
++//! Adapted (as an approach, not a runtime) from sandbox isolation: the
++//! isolation boundary *is* the environment. A session opens from an **empty
++//! workspace** under a **session-scoped identity**, with **exactly one
++//! contract** in force (a single field, so the type itself enforces "one"), and
++//! results leave only as **copies** (the workspace is discarded at session end).
++//!
++//! This crate models that boundary as a *checkable contract* — what it accepts,
++//! it can check — rather than running a sandbox. The filesystem binding lives in
++//! the node; here the boundary is a pure, deterministic invariant.
++
++use std::collections::BTreeSet;
++
++/// Why a session boundary fails an isolation invariant.
++#[derive(Debug, Clone, PartialEq, Eq)]
++pub enum IsolationError {
++    /// The workspace is not empty at session start (it must begin clean).
++    NonEmptyWorkspace { count: usize },
++    /// No contract is in force (a session runs exactly one, non-empty contract).
++    NoContract,
++    /// The session identity is empty (it must be freshly minted, not reused).
++    EmptyIdentity,
++}
++
++impl std::fmt::Display for IsolationError {
++    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
++        match self {
++            Self::NonEmptyWorkspace { count } => {
++                write!(f, "workspace not empty at session start ({count} entries)")
++            }
++            Self::NoContract => write!(f, "no contract is in force"),
++            Self::EmptyIdentity => write!(f, "session identity is empty"),
++        }
++    }
++}
++
++impl std::error::Error for IsolationError {}
++
++/// A session-scoped identity: it exists only for the session and is not
++/// persisted or reused across sessions.
++#[derive(Debug, Clone, PartialEq, Eq)]
++pub struct SessionIdentity {
++    /// A non-empty, session-unique token.
++    pub token: String,
++}
++
++/// The entries present in the workspace at session start, modelled as an
++/// abstract set so the boundary is a pure, checkable contract (no filesystem).
++#[derive(Debug, Clone, Default, PartialEq, Eq)]
++pub struct Workspace {
++    entries: BTreeSet<String>,
++}
++
++impl Workspace {
++    /// An empty workspace — the required session-start state.
++    #[must_use]
++    pub const fn empty() -> Self {
++        Self {
++            entries: BTreeSet::new(),
++        }
++    }
++
++    /// A workspace pre-populated with the given entries (a violated boundary).
++    #[must_use]
++    pub fn with_entries<I, S>(entries: I) -> Self
++    where
++        I: IntoIterator<Item = S>,
++        S: Into<String>,
++    {
++        Self {
++            entries: entries.into_iter().map(Into::into).collect(),
++        }
++    }
++
++    /// Whether the workspace is clean (no pre-existing entries).
++    #[must_use]
++    pub fn is_empty(&self) -> bool {
++        self.entries.is_empty()
++    }
++
++    /// The number of pre-existing entries.
++    #[must_use]
++    pub fn len(&self) -> usize {
++        self.entries.len()
++    }
++}
++
++/// The isolation boundary for one session: an empty workspace, a session-scoped
++/// identity, and exactly one contract.
++#[derive(Debug, Clone, PartialEq, Eq)]
++pub struct SessionBoundary {
++    /// The session-scoped identity.
++    pub identity: SessionIdentity,
++    /// The single in-force contract (one field enforces "exactly one").
++    pub contract: String,
++    /// The (empty) workspace the session opened from.
++    pub workspace: Workspace,
++}
++
++impl SessionBoundary {
++    /// Open a session boundary, enforcing every isolation invariant.
++    ///
++    /// # Errors
++    ///
++    /// [`IsolationError::EmptyIdentity`] for a missing identity,
++    /// [`IsolationError::NonEmptyWorkspace`] when the workspace is not empty, or
++    /// [`IsolationError::NoContract`] when the contract is empty.
++    pub fn open(
++        identity: SessionIdentity,
++        contract: String,
++        workspace: Workspace,
++    ) -> Result<Self, IsolationError> {
++        if identity.token.is_empty() {
++            return Err(IsolationError::EmptyIdentity);
++        }
++        if !workspace.is_empty() {
++            return Err(IsolationError::NonEmptyWorkspace {
++                count: workspace.len(),
++            });
++        }
++        if contract.is_empty() {
++            return Err(IsolationError::NoContract);
++        }
++        Ok(Self {
++            identity,
++            contract,
++            workspace,
++        })
++    }
++
++    /// Re-verify the invariants (a canary target for the repository gate).
++    ///
++    /// # Errors
++    ///
++    /// Returns the first violated invariant.
++    pub fn verify(&self) -> Result<(), IsolationError> {
++        if self.identity.token.is_empty() {
++            return Err(IsolationError::EmptyIdentity);
++        }
++        if !self.workspace.is_empty() {
++            return Err(IsolationError::NonEmptyWorkspace {
++                count: self.workspace.len(),
++            });
++        }
++        if self.contract.is_empty() {
++            return Err(IsolationError::NoContract);
++        }
++        Ok(())
++    }
++}
++
++#[cfg(test)]
++mod tests {
++    use super::*;
++
++    fn id() -> SessionIdentity {
++        SessionIdentity {
++            token: "sess-01".to_owned(),
++        }
++    }
++
++    #[test]
++    fn opens_from_clean_environment() {
++        let b = SessionBoundary::open(id(), "contract-a".to_owned(), Workspace::empty())
++            .expect("clean session opens");
++        b.verify().expect("boundary holds");
++        assert_eq!(b.contract, "contract-a");
++    }
++
++    #[test]
++    fn refuses_non_empty_workspace() {
++        let ws = Workspace::with_entries(["pre-existing.txt"]);
++        let err = SessionBoundary::open(id(), "contract-a".to_owned(), ws).unwrap_err();
++        assert_eq!(err, IsolationError::NonEmptyWorkspace { count: 1 });
++    }
++
++    #[test]
++    fn refuses_empty_contract_and_identity() {
++        assert_eq!(
++            SessionBoundary::open(id(), String::new(), Workspace::empty()),
++            Err(IsolationError::NoContract)
++        );
++        let empty_id = SessionIdentity { token: String::new() };
++        assert_eq!(
++            SessionBoundary::open(empty_id, "contract-a".to_owned(), Workspace::empty()),
++            Err(IsolationError::EmptyIdentity)
++        );
++    }
++
++    /// Canary: a mutation of the boundary after `open` must be caught by
++    /// `verify`.
++    #[test]
++    fn verify_catches_mutation() {
++        let mut b = SessionBoundary::open(id(), "contract-a".to_owned(), Workspace::empty())
++            .expect("open");
++        b.workspace = Workspace::with_entries(["leaked.txt"]);
++        assert_eq!(
++            b.verify(),
++            Err(IsolationError::NonEmptyWorkspace { count: 1 })
++        );
++    }
++}
+-- 
+2.39.5
+
