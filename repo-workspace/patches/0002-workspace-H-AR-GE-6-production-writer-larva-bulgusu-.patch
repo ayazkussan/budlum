@@ -1,0 +1,126 @@
+From 2a4b3834da769abf876f5ed4163ba95c9fe362d9 Mon Sep 17 00:00:00 2001
+From: Lubo's Ruler <ayazkussann@gmail.com>
+Date: Wed, 9 Sep 2026 15:56:13 +0000
+Subject: [PATCH 2/5] workspace H: AR-GE-6 production writer + larva bulgusu +
+ Lubot denetim
+
+---
+ ...26-09-09H-ARGE6-WRITER-VE-LUBOT-DENETIM.md | 69 +++++++++++++++++++
+ memory/hafiza.md                              | 28 ++++++++
+ 2 files changed, 97 insertions(+)
+ create mode 100644 DENETIM-2026-09-09H-ARGE6-WRITER-VE-LUBOT-DENETIM.md
+
+diff --git a/DENETIM-2026-09-09H-ARGE6-WRITER-VE-LUBOT-DENETIM.md b/DENETIM-2026-09-09H-ARGE6-WRITER-VE-LUBOT-DENETIM.md
+new file mode 100644
+index 0000000..b0f82b4
+--- /dev/null
++++ b/DENETIM-2026-09-09H-ARGE6-WRITER-VE-LUBOT-DENETIM.md
+@@ -0,0 +1,69 @@
++# DENETIM-2026-09-09H — AR-GE-6 production writer (larva temizliği) + Lubot denetim yeteneği
++
++**Tarih:** 2026-09-09 · **Yazar:** Lubo's Ruler
++**Kapsam:** budlum AR-GE-6 kalan (production writer) + Lubot yeni yetenek + ölçüm düzeltmeleri.
++
++## Budlum — larva temizliği: AR-GE-6'nın kalanı production writer'dı
++
++- **Bulgu (bu oturumda açıldı):** G turunun F-11/F-12 işi **larvaldı** — API
++  (`anchor_external_root`, `VerifiedCheckpoint::external_root()`) kurulmuştu ama
++  **production'da hiçbir yol `external_roots`'a yazmıyordu**. Relayer gate
++  (`executor.rs:936`) hâlâ boş registry okuyordu → relayer mekanizması yine
++  `relayer_unanchored_root`. "Larva temizliği" kaleminin gerçek içeriği buydu.
++- **Fix `fa1d4a6`:**
++  - `Blockchain::submit_verified_domain_commitment` artık `external_roots`'un
++    **tek production yazıcısı**: domain adapter'ı finality'i ispatladıktan sonra,
++    commitment'ı kabulünden önce `state.anchor_external_root(domain_id, state_root)`.
++    Relayer tx bu metoda erişemez (executor yalnız okur) → tuzağı kapanır kalır.
++  - **Fail-closed:** zero `state_root` reddedilir (message: "zero state root, no
++    external-root anchor written (fail-closed)"); domain anchor olmadan
++    ilerleyemez. PoW adapter zero root'u reddetmediği için (binding yalnız
++    header↔commitment) bu kontrol burada zorunluydu; relayer gate'in kendi
++    zero-root reddiyle ayni mantık.
++  - **Bypass denetimi:** `accept_domain_commitment`'in tek production çağrıcısı
++    bu fonksiyon; raw `submit_domain_commitment` production'da
++    `#[cfg(not(test))]` stub ("Raw domain commitment submission is disabled") →
++    bypass yok. Test-only raw yol bilinçli korundu (byzantine/bridge test
++    scaffold'ı).
++  - **F-12 tüketici:** `budlum-light` binary, doğrulanan checkpoint'te
++    `external_root=0x...` basıyor (None ise `-`) — light-client tarafının
++    anchor'a beslediği kök operatör tarafından karşılaştırılabilir.
++- **3 yeni test** (`src/tests/pow_light_client.rs`, çalışan PoW fixture'u):
++  1. `finalized_pow_commitment_anchors_external_root` — finalize → anchor yazıldı.
++  2. `zero_state_root_commitment_is_refused_fail_closed` — adapter geçer,
++     anchor adımı reddeder; domain ilerlemez, registry boş.
++  3. `newer_finalized_commitment_supersedes_older_anchor` — kayan pencere 2.
++     commitment → yeni kök eskisini ezdi (F-12 tek-son-kök semantiği).
++- **Dal:** `ayazkussan/budlum:arena/01a08674-budlum` = `f455ba4` + `e5f5c9d` +
++  `a435726` + **`fa1d4a6`** (PUSH). PR50'ye taşı: `fa1d4a6`.
++- **CI bekliyor:** derleme + test (ana crate yalnız CI'da görünür).
++
++## Lubot — denetim yeteneği + ölçüm düzeltmesi
++
++- **denetim crate** `4c22dc5`: `lubot-denetim` — güvenlik incelemesini
++  (scan → validate → fix) **kanıtlı defter** olarak modelleyen saf crate
++  (codex-security'in inceleme disiplininden yaklaşım uyarlaması; ad/kod yok).
++  - `record` (scan): boş id/detail reddi; idempotent re-scan; **değişen bulgu
++    eski closure'yu BOZAR ve Some(voided) döner** (stale closure miras alınamaz).
++  - `fix`: verification + commit ikisi de zorunlu (evidence-gated closure).
++  - `reject`: reason zorunlu; **High/Critical için attester zorunlu** (severity
++    tavanı; Low/Medium attestersız).
++  - `complete` (gate): tek açık bulgu kalmadan rapor yok; `Report` attested
++    waiver id listesini taşır (denetlenebilir artık).
++  - `verify` (canary): mutation sonra yapısal invariant'ları yeniden doğrular.
++  - 9 test; unwrap/expect yok; pedantic 0 hedefi (ratchet).
++- **Müfredat:** `ajan.jsonl` +1 kayıt (`every-finding-gets-an-evidenced-disposition`).
++- **Ölçüm düzeltmesi `792fbb4`:** G turunda izolasyon crate README'e
++  satırlanmamıştı → `gate_readme_is_measured` kırmızı olacaktı (README 178,
++  suite 182). README + ratchet.json şimdi: **191 test** (178 + 4 izolasyon + 9
++  denetim), 37 gate, 0 pedantic, 793 corpus. Layout tablosu da iki crate ile
++  tamamlandı.
++- **Dal:** `olcum-disiplini` = `12bc9ac` + `e9b0a7a` + `4c22dc5` + **`792fbb4`**
++  (LOKAL, 403). PR#1'e it: `792fbb4`.
++- **CI bekliyor:** 191 test ölçümü + ratchet + README gate'leri.
++
++## Erişim (değişmedi, hatırlatma)
++- Bot push: SADECE `ayazkussan/budlum`. `ayazkussan/lubot` + `ayazkussan/workspace`
++  403 → lubot 3 commit + bu rapor **yerelde**, sandbox yenilenirse silinir.
++  Çözüm (G turunda soruldu): bot'u iki fork'a collaborator ekle VEYA yerel
++  commit'leri sen push'la.
+diff --git a/memory/hafiza.md b/memory/hafiza.md
+index a536570..b6b4699 100644
+--- a/memory/hafiza.md
++++ b/memory/hafiza.md
+@@ -6805,3 +6805,31 @@ Tek commit; CI dogrular. E4 sirada.
+ - ERISIM: bot yalniz ayazkussan/budlum'a push; lubot+workspace 403. Sandbox yenileniyor ->
+   lubot+workspace commit'leri yerel, silinme riski. Bot lubot+workspace'e eklensin.
+ - Ders: sandbox yenilenince yerel klonlar/commit'ler silinir; guvenli olan push edilebilen (budlum).
++
++## 2026-09-09 — AR-GE-6 production writer + larva temizligi + Lubot denetim
++
++- BULGU: G turunun F-11/F-12 isleri LARVALDI — API kurulmustu ama
++  production'da hicbir yol external_roots'a yazmiyordu; relayer gate bos
++  registry okumaga devam ediyordu. "Larva temizligi" kaleminin gercek
++  icerigi buydu (BUDLUM-DENETIM-RAPORU orijinali yok; tarama ile amlandı).
++- BUDLUM (PUSH, ayazkussan/budlum:arena/01a08674-budlum):
++  - fa1d4a6: submit_verified_domain_commitment = external_roots'un TEK
++    production yazicisi (verify -> anchor -> accept); zero root fail-closed
++    (domain anchor olmadan ilerleyemez); budlum-light external_root=basiyor
++    (F-12 tuketicisi); 3 yeni test (anchor / zero fail-closed / supersede).
++  - d0a2a9b: sertlestirme — anchor ancak kabul SONRASI yazar (reject/equivoque
++    commitment orphan anchor birakmaz); invariant kirilmasi sessizce yutulmaz.
++  - Bypass denetimi: accept_domain_commitment'in tek production cagiricisi bu
++    yol; raw submit_domain_commitment production'da stub (cfg(not(test))).
++  - PR50'ye tasima: d0a2a9b. CI bekliyor (ana crate yalniz CI'da).
++- LUBOT (LOKAL 403, olcum-disiplini):
++  - 4c22dc5: denetim crate (lubot-denetim) — scan->validate->fix kanitli
++    defter; evidence-gated closure; High/Critical waiver attester zorunlu;
++    degisen bulgu eski closure'u bozar (Some(voided)); complete() gate;
++    verify() canary. 9 test.
++  - 792fbb4: README+ratchet duzeltmesi — izolasyon satiri eksik kalmisti
++    (gate_readme_is_measured kirmizi olacakti); 191 test (178+4+9),
++    0 pedantic, layout tablosu tamam. ajan.jsonl +1 (rule kaydi).
++  - PR#1'e tasima: 792fbb4.
++- ERISIM degismedi: bot yalniz ayazkussan/budlum; lubot+workspace 403.
++  lubot 3 commit + bu rapor yerelde.
+-- 
+2.39.5
+

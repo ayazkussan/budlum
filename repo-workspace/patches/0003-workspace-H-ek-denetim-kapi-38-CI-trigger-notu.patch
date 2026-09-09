@@ -1,0 +1,50 @@
+From 666cc30d9a29a5cd48073e8be3e1926834a7f8b8 Mon Sep 17 00:00:00 2001
+From: Lubo's Ruler <ayazkussann@gmail.com>
+Date: Wed, 9 Sep 2026 15:58:59 +0000
+Subject: [PATCH 3/5] workspace H ek: denetim kapi (38) + CI trigger notu
+
+---
+ DENETIM-2026-09-09H-ARGE6-WRITER-VE-LUBOT-DENETIM.md | 12 ++++++++++--
+ memory/hafiza.md                                     |  6 ++++++
+ 2 files changed, 16 insertions(+), 2 deletions(-)
+
+diff --git a/DENETIM-2026-09-09H-ARGE6-WRITER-VE-LUBOT-DENETIM.md b/DENETIM-2026-09-09H-ARGE6-WRITER-VE-LUBOT-DENETIM.md
+index b0f82b4..004aa88 100644
+--- a/DENETIM-2026-09-09H-ARGE6-WRITER-VE-LUBOT-DENETIM.md
++++ b/DENETIM-2026-09-09H-ARGE6-WRITER-VE-LUBOT-DENETIM.md
+@@ -58,8 +58,16 @@
+   suite 182). README + ratchet.json şimdi: **191 test** (178 + 4 izolasyon + 9
+   denetim), 37 gate, 0 pedantic, 793 corpus. Layout tablosu da iki crate ile
+   tamamlandı.
+-- **Dal:** `olcum-disiplini` = `12bc9ac` + `e9b0a7a` + `4c22dc5` + **`792fbb4`**
+-  (LOKAL, 403). PR#1'e it: `792fbb4`.
++- **Kapi `ddf0ac8`:** denetim crate'in ledger kurallari kapi'ya baglandi
++  (`review-crate-holds-ledger-rules`; 9 marka + voiding satiri; canary'li
++  self-test; yerelde calistirildi: self-test OK + gate OK). Kapi sayisi 38.
++- `20e07d9`: rustfmt hizalama (1 test cagrisi 100 sutunu asiyordu;
++  `gate_fmt_clean` icin guvenlendirme).
++- Yerel kapi taramasi (cargo'siz): no-panic-path / no-debug-leftovers /
++  dependencies-are-used / provenance / mask / findings / eval-runs yeşil;
++  cargo'lu kapilar (fmt, ratchet, readme, secret-scan) CI'da dogrulanacak.
++- **Dal:** `olcum-disiplini` = `12bc9ac` + `e9b0a7a` + `4c22dc5` + `792fbb4`
++  + `20e07d9` + **`ddf0ac8`** (LOKAL, 403). PR#1'e it: `ddf0ac8`.
+ - **CI bekliyor:** 191 test ölçümü + ratchet + README gate'leri.
+ 
+ ## Erişim (değişmedi, hatırlatma)
+diff --git a/memory/hafiza.md b/memory/hafiza.md
+index b6b4699..49d5f87 100644
+--- a/memory/hafiza.md
++++ b/memory/hafiza.md
+@@ -6833,3 +6833,9 @@ Tek commit; CI dogrular. E4 sirada.
+   - PR#1'e tasima: 792fbb4.
+ - ERISIM degismedi: bot yalniz ayazkussan/budlum; lubot+workspace 403.
+   lubot 3 commit + bu rapor yerelde.
++- LUBOT ek (ayni gun): denetim kapi eklendi ddf0ac8 (38 kapi; yerelde
++  self-test+gate OK; no-panic-path 26 dosya yeşil); 20e07d9 rustfmt duzeltme.
++  PR#1'e tasima: ddf0ac8. BUDLUM: RelayerWorker'in main.rs:1522'de canli oldugu
++  dogrulandi (larva degil) -> AR-GE-6 dongusu tam (worker -> executor gate ->
++  domain commitment writer -> light client). Fork push'lari CI calistirmaz
++  (ci.yml: main + PR to main) -> CI ancak PR50'ye tasinanlarda gorecek.
+-- 
+2.39.5
+

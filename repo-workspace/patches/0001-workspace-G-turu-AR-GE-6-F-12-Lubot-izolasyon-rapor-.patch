@@ -1,0 +1,84 @@
+From 05cea6a4c6f63da40ad343c40ac0be33a933fc39 Mon Sep 17 00:00:00 2001
+From: Lubo's Ruler <ayazkussann@gmail.com>
+Date: Wed, 9 Sep 2026 15:47:06 +0000
+Subject: [PATCH 1/5] =?UTF-8?q?workspace=20G=20turu:=20AR-GE-6=20F-12=20+?=
+ =?UTF-8?q?=20Lubot=20izolasyon=20=E2=80=94=20rapor=20+=20hafiza?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+---
+ ...026-09-09G-ARGE6-F12-VE-LUBOT-IZOLASYON.md | 42 +++++++++++++++++++
+ memory/hafiza.md                              | 10 +++++
+ 2 files changed, 52 insertions(+)
+ create mode 100644 DENETIM-2026-09-09G-ARGE6-F12-VE-LUBOT-IZOLASYON.md
+
+diff --git a/DENETIM-2026-09-09G-ARGE6-F12-VE-LUBOT-IZOLASYON.md b/DENETIM-2026-09-09G-ARGE6-F12-VE-LUBOT-IZOLASYON.md
+new file mode 100644
+index 0000000..bd2a472
+--- /dev/null
++++ b/DENETIM-2026-09-09G-ARGE6-F12-VE-LUBOT-IZOLASYON.md
+@@ -0,0 +1,42 @@
++# DENETIM-2026-09-09G — AR-GE-6 (F-12) + Lubot izolasyon yeteneği
++
++**Tarih:** 2026-09-09 (G turu) · **Yazar:** Lubo's Ruler
++**Not:** Sandbox yenilenince F turu lokal raporu (`776ee5b`) silindi; bu dosya F+G'yi kapsar.
++
++## 6 karar (ask_user, G turu başı)
++1. workspace raporu: **sen push'la** (bot'a workspace push yetkisi yok, 403).
++2. deneme: **açıldı** → `budlum-xyz/deneme` public (ayazkussan/deneme değil).
++3. F-12 semantiği: **ben karar verdim** → tek son-finalized kök/domain (gerekçe aşağı).
++4. Doğrulama: **commit→CI→fix** (ana crate yerelde OOM; toolchain de silinmiş).
++5. Lubot: **yeni yetenek/crate** (8 skill repo'sundan uyarlanan).
++6. Yürüyüş: **paralel** (budlum + Lubot).
++
++## Budlum — AR-GE-6 core tamam
++- **F-11** `e5f5c9d`: `AccountState::anchor_external_root(domain, root)` — consensus
++  write yolu (create/supersede, zero-reject). `external_roots` artık consensus'tan yazılıyor.
++- **F-12** `a435726`: `VerifiedCheckpoint.state_root` + `external_root() -> Hash32`.
++  Light-client doğruladığı external finality artık anchor'a beslenecek root üretir.
++  `verify_checkpoint` + `verify_pq_checkpoint` `header.state_root`'u taşıyor.
++- **Birlikte:** verify → (checkpoint root) → consensus anchor (F-11) → relayer gate.
++  Relayer hâlâ anchor açamaz (tuzağı kapalı). 5 test (F-11: 4, F-12: 1).
++- **F-12 gerekçesi (sen-karar):** tek son-finalized kök/domain — (a) gate `== son anchor`
++  semantiğiyle tutarlı, (b) state bounded (domain başına tek), (c) sound.
++  Bounded-set (gecikmeli relay eski kökle) sonraki slice.
++- **Dal:** `ayazkussan/budlum:arena/01a08674-budlum` = `f455ba4` + `e5f5c9d` + `a435726`.
++  Asıl PR50 (`budlum-xyz/budlum:usl`) e it: `a435726`'yı usl'e taşı.
++- **Sıradaki (budlum):** larva temizliği; CI sonucu (`a435726` derlenme).
++
++## Lubot — yeni yetenek (paralel)
++- **izolasyon crate** `e9b0a7a`: `lubot-izolasyon` — ajan session izolasyon sınırı,
++  *checkable contract* olarak (arcbox'in sandbox yaklaşımının uyarlaması, runtime değil).
++  `SessionBoundary` = boş workspace + oturumluk kimlik + TEK sözleşme (tip seviyesinde).
++  `open()` invariant'ları zorlar, `verify()` gate canary. 4 test. Fail-closed (unwrap/expect yok).
++- Arcbox'tan ad/kod alınmadı; izolasyon sınırı deseni uyarlandı.
++- **Dal:** `olcum-disiplini` (PR#1) üzerine `e9b0a7a`. Asıl PR#1'e it: `e9b0a7a`.
++- **CI:** ratchet 0 pedantic + gates (37/37) doğrulanır; yerel toolchain yok.
++
++## Erişim bölümü (önemli)
++- **Push yetkisi:** bot SADECE `ayazkussan/budlum`'a yazıyor; `ayazkussan/lubot` +
++  `ayazkussan/workspace` **403**. Bu turdaki Lubot (`e9b0a7a`) + bu rapor **yerelde**;
++  sandbox yenilenirse silinir. İki seçenek: (a) bot'u lubot+workspace fork'larına
++  işbirlikçi ekle (ben push'larım, güvenli), (b) yerel commit'leri şimdi push'la.
+diff --git a/memory/hafiza.md b/memory/hafiza.md
+index 12ca0b9..a536570 100644
+--- a/memory/hafiza.md
++++ b/memory/hafiza.md
+@@ -6795,3 +6795,13 @@ Tek commit; CI dogrular. E4 sirada.
+ - CI kalıntıları: 2c93e87 (5 derleme hatası: test import, relayer imza, snapshot assert, qc borrow, panic! makrosu) + f455ba4 (bridge_lifecycle 222/246 Bud kalıntıları — Miri/ASan test hedefi derlemesi). 2656ac0'da tek kırmızı Miri idi; Determinism/DDC/SupplyChain 2c93e87 kırmızıları 2656ac0'da yeşildi (geçici).
+ - usl HEAD f455ba4. Sıradaki: AR-GE-6 (F-11 external_roots + F-12 light-client çapa yaşam döngüsü) → larva temizliği. Lubot.md yüklemesi (sistem-prompt dökümü) Lubot hattı için kaynak, C oturumu iş bölümünde.
+ - Ders: yerel doğrulama yalnız gates+bud katmanlarında; ANA CRATE'İN test hedefi derlemesi yalnız CI'da görülür — test dosyalarındaki tip değişikliklerinde CI loglarındaki E0308'ler mutlaka taranmalı (Miri işi lib-test derlemesini erken yüzeye çıkarıyor).
++
++## 2026-09-09 (G turu) — AR-GE-6 F-12 + Lubot izolasyon
++- 6 karar: sen-push; deneme public (budlum-xyz/deneme); F-12 ben-karar (tek son-finalized kok);
++  ci-akisi; Lubot=yetenek; paralel.
++- Budlum AR-GE-6 core tam: F-11 e5f5c9d (anchor_external_root) + F-12 a435726
++  (VerifiedCheckpoint.state_root + external_root). Dal: ayazkussan/budlum:arena/01a08674-budlum.
++- Lubot: izolasyon crate e9b0a7a (PR#1 olcum-disiplini uzerinde). Arcbox deseni uyarlandi.
++- ERISIM: bot yalniz ayazkussan/budlum'a push; lubot+workspace 403. Sandbox yenileniyor ->
++  lubot+workspace commit'leri yerel, silinme riski. Bot lubot+workspace'e eklensin.
++- Ders: sandbox yenilenince yerel klonlar/commit'ler silinir; guvenli olan push edilebilen (budlum).
+-- 
+2.39.5
+
