@@ -1543,6 +1543,24 @@ impl Blockchain {
         proof: FinalityProof,
     ) -> Result<(), String> {
         self.verify_domain_commitment_finality(&commitment, &proof)?;
+        // AR-GE-6: the only production writer of the consensus-owned
+        // external-root registry. The anchor lands only after the domain's
+        // own adapter has proven finality, and before the commitment
+        // advances the domain registry. The executor's relayer gate reads
+        // `external_roots` exclusively, so a relayer transaction can never
+        // mint the anchor it relies on (the relayer-data-to-open trap stays
+        // closed).
+        //
+        // A zero state root is refused outright (fail-closed): it anchors
+        // nothing, and the relayer gate already rejects zero roots on the
+        // result side, so accepting such a commitment could only advance a
+        // domain that can never satisfy the gate.
+        if !self.state.anchor_external_root(commitment.domain_id, commitment.state_root) {
+            return Err(format!(
+                "Domain {} height {}: zero state root, no external-root anchor written (fail-closed)",
+                commitment.domain_id, commitment.domain_height
+            ));
+        }
         self.accept_domain_commitment(commitment)
     }
 
