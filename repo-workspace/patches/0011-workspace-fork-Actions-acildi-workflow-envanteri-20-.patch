@@ -1,0 +1,35 @@
+From 54b3a3b6a3b274e80ffe6e683de8e20370216f7c Mon Sep 17 00:00:00 2001
+From: Lubo's Ruler <ayazkussann@gmail.com>
+Date: Wed, 9 Sep 2026 17:03:27 +0000
+Subject: [PATCH 11/11] workspace: fork Actions acildi + workflow envanteri (20
+ dosya, 0 secret)
+
+---
+ memory/hafiza.md | 14 ++++++++++++++
+ 1 file changed, 14 insertions(+)
+
+diff --git a/memory/hafiza.md b/memory/hafiza.md
+index a0223e6..f17af33 100644
+--- a/memory/hafiza.md
++++ b/memory/hafiza.md
+@@ -6927,3 +6927,17 @@ Tek commit; CI dogrular. E4 sirada.
+   circuit), BNS BAĞLI (4 tx + arm'lar + RPC), B.U.D. BAĞLI (perception content_id
+   + asset binding; byte off-chain tasarım). Sapma: "src/lubot" modülü canlı repoda
+   yok (ürün yüzeyi = AI katmanı). Model kaynağı kararı hâlâ AÇIK.
++
++## 2026-09-09 — Fork Actions ACILDI + workflow envanteri (kullanici: "allowlari actim")
++
++- Kullanici fork'ta "Allow all actions"i acti. Eski push'larda run olmamasi
++  normaldi (event tetiklemez); YENI push tetikleyecek.
++- WORKFLOW ENVANTERI (20 dosya, 0 secret → fork'ta hepsi kosabilir):
++  - PR'da kendiliginden (17): ci (budlum+budzero build/test + 23 gate job),
++    benchmark, cargo-vet, dependency-review, determinism,
++    diverse-double-compiling, docker-smoke, extra-tooling, grype, miri,
++    osv-scanner, security-audit, semgrep, semver, supply-chain-extra, typos.
++  - Yalnizca schedule+dispatch (3): rust.yml (haftalik Sal — "rust workflow"),
++    fuzz-nightly (gecelik), security-hardening (haftalik Paz, since girdili).
++  - push main + dispatch (2): provenance, (docker-smoke PR'da da var).
++- Kanit standardi artik karsilanabilir: run numaralari bu PR'dan alinacak.
+-- 
+2.39.5
+

@@ -12,7 +12,7 @@ git -C <workspace-klonu> am patches/000*.patch
 Patch sirasi 0001..0005 (sira kritik; hafiza.md append'lari birbiri
 uzerine yazilir).
 
-## Icerik (10 commit)
+## Icerik (11 commit)
 1. DENETIM-2026-09-09G: AR-GE-6 F-12 + Lubot izolasyon raporu + hafiza.
 2. DENETIM-2026-09-09H: AR-GE-6 production writer + larva bulgusu +
    Lubot denetim + hafiza.
@@ -28,3 +28,4 @@ uzerine yazilir).
 9. Lubot cagri zincirleri canli dogrulama + hafiza.
 10. BAGLANTILIK-LOG Lubot: 4 zincir BAĞLI (SHA'li kanit) +
     src/lubot sapmasi.
+11. Fork Actions acildi + workflow envanteri (20 dosya, 0 secret).
