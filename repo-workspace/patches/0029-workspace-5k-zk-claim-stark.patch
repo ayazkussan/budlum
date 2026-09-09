@@ -1,0 +1,48 @@
+From eeb6e71556d0ff4b4b4a24b74f7c0f149f42e0f6 Mon Sep 17 00:00:00 2001
+From: ayazkussan <149924814+ayazkussan@users.noreply.github.com>
+Date: Wed, 9 Sep 2026 20:31:26 +0000
+Subject: [PATCH] denetim-2026-09-09N 5k: Zk claim 7 kapisi + ai/execution
+ STARK clean
+
+---
+ ...A4-KONSENSUS-FINALITY-DOMAIN-COMMITMENT.md | 27 +++++++++++++++++++
+ 1 file changed, 27 insertions(+)
+
+diff --git a/DENETIM-2026-09-09N-DALGA4-KONSENSUS-FINALITY-DOMAIN-COMMITMENT.md b/DENETIM-2026-09-09N-DALGA4-KONSENSUS-FINALITY-DOMAIN-COMMITMENT.md
+index da35576..06ac544 100644
+--- a/DENETIM-2026-09-09N-DALGA4-KONSENSUS-FINALITY-DOMAIN-COMMITMENT.md
++++ b/DENETIM-2026-09-09N-DALGA4-KONSENSUS-FINALITY-DOMAIN-COMMITMENT.md
+@@ -379,3 +379,30 @@ yok (BridgeRelayerPipeline wired değil) — dolayısıyla option A
+   asla process memory'ye yüklenmez (`bls_key: None`, vendor mechanism
+   üzerinden imza); `new_without_software_fallback` = mainnet zorunlu yol
+   (vendor failure → fail-closed); PIN env'den.
++
++## 5k. Prover/Zk claim yolu + ai/execution STARK içi — clean
++
++- **Zk claim (blockchain.rs ~2430-2625)**: 7 kademeli gate, her biri
++  "proof sistemi constrain etmediği alanı verificator kendi kodunda
++  denetler" sınıfı:
++  1b. chain_id binding (proof başka zincirde üretilemez),
++  1c. **program allow-list** — "sender ikisini de verdiği için
++  program_hash==public_inputs.program_hash daima geçer; saldırgan kendi
++  yazdığı programla kusursuz proof sunabilir" → domain.zk_program_allowlist;
++  **boş liste = kapalı (fail-closed)**,
++  1d. freshness (MAX_ZK_PROOF_HEIGHT_LAG; height 0 = kalıcı tolerans,
++  "program height okumuyorsa 0 doğru cevap" dokümante),
++  1e. continuity (domain.last_committed_height arkasına claim yok),
++  1f. gas_used ≤ gas_limit (STARK bu ilişkiyi constrain etmez),
++  1g. **final_state_root == state_writes_digest** (AIR root'u kendine
++  bağlar — prover 32 byte serbest bırakabilirdi; trace-derived digest ile
++  eşitlik, root'un proven değer olmasını zorlar).
++  Ekonomi: fee (invalid → burn, conflict → refund), first-valid-wins,
++  domain progress (last_committed_height/hash) claim ile ilerler, persist.
++- **ai/execution STARK (stark.rs 44, verify.rs 839)**: size gate ilk
++  (decode = hostile envelope'ın node'a ödetdiği iş), public_inputs_hash =
++  **caller-derived input** (prover'ın iddiası değil), program_hash binding,
++  plonky3 verify; `verify_execution_proof_full` = structural+STARK tek
++  çağrı ("iki yarı ayrılamaz"); `expected_initial_state_root` = **L1
++  guest re-execution** (verificator bağımsız başlangıç state'ini
++  yeniden hesaplar).
+-- 
+2.39.5
+
