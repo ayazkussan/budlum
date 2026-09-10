@@ -10,7 +10,7 @@ git -C <lubot-klonu> fetch origin olcum-disiplini
 git -C <lubot-klonu> checkout olcum-disiplini
 git -C <lubot-klonu> am patches/*.patch
 ```
-Patch sirasi 0001..0017; 0010 ve 0013 kok `Cargo.toml`'a dokunur ve bu ikisi
+Patch sirasi 0001..0018; 0010 ve 0013 kok `Cargo.toml`'a dokunur ve bu ikisi
 tek satir baglamla uretildi (`git -c diff.context=1`). Neden olculdu: uc
 satirlik baglam, bos satir duzeni farkli olan bir kok manifeste dustu; tek
 satirla iki duzende de gecti. 0013'ün `docs/CRATES.md` huntesinin on-goruntusu
@@ -19,7 +19,7 @@ sira ile uygulandiginda.
 Base disinda uygulaniyorsa
 `git am -3` veya dosyalar elle kopyalanir.
 
-## Icerik (17 commit, 0006..0017 bu turda eklendi)
+## Icerik (18 commit, 0006..0018 bu turda eklendi)
 1. izolasyon crate (lubot-izolasyon): session izolasyon siniri, checkable
    contract (4 test).
 2. denetim crate (lubot-denetim): scan -> validate -> fix kanitli defter
@@ -113,16 +113,32 @@ Base disinda uygulaniyorsa
     kayitla birlikte kurulur, ayri duzenlenemez - "sessizce secildi" hastaligi
     kontrolle degil kurulusla engellenir; bu sinir crate'in `verify()` dokumaninda
     yazili.
+18. esik crate (lubot-esik, 1428 satir / 20 test): aktivasyon defteri. Bir
+    davranis degisikligi bir kademede acilir ve o kademe kayittir - yorüm degil.
+    Kuralar: kademe 0 reddedilir (`Immediate`: kimse vazgecemez, bu bir rollout
+    degil yeni varsayilan); planin anlastigi bayrak listesi `declare`'da kapanir
+    (`UnlistedFlag`); degisikligin kademi planinki olmak zorunda (`EpochDrift`);
+    iki canli plan ayni kademeyi paylasamaz (`PlanCollision`) ama tamami
+    emekliye ayrilmis plan kademesini birakir (test'li); konsensus degisikligi
+    gerekcesiz kabul edilmez (`ReasonlessConsensusChange`); emeklilik icin
+    degisikligin en az bir kadem canli olmasi gerekir (`NeverActivated` /
+    `TimeTravelling`); kaydolan kademeye dokunmak `RewriteOfRecord`'dir.
+    Canlil *uc* durum: `On` / `Off` / `Unratified` - "plan geldi, isaret konmadi"
+    ile "daha gelmedi" ayni seye indirilirse dugum eski kurali calistirip yeni
+    calisiyormus gibi raporlar; `verify(now)` buna `MissedActivation` diyor.
+    F-16'nin ertelenen yarisinin (ReplicationDeficit biletinin fiyati) ihtiyac
+    duydugu sekil budur: crate Budlum'da bir kullanim noktasi iddia etmiyor,
+    ertelemenin nasil denetlenebilir kaydedilecegini tanimliyor.
 
-Test ratchet'i: 191 -> 399. Yeni testler 116 = yetenek 13 + olcek 10 + kanit 12
-+ mimari 10 + takip 12 + muhur 11 + kuyruk 11 + erisim 13 + anlama 24. Lubot'un `training/ratchet.json` dosyasi
+Test ratchet'i: 191 -> 419. Yeni testler 136 = yetenek 13 + olcek 10 + kanit 12
++ mimari 10 + takip 12 + muhur 11 + kuyruk 11 + erisim 13 + anlama 24 + esik 20. Lubot'un `training/ratchet.json` dosyasi
 0003'te 191'e baglandi; o sayiyi buradan degistirmiyoruz - guncelleme Lubot
 kosusunda `cargo test` gercekten kostuktan sonra, gercek sayiyla yapilir.
 
-Dokuz crate de std disinda bagimlilik
-kullanmiyor, I/O yapmiyor, saat/rastgele okumuyor; toplam 8427 satir, prod
+On crate de std disinda bagimlilik
+kullanmiyor, I/O yapmiyor, saat/rastgele okumuyor; toplam 9855 satir, prod
 tarafinda sifir unwrap/expect. Delimiter dengesi (paren/brace/bracket,
-stringler ve yorumlar cikarildiktan sonra) dokuz dosyada da sifir - bu kum
+stringler ve yorumlar cikarildiktan sonra) on dosyada da sifir - bu kum
 havuzunda yapilabilen tek yapi kontrolu buydu. Ek olarak her satir 100
 karakteri gecmiyor (Turkce karakter karakterle sayilir, byte ile degil) ve
 hicbir fonksiyon 100 satiri asmiyor: `too_many_lines` pedantic'te uyaridir ve
@@ -134,4 +150,4 @@ olarak kirildi.
 diye bir iddia yok, iddia su: patch'ler uygulaniyor, dosyalar yerinde, kurallar
 test olarak yazili. Lubot'ta kosulacak komut:
 `cargo test -p lubot-yetenek -p lubot-olcek -p lubot-kanit -p lubot-mimari -p
-lubot-takip -p lubot-muhur -p lubot-kuyruk -p lubot-erisim -p lubot-anlama`.
+lubot-takip -p lubot-muhur -p lubot-kuyruk -p lubot-erisim -p lubot-anlama -p lubot-esik`.
