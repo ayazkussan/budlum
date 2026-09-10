@@ -12,7 +12,7 @@ git -C <lubot-clone> checkout -b lubot-series origin/main
 git -C <lubot-clone> am -3 --whitespace=fix patches/*.patch
 ```
 
-Verified, not asserted: a clean clone of `main` @ `37d32c9` takes all 20 files
+Verified, not asserted: a clean clone of `main` @ `37d32c9` takes all 21 files
 with strict `git am -3` - no `--reject`, no fallback - and the resulting tree
 has `Cargo.toml` members equal to the 20 directories under `crates/`, and
 `docs/CRATES.md` with one row per crate the series adds (12).
@@ -75,6 +75,26 @@ gained twelve, because the first two (izolasyon, denetim) were never given a
 row. Its acceptance test is `rows == crate dirs for the crates the series adds`
 (12 == 12), and it changes no code, so it needs no compilation.
 
+## Patch 0021: the gate that makes "is anything wired?" a measured number
+
+`gates/public-api-is-reached` counts production `pub fn` declarations in
+`crates/**/src/**/*.rs` against an identifier census of the whole tree (test tails
+cut, the declaring file's own declaration lines subtracted), with a
+`/// Convenience:` / `WIRING:` / `exposed for` exemption within 14 lines above.
+It is a ratchet: `gates/dead-pub-api.baseline` holds the 53 entries measured on
+the applied tree, growth fails, and a baseline line that stopped being dead fails
+too, so tightening is the only direction that moves.
+
+Unlike the compiled parts of this series, the gate was executed rather than
+inspected, because it is std-only Python and python3 exists here: `--self-test`
+OK, `public-api-is-reached` OK at 53/53, and both failure directions reproduced
+on a scratch copy - a freshly injected unreached `pub fn` failed with
+"1 public function(s) nothing in the tree calls", and deleting a live baseline
+line failed with "1 baseline entry no longer dead". A missing or unsorted baseline
+fails with its own message, since a gate that cannot read its baseline is a gate
+that always passes. `--list` reports 39 gates and README plus
+`training/ratchet.json` moved to 39 with it, so the ratchet describes the tree.
+
 ## How this directory is regenerated
 
 `tools/rebuild_series.py` is the tool that produced patches 0001-0018: it replays
@@ -110,3 +130,4 @@ crate_dirs=20 my_crates=12 lines=10581 tests=149`.
 | `0018` | esik: davranis degisikliklerinin aktivasyon cagisi bir veridir | 4 files, +1445 |
 | `0019` | lubot README+ratchet: 327 test, uygulanmis agactan sayildi | 1 files, +1 |
 | `0020` | envanter: serinin 12 crate'i var, tablo 10 sayiyordu | 1 files, +4 |
+| `0021` | lubot kapi: ulasilmayan pub fn ratchet'i (39 kapi, canary'li) | 4 files, +197 |

@@ -1,7 +1,7 @@
 From 79e926638681856e57912232e468c8bc02a4fd1e Mon Sep 17 00:00:00 2001
 From: Lubo's Ruler <ayazkussann@gmail.com>
 Date: Thu, 10 Sep 2026 08:44:41 +0000
-Subject: [PATCH 12/20] muhur: sonradan duzeltilen kayit iz birakmali
+Subject: [PATCH 12/21] muhur: sonradan duzeltilen kayit iz birakmali
 
 ---
  crates/muhur/Cargo.toml |  12 +

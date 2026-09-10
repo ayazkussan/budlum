@@ -1,7 +1,7 @@
 From 55eb5615d4a1c7cbe664a121ade90fd3a7eaa49a Mon Sep 17 00:00:00 2001
 From: Lubo's Ruler <ayazkussann@gmail.com>
 Date: Thu, 10 Sep 2026 08:27:20 +0000
-Subject: [PATCH 09/20] mimari: modul tablosu koda uysun, kod tabloya degil
+Subject: [PATCH 09/21] mimari: modul tablosu koda uysun, kod tabloya degil
 
 ---
  crates/mimari/Cargo.toml |  12 +

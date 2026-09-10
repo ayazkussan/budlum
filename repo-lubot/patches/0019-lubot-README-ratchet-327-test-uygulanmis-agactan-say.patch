@@ -1,7 +1,7 @@
 From f0d073fbe55dd910a584f90be68df5f07c8a7f84 Mon Sep 17 00:00:00 2001
 From: Lubo's Ruler <ayazkussann@gmail.com>
 Date: Thu, 10 Sep 2026 12:43:54 +0000
-Subject: [PATCH 19/20] lubot README+ratchet: 327 test, uygulanmis agactan
+Subject: [PATCH 19/21] lubot README+ratchet: 327 test, uygulanmis agactan
  sayildi
 
 Serinin ucu 12 crate ve 149 test ekliyor, ama README satiri 191'de kalmisti:

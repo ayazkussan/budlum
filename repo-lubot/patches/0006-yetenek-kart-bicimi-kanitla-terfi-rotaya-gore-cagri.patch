@@ -1,7 +1,7 @@
 From 3f3ae0ba961655f50d8e88acb9d86d17db5582de Mon Sep 17 00:00:00 2001
 From: Lubo's Ruler <ayazkussann@gmail.com>
 Date: Thu, 10 Sep 2026 08:27:20 +0000
-Subject: [PATCH 06/20] yetenek: kart bicimi, kanitla terfi, rotaya gore cagri
+Subject: [PATCH 06/21] yetenek: kart bicimi, kanitla terfi, rotaya gore cagri
 
 ---
  crates/yetenek/Cargo.toml |  12 +

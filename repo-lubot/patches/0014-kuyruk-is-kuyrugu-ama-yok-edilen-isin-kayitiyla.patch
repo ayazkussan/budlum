@@ -1,7 +1,7 @@
 From 83d586362cade9c18df6109bd297d3a3b5108726 Mon Sep 17 00:00:00 2001
 From: Lubo's Ruler <ayazkussann@gmail.com>
 Date: Thu, 10 Sep 2026 09:00:11 +0000
-Subject: [PATCH 14/20] kuyruk: is kuyrugu, ama yok edilen isin kayitiyla
+Subject: [PATCH 14/21] kuyruk: is kuyrugu, ama yok edilen isin kayitiyla
 
 ---
  crates/kuyruk/Cargo.toml |  12 +

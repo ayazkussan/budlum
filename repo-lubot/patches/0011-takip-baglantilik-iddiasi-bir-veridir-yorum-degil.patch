@@ -1,7 +1,7 @@
 From 96878d20d6b9c45182db52045e2ead8c01fbb904 Mon Sep 17 00:00:00 2001
 From: Lubo's Ruler <ayazkussann@gmail.com>
 Date: Thu, 10 Sep 2026 08:44:41 +0000
-Subject: [PATCH 11/20] takip: baglantilik iddiasi bir veridir, yorum degil
+Subject: [PATCH 11/21] takip: baglantilik iddiasi bir veridir, yorum degil
 
 ---
  crates/takip/Cargo.toml |  12 +
