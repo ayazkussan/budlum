@@ -1,23 +1,9 @@
-From e9b0a7a28a0c71a24a17b5590527192950eeaf87 Mon Sep 17 00:00:00 2001
+From f1b490df3b2c06785655b7e5466800bd723f3b1c Mon Sep 17 00:00:00 2001
 From: Lubo's Ruler <ayazkussann@gmail.com>
 Date: Wed, 9 Sep 2026 15:46:38 +0000
-Subject: [PATCH 1/5] lubot yetenek: izolasyon crate (arcbox -> izolasyon
+Subject: [PATCH 01/20] lubot yetenek: izolasyon crate (arcbox -> izolasyon
  siniri)
-MIME-Version: 1.0
-Content-Type: text/plain; charset=UTF-8
-Content-Transfer-Encoding: 8bit
 
-Ajan session izolasyon siniri, checkable contract olarak (arcbox'in sandbox
-yaklasiminin Lubot'a uyarlamasi — runtime degil, sinirin kendisi ortamdir).
-
-- SessionBoundary: bos workspace + oturumluk kimlik + TEK sozlesme (tip seviyesinde
-  tek alan). open() invariant'lari zorlar; verify() bir gate canary hedefi.
-- IsolationError: NonEmptyWorkspace / NoContract / EmptyIdentity.
-- Fail-closed: production'da unwrap/expect yok (workspace lint).
-- 4 test: clean open, bos-olmayan workspace reddi, bos contract/identity, verify canary.
-
-Arcbox'tan ad/kod alinmadi; izolasyon siniri deseni uyarlandi. CI'da dogrulanir
-(ratchet 0 pedantic + gates; yerel toolchain yok).
 ---
  Cargo.toml                  |   1 +
  crates/izolasyon/Cargo.toml |  12 +++

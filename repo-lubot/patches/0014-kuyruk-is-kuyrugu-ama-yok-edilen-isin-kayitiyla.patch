@@ -1,30 +1,8 @@
-From 53184952a46e75792205b232fb75e6bf2a1a7983 Mon Sep 17 00:00:00 2001
+From 83d586362cade9c18df6109bd297d3a3b5108726 Mon Sep 17 00:00:00 2001
 From: Lubo's Ruler <ayazkussann@gmail.com>
 Date: Thu, 10 Sep 2026 09:00:11 +0000
-Subject: [PATCH 14/16] kuyruk: is kuyrugu, ama yok edilen isin kayitiyla
-MIME-Version: 1.0
-Content-Type: text/plain; charset=UTF-8
-Content-Transfer-Encoding: 8bit
+Subject: [PATCH 14/20] kuyruk: is kuyrugu, ama yok edilen isin kayitiyla
 
-Lubot'un bakim isi bir kuyruktur: onarim, yeniden-indeks, rapor, supürme. Bu
-sekilde kurulan her kuyrunun arizasi aynidir ve "bir is yavas" degildir - "bir
-is kaybolmustur". Sinirli kuyruk + tahliye politikasi + muhasebe yoksa boyle
-olur: kapasite dolar, eski giris yer acmak icin atilir, kosu devam eder, ve
-atilan isin tek kaydi ciktilarda olmamasidir.
-
-Degismez: `submitted == in_flight + done + dead_letters + dropped + refused`.
-verify() bunu kendi sayaclardan yeniden sayar; kalan her sey bir tercih, bu ise
-aritmetik.
-
-Politikalar ve hangilerinin tercih oldugu: kapasite kurulusta sabit, sifir
-reddedilir; dolu kuyruk yalniz daha ucuz bir sinifi cikarir (Repair, Repair'i
-cikarmaz - sigmiyorsa gelen sey *sayilir*); basarisiz is geri dönük due ile
-tekrar kuyruga girer, deneme hakki biten olu-mektuba gider ve olu-mektup liste
-yer acmak icin kisaltilmaz; ayni key ile ikinci gönderim merge edilmez, reddedilir
-(cunku bir shard icin iki bilet iki operatörün parasidir).
-
-`fail` sonuc döndürür (`Some(Dead)` / `None`): "denemekten vazgectik" bir hata
-degil bir sonuçtur, ama cagiranin raporlamasi gereken bir sonuç. 11 test.
 ---
  crates/kuyruk/Cargo.toml |  12 +
  crates/kuyruk/src/lib.rs | 708 +++++++++++++++++++++++++++++++++++++++

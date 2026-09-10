@@ -1,15 +1,9 @@
-From f11fd4de8c7d50bcd8c28c88406bc76e1109afd5 Mon Sep 17 00:00:00 2001
+From 2d19b8d90cad9fa9d769712902840f88b0a34ffb Mon Sep 17 00:00:00 2001
 From: Lubo's Ruler <ayazkussann@gmail.com>
 Date: Thu, 10 Sep 2026 08:28:53 +0000
-Subject: [PATCH] workspace: dort crate members listesine, envanter dosyasi
+Subject: [PATCH 10/20] workspace: dort crate members listesine, envanter
+ dosyasi
 
-Kart defteri (yetenek), limit defteri (olcek), kanit zinciri (kanit), mimari
-tablo kontrolu (mimari). Dordun bir digerine bagimliligi yok; hepsi std,
-hicbirisi I/O yapmiyor.
-
-Envanter ayrica docs/CRATES.md icinde: her crate'in ne tuttugu ve neyi
-reddettigi tek satirda. Bir crate'in neyi reddettigi yazili degilse o crate
-bir tercih degil bir katmandir - ve katmanlar kaydirilabilir.
 ---
  Cargo.toml     |  4 ++++
  docs/CRATES.md | 12 ++++++++++++
@@ -17,16 +11,20 @@ bir tercih degil bir katmandir - ve katmanlar kaydirilabilir.
  create mode 100644 docs/CRATES.md
 
 diff --git a/Cargo.toml b/Cargo.toml
-index bf9117a..42b5ddf 100644
+index 108812b..c3a3870 100644
 --- a/Cargo.toml
 +++ b/Cargo.toml
-@@ -21,2 +21,6 @@ members = [
+@@ -11,6 +11,10 @@ members = [
+     "crates/sikistir",
+     "crates/izolasyon",
      "crates/denetim",
 +    "crates/yetenek",
 +    "crates/olcek",
 +    "crates/kanit",
 +    "crates/mimari",
  ]
+ 
+ # The panic limit: a reader that panics is a reader that stops answering.
 diff --git a/docs/CRATES.md b/docs/CRATES.md
 new file mode 100644
 index 0000000..a18a33f

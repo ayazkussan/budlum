@@ -1,32 +1,8 @@
-From d1ba2c8c906c076347be20fc71b3e6781f905f04 Mon Sep 17 00:00:00 2001
+From 79e926638681856e57912232e468c8bc02a4fd1e Mon Sep 17 00:00:00 2001
 From: Lubo's Ruler <ayazkussann@gmail.com>
 Date: Thu, 10 Sep 2026 08:44:41 +0000
-Subject: [PATCH 12/13] muhur: sonradan duzeltilen kayit iz birakmali
-MIME-Version: 1.0
-Content-Type: text/plain; charset=UTF-8
-Content-Transfer-Encoding: 8bit
+Subject: [PATCH 12/20] muhur: sonradan duzeltilen kayit iz birakmali
 
-Lubot'un ciktilari bir insan denetiminin buradan basladigi seydir. Dosya iz
-birakmadan duzeltilebiliyorsa "kosu bunu soyledi" ile "birisi kosuya bunu
-soyletti" ayni cumledir - ve deneme adimi dosyayi okudugu icin ikisini ayirt
-edemez.
-
-Sekil: her girdi onceki ucu mühurler, H(sira, aktör, metin) + prev. Buradan iki
-ozellik cikar: bir girdiyi yeniden yazmak sonrasindaki her mührü degistirir;
-kuyrugu silmek son ucu degistirir ve son uc finalize'da saklanir. Kontroller
-uc tanedir: mühürler baytlardan yeniden sayilir, siralar 1-artan ve kesintisiz,
-yeniden bulunan uc saklanan uca esit. Finalize edilmemis zincir "temiz" degil-
-`NeverFinalized` der; bitmemis mühur temiz mühur demek degildir.
-
-Mühür FNV-1a/64 ve secim soyle aciklanir: burada hasim saldirgani modeli yok;
-gercek bozulma sekli dosyanin el ile duzeltilmesi, raporu kismak icin kuyruğun
-atılması, hikayeyi degistirmek icin girdinin tasınması. Isten taraf zinciri
-yeniden hesaplayabiliyorsa bu katman yetmez, anahtarli insa lazim - ve bunu
-Lubot bir yoruma degil bir ture yazacagi icin, buraya "yorum degil, tip"
-notu birakildi.
-
-Ayrı bir indeks (aktör -> sira) zincirin ustunda durur ve ayrica
-kontrol edilir: ikinci bir yapi ikinci bir turlu yalan soyleyebilir. 11 test.
 ---
  crates/muhur/Cargo.toml |  12 +
  crates/muhur/src/lib.rs | 631 ++++++++++++++++++++++++++++++++++++++++

@@ -1,26 +1,8 @@
-From 8723b1ffef3418f56f04c8e3ce1cee2d8e01f105 Mon Sep 17 00:00:00 2001
+From 3f3ae0ba961655f50d8e88acb9d86d17db5582de Mon Sep 17 00:00:00 2001
 From: Lubo's Ruler <ayazkussann@gmail.com>
 Date: Thu, 10 Sep 2026 08:27:20 +0000
-Subject: [PATCH 06/10] yetenek: kart bicimi, kanitla terfi, rotaya gore cagri
-MIME-Version: 1.0
-Content-Type: text/plain; charset=UTF-8
-Content-Transfer-Encoding: 8bit
+Subject: [PATCH 06/20] yetenek: kart bicimi, kanitla terfi, rotaya gore cagri
 
-Bir beceri bir paragraf degil, bir kosudur. Kartlarin her biri bir tetik
-tasir - "sunu gorduysen beni cagir" - ve bir cikis kaniti: hangi kosmanin
-kartini kapattigi. Bir kart hicbir seyi kapatabiliyorsa kart degil
-gelenektir; gelenek de bir kosu dograyana kadar hicbir sey ispatlamaz.
-
-Defter (ledger) iki yonlu zorunluluk tanir: bir kart ancak onu dogrulayan
-kosu kaydedildiginde kabulden aktife yukselir; celiskili kosu onu geri
-dusurur ve satir silinmez - silinirse ayni iddia bir sonraki turde temiz bir
-sayfa olarak geri gelir. Ad karti rotaya gore cagrilir: baglamin yetenegini
-istemedigi kart cagrilmaz, cagrilmadigi icin basarisiz sayilmaz, ve
-cagrilmama listesi rapor edilir.
-
-Bir kart reddedilir: adi ya da adimlari baska bir aracinin adini ode
-içeriyorsa (kopyalanmis talimat saldirisinin ucuz hali); tetigi bos ise;
-adimi bos ise; cikis kaniti sadece soz ise. 13 test.
 ---
  crates/yetenek/Cargo.toml |  12 +
  crates/yetenek/src/lib.rs | 782 ++++++++++++++++++++++++++++++++++++++

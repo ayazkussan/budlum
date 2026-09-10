@@ -1,26 +1,8 @@
-From 23854707c52c51b9a7c1566232ad3782ad7158d2 Mon Sep 17 00:00:00 2001
+From 55eb5615d4a1c7cbe664a121ade90fd3a7eaa49a Mon Sep 17 00:00:00 2001
 From: Lubo's Ruler <ayazkussann@gmail.com>
 Date: Thu, 10 Sep 2026 08:27:20 +0000
-Subject: [PATCH 09/10] mimari: modul tablosu koda uysun, kod tabloya degil
-MIME-Version: 1.0
-Content-Type: text/plain; charset=UTF-8
-Content-Transfer-Encoding: 8bit
+Subject: [PATCH 09/20] mimari: modul tablosu koda uysun, kod tabloya degil
 
-Bir isim degisir, bir kademe silinir, ve hatti tarif eden tablo olmayan bir
-seyi adlandirmaya devam eder. Hicbir sey kirmaz: okuyucu tabloya guaranir,
-sembolu arar, bulamaz ve kafasi karisan kendisi sanir.
-
-Kural tek: tabloda adlandirilan her sembol, tablonun "burada" dedigi dosyada
-bir bildirim anahtariyla (fn/struct/enum/trait/def/class...) gecmelidir. Iki
-boru daha var: sozsu satir ihlaldir - isim + iddia yoksa tablo bir
-spesifikasyon gibi okunur ve hicbir sey baglamaz; bos tablo ve tek satirlik
-tablo da gecmez, cunku bir kapi kendisine hicbir sey verilmedigi icin
-gcerse kapi degildir.
-
-Imza kusuratilir: `run(x, y)` ve `pkg::stage` parametre/yon süslerinden
-arindirilir; tam imza isteyen bir kontrol biri parametre adi yazdigi anda
-yeniden yazilir. Bu kontrol sozlesmenin dogru oldugunu iddia etmez; iddia
-ettigi sey, iddia edilen seyin var oldugudur. 10 test.
 ---
  crates/mimari/Cargo.toml |  12 +
  crates/mimari/src/lib.rs | 588 +++++++++++++++++++++++++++++++++++++++

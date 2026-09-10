@@ -1,153 +1,112 @@
-# repo-lubot — tek PR aynasi
+# repo-lubot - the mirrored patch series
 
-Kod: `ayazkussan/lubot`, dal `olcum-disiplini` (PR#1), base `12bc9ac`.
-Bot bu fork'a push edemedigi (403) icin commit'ler format-patch olarak
-aynalaniyor; dagitim kullaniciya ait.
+Code: `ayazkussan/lubot`, base `main` @ `37d32c9`. The bot cannot push to that
+fork (403), so every commit ships here as a `git format-patch` file; distribution
+is the user's.
 
-## Uygulama
+## Applying
+
 ```
-git -C <lubot-klonu> fetch origin olcum-disiplini
-git -C <lubot-klonu> checkout olcum-disiplini
-git -C <lubot-klonu> am patches/*.patch
+git -C <lubot-clone> fetch origin main
+git -C <lubot-clone> checkout -b lubot-series origin/main
+git -C <lubot-clone> am -3 --whitespace=fix patches/*.patch
 ```
-Patch sirasi 0001..0018; 0010 ve 0013 kok `Cargo.toml`'a dokunur ve bu ikisi
-tek satir baglamla uretildi (`git -c diff.context=1`). Neden olculdu: uc
-satirlik baglam, bos satir duzeni farkli olan bir kok manifeste dustu; tek
-satirla iki duzende de gecti. 0013'ün `docs/CRATES.md` huntesinin on-goruntusu
-bu serinin kendisi tarafindan olusturulur, yani baglam garantili - zincir
-sira ile uygulandiginda.
-Base disinda uygulaniyorsa
-`git am -3` veya dosyalar elle kopyalanir.
 
-## Icerik (18 commit, 0006..0018 bu turda eklendi)
-1. izolasyon crate (lubot-izolasyon): session izolasyon siniri, checkable
-   contract (4 test).
-2. denetim crate (lubot-denetim): scan -> validate -> fix kanitli defter
-   (9 test): evidence-gated closure, High/Critical waiver attester zorunlu,
-   degisen bulgu eski closure'u bozar, complete() gate, verify() canary.
-3. README + ratchet: 191 test (178+4+9), 0 pedantic, layout tablosu.
-4. rustfmt hizalamasi (1 test cagrisi).
-5. kapi: review-crate-holds-ledger-rules (38. kapi, canary'li self-test).
-6. yetenek crate (lubot-yetenek, 782 satir / 13 test): beceri karti = tetik +
-   cikis kaniti; kabul ancak karti kapatan bir kosu kaydedilirse; celiski
-   kartin satirini silmez, Status::Rejected'a dusurur. Rotasyon: kart ancak
-   baglam onun yetenegini isterse cagrilir; cagrilmayan kart basarisiz sayilmaz
-   ve cagrilmama listesi rapor edilir. Bir kart reddedilir: baska bir aracinin
-   adini isim/adimlarinda ode tasisiyorsa, tetigi bos ise, adimi bos ise, ya
-   da cikis kaniti yalniz soz ise.
-7. olcek crate (lubot-olcek, 715 satir / 10 test): sert tavan + yumusak su
-   hatti + ayrilmis taban, iki havuz. Normal is tavan-taban'i doldurur, su
-   hattini gecmek iddia ister ve sayilir; kapanis isi tabani harcayabilir
-   ("okuyacak yer kaldi, dogrulayacak kalmadi" cumlesi kurulamaz). Sigmayan
-   sey sayiyla reddedilir; tahliye edilen her satir dusurme defterine yazilir;
-   verify() toplamlari yeniden sayip sayilmadan cikmis maliyeti bulur.
-8. kanit crate (lubot-kanit, 883 satir / 12 test): kapsama kilidi + plan
-   kilitli gozlem -> iddia -> bag -> yol -> kos -> kapanis. Anlatim kapanis
-   yapamaz; yalniz sozle desteklenen bulgu described_only()'de durur (denetim
-   AI'si bulgu metnini koda yapistirdi hatasinin makinece karsiligi). Kapanis
-   sonrasi kanit cekilirse verify() kapanisi gecersiz kilar.
-9. mimari crate (lubot-mimari, 588 satir / 10 test): modul tablosundaki her
-   sembol, tablonun "burada" dedigi dosyada bir bildirim anahtariyla gecmek
-   zorunda; sozlesmesi bos satir, bos tablo ve tek satirlik tablo gecermez.
-   Bayat WIRING yorumu / isim degismis sembol hastaliginin kapiya baglanmis hali.
-11. takip crate (lubot-takip, 715 satir / 12 test): baglanti iddiasi veri
-    olarak tutulur - sembol, Wired/Unwired, ve Wired ise cagri noktasi + rota.
-    `recompute(tree, commit)` agaci tekrar tarayip iki yonu de kirar: bagli
-    iddianin cagrisi kaybolmussa `SiteNoLongerHolds`, baglisiz denilen sembole
-    cagri geldigini goruyorsan `UnwiredClaimNowHolds` (yalniz kuculen bir
-    ratchet'in goremedigi yon), commit degistiyse once `CommitMoved`, hic iddia
-    yoksa `Empty`. Budlum'daki bayat `WIRING:` yorumlari, 205 olu `pub fn` ve
-    hic declare edilmemis kapi hastaliklarinin Lubot tarafindaki karsiligi;
-    metin aramanin cagri grafigi olmadigi crate'in kendi dokumaninda vekalet
-    olarak adlandiriliyor - bu yuzden dogruluk degil sapma raporlar.
-12. muhur crate (lubot-muhur, 631 satir / 11 test): sadece-eklenen zincir; her
-    girdi onceki ucu mühurler, `finalize()` son ucu saklar ve `verify()`
-    baytlari yeniden sayar. Yeniden yazma (`Rewritten`), kuyruk silme
-    (`TailMoved`), orta girdi koparma (`Gap`), finalize-edilmemis zincir
-    (`NeverFinalized`), ayri indeksin suruklenmesi (`IndexDrift`) ayri hatalar.
-    FNV-1a seciminin siniri - saldirgan zinciri yeniden hesaplayabiliyorsa bu
-    katman yetmez, anahtarli insa gerekir - dokumanda yazili; anahtarli gereken
-    yerde bunu bir tip soyleyecek, bir yorum degil.
-13. workspace: takip ve muhur `members` listesine + envanterin iki yeni satiri
-    (`docs/CRATES.md`). Envanterin kendisi de bir baglanti iddiasidir; ihlal
-    sutunu da bu yuzden ayni commit'te guncelleniyor.
-14. kuyruk crate (lubot-kuyruk, 708 satir / 11 test): sinirli bakim is kuyrugu.
-    Degismez: `submitted == in_flight + done + dead_letters + dropped + refused`,
-    `verify()` bunu sayaclardan yeniden sayarak. Dolu kuyruk yalniz daha ucuz
-    sinifi cikarir; `Repair` bir `Repair`'i cikarmaz - sigmiyorsa gelen red
-    *sayilir*. Ayni key'e ikinci gonderim merge edilmez: bir shard icin iki bilet
-    iki operatörün parasidir. Deneme hakki biten is olu-mektuba gider ve
-    liste yer acmak icin kisaltilmaz. `fail` `Some(Dead)`/`None` döndürür -
-    "vazgectik" bir hata degil, raporlanacak bir sonuc.
-15. erisim crate (lubot-erisim, 962 satir / 13 test): yetki defteri. Kapsama
-    ayiracli yol (`src/storage` → `src/storage/deal.rs` evet,
-    `src/storagesecreta`/`src/storage-deal` hayir - saf `starts_with`'in
-    yaptigi sey buradaki testin tek amaci); devir alma parent'in KAYITLI
-    sinirlarina karsi kontrol edilir ve genisleyen boyut adlandirilir; iptal
-    silmek degildir ve ebeveyn iptali alt agaci da iptal eder (aksi halde iptal
-    edilen kok, iptaldan once cikarilmis dar kopya uzerinden calismaya devam
-    eder); saat okunmaz, `at` parametredir - `>=` siniri o yuzden test
-    edilebilir. Anahtar/paraf yok: defter neye izin verildigine karar verir,
-    tokenin gercekligine iddia etmez. `verify()` izi kayitlara karsi sayar.
-16. workspace: kuyruk ve erisim `members` listesine + envanterin iki satiri.
-17. anlama crate (lubot-anlama, 2443 satir / 24 test): komutu, emretmeden once
-    oku. Kelime kelime kayit: her kelimenin ne kattigi (rol) ve nereden bilindigi
-    (stated / inferred / assumed). Kirildigi yerler: kelimesi desteklemeyen kapsam
-    (`ScopeWithoutWord`), gevsek eslesip duzeltmesi kaydedilmemis kelime
-    (`SilentCorrection`), listelenmemis varsayim (`UnlistedAssumption`), ek
-    metnindeki emrin eylem listesine inmesi (`InstructionInData`), ve sozcukle
-    desteklenmeyen her eylem (`ActionWithoutWord`: `claim()` bir iddiadir,
-    inanilmaz - `Command` iddiasi kelime listesinde geri arandirilir).
-    Negatiflik (V+ma/me) sozlukten ONCE bakilir ve yalniz bilinen filere
-    uygulanir: `yazma` asla `WriteCode` olmaz, `yuzme` de bir yasak uydurmaz;
-    `silmesin` iki katmanli dusurulur (`sil`+`me`+`sin`) - bir olumsuzlugu emir
-    okumak bu tablonun yapabilecegi en kotu hata. Tolerance kademeli: <=6 harf
-    hic, 7-9 bir, >=10 iki; bes harfli bir kelimenin tek mesafesi iki fiili ayni
-    anda esitleyebilir, o yuzden orada tahmin yok. Tirnak ici veridir:
-    `Role::QuotedData` eslesmez, eylem uretmez, sorgu dogurmaz. Ek dosyalarinin
-    emirleri `Attachment::new`'de karantinaya alinir; `verify()` karantinayi
-    degil SONUCU kontrol eder, cunku tip karantinayi kendisi kuruyor - ve
-    `mentions()` tek kapi oldugu icin ek metin yalniz sozlugu zenginlestirir.
-    Kayit elle duzeltilebilir (`revise`, `extend_scope`); ikisi de dogrulama
-    ister ve `verify()` o duzenlemelerin biraktigi izi arar. Ambiguity listesi
-    kayitla birlikte kurulur, ayri duzenlenemez - "sessizce secildi" hastaligi
-    kontrolle degil kurulusla engellenir; bu sinir crate'in `verify()` dokumaninda
-    yazili.
-18. esik crate (lubot-esik, 1428 satir / 20 test): aktivasyon defteri. Bir
-    davranis degisikligi bir kademede acilir ve o kademe kayittir - yorüm degil.
-    Kuralar: kademe 0 reddedilir (`Immediate`: kimse vazgecemez, bu bir rollout
-    degil yeni varsayilan); planin anlastigi bayrak listesi `declare`'da kapanir
-    (`UnlistedFlag`); degisikligin kademi planinki olmak zorunda (`EpochDrift`);
-    iki canli plan ayni kademeyi paylasamaz (`PlanCollision`) ama tamami
-    emekliye ayrilmis plan kademesini birakir (test'li); konsensus degisikligi
-    gerekcesiz kabul edilmez (`ReasonlessConsensusChange`); emeklilik icin
-    degisikligin en az bir kadem canli olmasi gerekir (`NeverActivated` /
-    `TimeTravelling`); kaydolan kademeye dokunmak `RewriteOfRecord`'dir.
-    Canlil *uc* durum: `On` / `Off` / `Unratified` - "plan geldi, isaret konmadi"
-    ile "daha gelmedi" ayni seye indirilirse dugum eski kurali calistirip yeni
-    calisiyormus gibi raporlar; `verify(now)` buna `MissedActivation` diyor.
-    F-16'nin ertelenen yarisinin (ReplicationDeficit biletinin fiyati) ihtiyac
-    duydugu sekil budur: crate Budlum'da bir kullanim noktasi iddia etmiyor,
-    ertelemenin nasil denetlenebilir kaydedilecegini tanimliyor.
+Verified, not asserted: a clean clone of `main` @ `37d32c9` takes all 20 files
+with strict `git am -3` - no `--reject`, no fallback - and the resulting tree
+has `Cargo.toml` members equal to the 20 directories under `crates/`, and
+`docs/CRATES.md` with one row per crate the series adds (12).
 
-Test ratchet'i: 191 -> 419. Yeni testler 136 = yetenek 13 + olcek 10 + kanit 12
-+ mimari 10 + takip 12 + muhur 11 + kuyruk 11 + erisim 13 + anlama 24 + esik 20. Lubot'un `training/ratchet.json` dosyasi
-0003'te 191'e baglandi; o sayiyi buradan degistirmiyoruz - guncelleme Lubot
-kosusunda `cargo test` gercekten kostuktan sonra, gercek sayiyla yapilir.
+## Why this directory was rewritten
 
-On crate de std disinda bagimlilik
-kullanmiyor, I/O yapmiyor, saat/rastgele okumuyor; toplam 9855 satir, prod
-tarafinda sifir unwrap/expect. Delimiter dengesi (paren/brace/bracket,
-stringler ve yorumlar cikarildiktan sonra) on dosyada da sifir - bu kum
-havuzunda yapilabilen tek yapi kontrolu buydu. Ek olarak her satir 100
-karakteri gecmiyor (Turkce karakter karakterle sayilir, byte ile degil) ve
-hicbir fonksiyon 100 satiri asmiyor: `too_many_lines` pedantic'te uyaridir ve
-`-D warnings` onu hataya cevirir. `read()` bir keresinde 276 satira cikmisti;
-`read_word` + `apply_glossary` + `infer_the_obvious_work` + `record_the_gaps`
-olarak kirildi.
+The mirror used to document its base as the branch `olcum-disiplini` @ `12bc9ac`.
+That branch is gone: `main` is the fork's only ref, one commit, a different tree (it
+carries `crates/doc`, `crates/sikistir`, `gates/check.py`,
+`training/curriculum/ajan.jsonl`). Against the one base that exists, the old files did
+not apply - patch 0002's `Cargo.toml` and `ajan.jsonl` hunks carried context from the
+deleted branch, so `git am -3` rejected there and everything after it was unreachable.
+A series nobody can apply is a bundle of text files, so the 18 commits were replayed
+onto today's main and re-exported.
 
-**Derlenmedi.** Rust araci yok ve indirilemiyor; dolayisiyla "testler gecti"
-diye bir iddia yok, iddia su: patch'ler uygulaniyor, dosyalar yerinde, kurallar
-test olarak yazili. Lubot'ta kosulacak komut:
-`cargo test -p lubot-yetenek -p lubot-olcek -p lubot-kanit -p lubot-mimari -p
-lubot-takip -p lubot-muhur -p lubot-kuyruk -p lubot-erisim -p lubot-anlama -p lubot-esik`.
+Where context could not match, the repair was by *class* and it is stated rather than
+buried: 0002's training rows are appended (JSONL order is not semantic) and its
+workspace-members line is inserted by regenerating the list from the crate directories
+that exist. The first attempt at this used `patch -N`, which skips hunks it believes are
+already applied and still exits 0; it reported 18/18 clean while the members list never
+grew and ten crate manifests were never written. The structural self-check - members ==
+crate dirs, every crate has `Cargo.toml` and `src/lib.rs`, no `.rej` anywhere - is what
+caught a successful-looking lie, and it runs before anything is exported.
+
+## What was run here
+
+No Rust toolchain exists in this sandbox, so nothing was compiled. What does
+exist is python3, and lubot's gate suite is std-only Python, so it was run on
+the applied tree: `gates/check.py --list` reports 38 gates (matching the
+README's claim), and `--all` passes the first 5 (`reads-not-generates`,
+`no-fourth-channel`, `provenance-fails-closed`, `mask-before-storage`,
+`no-panic-path`) - after which the runner aborts with `FileNotFoundError:
+'cargo'` inside `gate_readme_is_measured`, because that loop catches
+`SystemExit` only. That crash is pre-existing in the base repo, not a product
+of this series; it is reported rather than patched here, since a gate runner
+that fails *softly* when its tool is missing is a decision for the repo owner,
+not for a patch bundle. It is also the reason the ratchet number cannot be
+verified with cargo: it can only be derived.
+
+## What is NOT verified
+
+Nothing was compiled. This sandbox has no toolchain: rustup, crates.io, the docker
+registry and GitHub release assets are all unreachable from it. So
+`cargo test --workspace`, `clippy -D warnings` and the rustfmt state of these crates are
+unmeasured. The test-count line is the one claim that was rebuilt rather than
+carried: patch 0019 sets it to 327, which is `#[test]` attributes in
+`crates/**/*.rs` - 178 in the eight base crates plus 149 in the twelve this
+series adds, with 0 `#[ignore]` and no doc examples, so cargo has nothing else
+to count. The base README said 191 while the base tree measures 178, a
+13-test overstatement that predates this series; 0019 replaces it with a count
+derived from the applied tree instead of inflating the old number. `38 gates`
+was checked by counting `def gate_`; `0 pedantic` and `793 corpus records` were
+left alone - the first needs clippy, the second is the gate's own corpus
+definition, and `training/curriculum/*.jsonl` holds 83 rows there, so those two
+are not the same quantity.
+
+Patch 0020 is the other content fix found by checking structure rather than by
+hoping: the series' own `docs/CRATES.md` listed ten crates while `crates/`
+gained twelve, because the first two (izolasyon, denetim) were never given a
+row. Its acceptance test is `rows == crate dirs for the crates the series adds`
+(12 == 12), and it changes no code, so it needs no compilation.
+
+## How this directory is regenerated
+
+`tools/rebuild_series.py` is the tool that produced patches 0001-0018: it replays
+the recorded commit headers (subject, author, real `Date:` header) onto a base
+checkout, repairs unmatchable hunks by class with a printed note, and refuses to
+export anything until a structural self-check over the *result* passes. Patches
+0019 and 0020 are not produced by it - they are authored on top of the replayed
+tree, which is why the tool reproduces 18 commits and the directory ships 20.
+Smoke-tested from a clean clone of the fork: same self-check line, `members=20
+crate_dirs=20 my_crates=12 lines=10581 tests=149`.
+
+## Contents
+
+| patch | commit subject | diffstat |
+|---|---|---|
+| `0001` | lubot yetenek: izolasyon crate (arcbox -> izolasyon siniri) | 3 files, +216 |
+| `0002` | lubot yetenek: denetim crate (scan -> validate -> fix, kanitli defter) | 4 files, +531 |
+| `0003` | lubot README+ratchet: izolasyon+denetim ölçülür (191 test, 0 pedantic) | 2 files, +6 |
+| `0004` | lubot denetim: rustfmt hizali test cagrisi | 1 files, +7 |
+| `0005` | lubot kapi: denetim crate'in ledger kurallari (38 kapi, canary'li) | 3 files, +47 |
+| `0006` | yetenek: kart bicimi, kanitla terfi, rotaya gore cagri | 2 files, +794 |
+| `0007` | olcek: sert tavan, yumusak su hatti, ayrilmis taban, sessiz dusurme yasagi | 2 files, +727 |
+| `0008` | kanit: kapsama kilidi, sonra iddia, sonra yol; ucusuz kapanis yok | 2 files, +895 |
+| `0009` | mimari: modul tablosu koda uysun, kod tabloya degil | 2 files, +600 |
+| `0010` | workspace: dort crate members listesine, envanter dosyasi | 2 files, +16 |
+| `0011` | takip: baglantilik iddiasi bir veridir, yorum degil | 2 files, +727 |
+| `0012` | muhur: sonradan duzeltilen kayit iz birakmali | 2 files, +643 |
+| `0013` | workspace: takip ve muhur members listesine, envanter iki satir | 2 files, +4 |
+| `0014` | kuyruk: is kuyrugu, ama yok edilen isin kayitiyla | 2 files, +720 |
+| `0015` | erisim: yetki belgesi daralabilir, buyüyemez | 2 files, +974 |
+| `0016` | workspace: kuyruk ve erisim members listesine, envanter iki satir daha | 2 files, +4 |
+| `0017` | anlama: komutu oku, emri vermeden önce | 4 files, +2462 |
+| `0018` | esik: davranis degisikliklerinin aktivasyon cagisi bir veridir | 4 files, +1445 |
+| `0019` | lubot README+ratchet: 327 test, uygulanmis agactan sayildi | 1 files, +1 |
+| `0020` | envanter: serinin 12 crate'i var, tablo 10 sayiyordu | 1 files, +4 |

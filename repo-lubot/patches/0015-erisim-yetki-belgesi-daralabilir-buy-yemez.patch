@@ -1,40 +1,12 @@
-From bab991a92c5ac3cc09862b2a9459f1e0d0198a84 Mon Sep 17 00:00:00 2001
+From 1349135bdca9ec99b9279e37bd41423896c6063b Mon Sep 17 00:00:00 2001
 From: Lubo's Ruler <ayazkussann@gmail.com>
 Date: Thu, 10 Sep 2026 09:00:11 +0000
-Subject: [PATCH 15/16] =?UTF-8?q?erisim:=20yetki=20belgesi=20daralabilir,?=
+Subject: [PATCH 15/20] =?UTF-8?q?erisim:=20yetki=20belgesi=20daralabilir,?=
  =?UTF-8?q?=20buy=C3=BCyemez?=
 MIME-Version: 1.0
 Content-Type: text/plain; charset=UTF-8
 Content-Transfer-Encoding: 8bit
 
-Lubot baska adlar adina sey ister: bir shard oku, bir kayit bas, bir tutamasi
-tasr. Bir acenteye izin veren her sistem bu defterin bir sürümünü tasir ve her
-sürümü ayni olayla biter: sahibi bir yardimciya devreder, yardimci sahibinden
-*daha fazlasini* yapabilir hale gelir; cunku kopyalanan belgede uc sayi
-yeniden kontrol edilmez - yetki, kapsama, sona erme.
-
-Buradaki kurallar:
-  * ttl ve kullanim sayisi sifirsa vermeye red; "sinirsiz" için sentinal
-    degil `Option::None` kullanilir, cunku sentinal hatanin uzandigi yerdir;
-  * **kapsama ayiracli bir yoldur.** `src/storage` → `src/storage/deal.rs`
-    kapsar; `src/storagesecrets` ve `src/storage-deal` kapsamaz. Saf
-    `starts_with` bunu kapsarmis gibi davranir - dosyanin kalanindan degerli
-    tek test odur;
-  * devralinan belge parent'in *kayitli* sinirlarina karsi kontrol edilir,
-    cocabildigine degil; uc boyuttan hangisinin genisledigi adlandirilir
-    ("invalid" degil), cunku düzeltme boyuta göre degisir;
-  * iptal silmek degildir; kayit ve iz kalir, iptal sonrasi kullanim grant id'siyle
-    reddedilir. Bir ebeveyn iptal edildiginde alt agac da iptal edilir - aksi
-    halde iptal edilen kok, iptaldan önce yapilmis dar kopya üzerinden calismaya
-    devam eder;
-  * defter kendi saatini okumaz: her yontem `at` ister. Sinir, `>=` ile
-    test edilir; `>` ile test edilen bir sinir bir epok satin alir;
-  * anahtar/imza yok. Bu defter bir tokenin *ne oldugunu* kararlastrir,
-    gercek oldugunu iddia etmez - gercekligi tasima yukümlülügü cagiranin, ve
-    tip bunu `holder: &str` alarak söylüyor, bir ad biliyormus gibi yapmıyor.
-
-`verify()` izi kayitlara karsi sayar: kayitlarini anlatamadigi bir olay günlügü
-ne olup bittiginin kaydi degil, birinin niyetinin kaydidir. 13 test.
 ---
  crates/erisim/Cargo.toml |  12 +
  crates/erisim/src/lib.rs | 962 +++++++++++++++++++++++++++++++++++++++

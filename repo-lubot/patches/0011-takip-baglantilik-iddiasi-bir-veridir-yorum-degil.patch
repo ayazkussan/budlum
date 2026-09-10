@@ -1,29 +1,8 @@
-From 0454462ab5a908e9675aa20ada518c14332f679d Mon Sep 17 00:00:00 2001
+From 96878d20d6b9c45182db52045e2ead8c01fbb904 Mon Sep 17 00:00:00 2001
 From: Lubo's Ruler <ayazkussann@gmail.com>
 Date: Thu, 10 Sep 2026 08:44:41 +0000
-Subject: [PATCH 11/13] takip: baglantilik iddiasi bir veridir, yorum degil
-MIME-Version: 1.0
-Content-Type: text/plain; charset=UTF-8
-Content-Transfer-Encoding: 8bit
+Subject: [PATCH 11/20] takip: baglantilik iddiasi bir veridir, yorum degil
 
-"Bu koruma hicbir yerden cagrilmıyor" cumlesi kodun yanina yorum olarak
-yazilir, sonra kod degisir, yorum degismez. Yorum yazildigi anda yalan degildi;
-sonra onu hic kimse kontrol etmedigi icin gercekligi commit hizasinda
-asindi. Bir dogrulama yorumu boyle olursa, yorumun yoklugundan daha kotu
-olmasinin tek nedeni bu: okuyucu ona guveniyor.
-
-Bu crate iddiayi veri olarak tutar: sembol, kosa-yol mu degil mi, ve "evet"
-diyorsan cagri noktasi hangisi. Nokta veri oldugu icin agaca karsi yeniden
-turetilebilir. Iki yon de kirilir:
-  - bagli iddia, cagri kaybolmus -> kimse eksildigini bilmeyen garanti;
-  - baglisiz iddia, cagri var -> ya etiket bayat, ya cagiran sey uretim gibi
-    davranan bir mock.
-Ikinci yon, yalnizca kuculen bir ratchet'in goremedigi yon.
-
-Metin araması cagri grafigi degildir; vekil oldugunu soyleyerek durur, bu
-yuzden dogruluk iddia etmez, sapma raporlar. Ayni nedenle agac cagirdan
-alınır, buradan okunmaz. Kayit bos ise kapi gecer-sansina sahip degildir:
-`Drift::Empty`. 12 test.
 ---
  crates/takip/Cargo.toml |  12 +
  crates/takip/src/lib.rs | 715 ++++++++++++++++++++++++++++++++++++++++

@@ -1,22 +1,9 @@
-From 8c0a0ca110ba57e8cc53dfb567f10ac38db3dc7e Mon Sep 17 00:00:00 2001
+From f1dc37bdc722e7fed4f9a113994838ab2a2484f5 Mon Sep 17 00:00:00 2001
 From: Lubo's Ruler <ayazkussann@gmail.com>
 Date: Thu, 10 Sep 2026 08:27:20 +0000
-Subject: [PATCH 07/10] olcek: sert tavan, yumusak su hatti, ayrilmis taban,
+Subject: [PATCH 07/20] olcek: sert tavan, yumusak su hatti, ayrilmis taban,
  sessiz dusurme yasagi
 
-Bir sinir kendini bildirmiyorsa sinir degil acma/kapama anahtardir. Kestirip
-devam etmek logda basariyla ayirt edilemez: kosu biter, okuyucu yarim konuya
-baktigini bilemez.
-
-Uc sayi ve iki havuz: normal is `tavan - taban` kadarini doldurabilir; su
-hattini gecmek iddia ister (Opsiyonel gecemez) ve her gecis sayilir. Kapanis
-isi - testi, kapiyi, diff'i - tabani harcayabilir; tabanin butun anlami
-"okuyacak yer kaldi, dogrulayacak kalmadi" cumlesinin kurulamaz olmasi.
-Sigmayan sey sayiyla reddedilir; cikarilan her satir dusurme defterine yazilir.
-
-`verify()` iki toplami yeniden sayip karsilastirir: tutulan maliyet ile ilan
-edilen maliyet farkliysa bir sey sayilmadan cikmistir, ve kapali bir defter
-saglam bir kosu gibi gorunur. 9 test.
 ---
  crates/olcek/Cargo.toml |  12 +
  crates/olcek/src/lib.rs | 715 ++++++++++++++++++++++++++++++++++++++++

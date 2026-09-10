@@ -1,7 +1,7 @@
-From ddf0ac8dca5d55b2e5a6f3384160ec3a950c3593 Mon Sep 17 00:00:00 2001
+From 7a97626875cbb2cfcd90d27e88527dee46b83a2c Mon Sep 17 00:00:00 2001
 From: Lubo's Ruler <ayazkussann@gmail.com>
 Date: Wed, 9 Sep 2026 15:58:48 +0000
-Subject: [PATCH 5/5] lubot kapi: denetim crate'in ledger kurallari (38 kapi,
+Subject: [PATCH 05/20] lubot kapi: denetim crate'in ledger kurallari (38 kapi,
  canary'li)
 
 ---

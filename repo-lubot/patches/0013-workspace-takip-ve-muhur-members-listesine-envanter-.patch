@@ -1,22 +1,19 @@
-From 384104e56d012f92a6466155327372de87270b7c Mon Sep 17 00:00:00 2001
+From 52fd31a076b32ead500497656a2043adeee021fe Mon Sep 17 00:00:00 2001
 From: Lubo's Ruler <ayazkussann@gmail.com>
 Date: Thu, 10 Sep 2026 08:44:41 +0000
-Subject: [PATCH 13/13] workspace: takip ve muhur members listesine, envanter
+Subject: [PATCH 13/20] workspace: takip ve muhur members listesine, envanter
  iki satir
 
-Envanterin kendisi de bir baglantilik iddiasidir; bu yuzen satirlar eklenirken
-tablonun ihlal sutunu da guncelleniyor - neyin reddedilmedigi yazilmayan bir
-crate, sonraki turde "neden hicbir sey gectirmiyor" diye okunur.
 ---
  Cargo.toml     | 2 ++
  docs/CRATES.md | 3 ++-
  2 files changed, 4 insertions(+), 1 deletion(-)
 
 diff --git a/Cargo.toml b/Cargo.toml
-index 42b5ddf..cd2f336 100644
+index c3a3870..88e43fd 100644
 --- a/Cargo.toml
 +++ b/Cargo.toml
-@@ -23,6 +23,8 @@ members = [
+@@ -15,6 +15,8 @@ members = [
      "crates/olcek",
      "crates/kanit",
      "crates/mimari",

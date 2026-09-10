@@ -1,28 +1,12 @@
-From 5c1da49149f73b39bed6c302e954eea01cdff882 Mon Sep 17 00:00:00 2001
+From decfc4e0c7921d4f74025c8140b1f23bf37ffd25 Mon Sep 17 00:00:00 2001
 From: ayazkussan <ayazkussan@users.noreply.github.com>
 Date: Thu, 10 Sep 2026 09:53:55 +0000
-Subject: [PATCH] =?UTF-8?q?anlama:=20komutu=20oku,=20emri=20vermeden=20?=
- =?UTF-8?q?=C3=B6nce?=
+Subject: [PATCH 17/20] =?UTF-8?q?anlama:=20komutu=20oku,=20emri=20vermeden?=
+ =?UTF-8?q?=20=C3=B6nce?=
 MIME-Version: 1.0
 Content-Type: text/plain; charset=UTF-8
 Content-Transfer-Encoding: 8bit
 
-Komutu zaten çözümlenmiş bir istek gibi ele alan araç ya her belirsizlikte
-durur ya - çok daha kötüsü - boşlukları sessizce doldurur ve uydurduğunu
-teslim eder. Bu crate boşlukları görünür kılar: her kelimenin ne kattığı,
-ve nereden bilindiği (operatör yazdı / bağlamdan çıkarıldı / varsayıldı)
-kayda geçer.
-
-- hiçbir kelimenin desteklemediği kapsam -> ScopeWithoutWord
-- gevşek eşleşip de düzeltmesi kaydedilmemiş kelime -> SilentCorrection
-- listelenmemiş varsayım -> UnlistedAssumption
-- ek metnindeki emir eylem listesine ulaşırsa -> InstructionInData
-- tırnak içi veri: sözlük olur, yetki olmaz
-- olumsuzluk (V+ma/me) sözlükten ÖNCE bakılır; 'yazma' asla WriteCode olmaz
-- kısa kelimelerde bulanık eşleşme yok: 6 harf ve altında tahmin yok
-
-24 test, std-only, üretim tarafında unwrap/expect yok. Derlenmedi: bu
-ağaçta cargo yok.
 ---
  Cargo.toml               |    1 +
  crates/anlama/Cargo.toml |   13 +
@@ -33,10 +17,10 @@ ağaçta cargo yok.
  create mode 100644 crates/anlama/src/lib.rs
 
 diff --git a/Cargo.toml b/Cargo.toml
-index 49c561f..921c06b 100644
+index 46c3b6d..1548d28 100644
 --- a/Cargo.toml
 +++ b/Cargo.toml
-@@ -27,6 +27,7 @@ members = [
+@@ -19,6 +19,7 @@ members = [
      "crates/muhur",
      "crates/kuyruk",
      "crates/erisim",

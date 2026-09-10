@@ -1,28 +1,9 @@
-From 3ce74ee02bba9b7e1ece21ea422b6f3aa08acd2a Mon Sep 17 00:00:00 2001
+From a6d0145b2530e2377ad34e273154d0107ffbc3bc Mon Sep 17 00:00:00 2001
 From: Lubo's Ruler <ayazkussann@gmail.com>
 Date: Thu, 10 Sep 2026 08:27:20 +0000
-Subject: [PATCH 08/10] kanit: kapsama kilidi, sonra iddia, sonra yol; ucusuz
+Subject: [PATCH 08/20] kanit: kapsama kilidi, sonra iddia, sonra yol; ucusuz
  kapanis yok
-MIME-Version: 1.0
-Content-Type: text/plain; charset=UTF-8
-Content-Transfer-Encoding: 8bit
 
-Bir incelemenin bozuldugu yer yanlis sonuc degil, sonucun dogru gorunmesidir:
-bir delik tarif edilir, tarif dosyaya yazilir, tarif ile duzeltme ayirt
-edilemez hale gelir. Bu zincir o iki seyi ayirir.
-
-gozlem -> iddia -> bag -> yol -> kos -> kapanis; her ok bir kuraldir. Hedef
-yetkilendirilip plan kaydedilmeden hicbir gozlem kabul edilmez: plandan once
-bakmak denetim degil gezintidir. Kanit bir bulguya baglanirken kapsam
-disindaysa reddedilir; sessizce kullanilamaz. Yol, kontrolün ne olacagini
-kosmadan once kaydeder, cunku "çıkti iyi gorundu" sonradan kararlastrilan bir
-olcuttur. Kapanis, davranis hakkinda bir iddiayi kapatabilecek en az bir
-gozlem ister; Anlatim kapatamaz - enum'da tutulmasinin tek nedeni bu: soz
-kaydedilir, sayilir ve reddedilir.
-
-Ayni crate "bulgu metni kodun icine yapistirildi" hatasini da makinece
-yakalar: yalniz sozle desteklenen bulgu `described_only()` listesinde durur ve
-rapor onu "gosterilmedi" diye yazar. 12 test.
 ---
  crates/kanit/Cargo.toml |  12 +
  crates/kanit/src/lib.rs | 883 ++++++++++++++++++++++++++++++++++++++++

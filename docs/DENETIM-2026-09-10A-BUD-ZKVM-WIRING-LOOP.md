@@ -991,3 +991,54 @@ pinned binary could not be fetched to reproduce CI's findings; a worktree of
 `origin/main` run through the same version from PyPI could, which is the route to
 write down.
 
+
+## 22. lubot mirror: rebuilt onto the only base that survives, 20 patches (`a3896e2`)
+
+The sandbox was reset mid-turn: `/tmp` was wiped and `budlum`'s HEAD was rolled
+back to `88970e3` with 43 paths left dirty on disk. Recovery was
+`git fetch origin <branch>` → `git stash push -u -m snapshot-restore-safety-1208`
+→ `git reset --hard FETCH_HEAD`. The lesson is recorded where it belongs: only
+pushed state is durable, and anything in `/tmp` is scratch. The lubot series was
+re-derived from the mirror in this repo, which is exactly why the mirror has to
+be appliable rather than merely present.
+
+It was not. The mirror documented its base as branch `olcum-disiplini` @ `12bc9ac`,
+and that branch no longer exists on the fork: `main` @ `37d32c9` is the only ref.
+Against the base that actually exists the files applied 9/18 (0/18 in a fresh
+clone until a committer identity was set - an environmental failure that looks
+exactly like a stale-context rejection, so it is written down as a trap). So the
+18 commits were replayed onto `main` and re-exported, and the tool that does it
+now ships as `repo-lubot/tools/rebuild_series.py`.
+
+Four defects were found in my own tooling, each with a rule attached:
+
+| defect | symptom | rule |
+|---|---|---|
+| `patch -N` skipping hunks | reported "18/18 clean" while `members` stayed 8 and ten crate manifests were never written | a structural self-check over the result must pass before export; a per-patch clean line is not evidence |
+| folded `Subject:` header | every rebuilt commit lost its tail ("...`cagisi bir`" instead of "...`cagisi bir veridir`"); subject fidelity 7/18 | unwrap continuation lines, then compare against the pristine originals |
+| double-encoded subjects | `=?UTF-8?q?=3D=3FUTF-8=3Fq=3F...` inherited from feeding a previous export back into `git commit -m` | decode until no encoded word remains |
+| magic separator date | all 18 rebuilt commits dated `Mon, 17 Sep 2001` | the `Date:` header is the commit date, the `From <sha>` line is git's placeholder |
+
+Fidelity after the fixes: 18/18 subjects identical to the pristine originals, and
+`git am -3 --whitespace=fix` of the regenerated files - as committed - into a
+clean clone of the real fork applies **20/20 with zero `.rej`**.
+
+Two findings were measured rather than guessed, and one of them is now fixed in
+the series itself. lubot's README ratchet line claims `191 tests` while the base
+tree contains 178 `#[test]` attributes: a 13-test overstatement that predates
+this work. The applied tip measures 327 (178 base + 149 from the twelve crates),
+with 0 `#[ignore]` and no doc examples, so 327 is the number cargo can only
+confirm, not revise - patch 0019 sets it that way, with the counting method in
+the message rather than an inflated carry-forward. Patch 0020 fixes the inventory:
+`docs/CRATES.md` listed ten crates while the series adds twelve, because
+`izolasyon` and `denetim` never got a row; its acceptance test is `rows == crate
+dirs` on the applied tree. And a real gap in lubot's gate runner is reported, not
+patched from a bundle: `gates/check.py --all` catches only `SystemExit`, so the
+first gate that shells out to `cargo` aborts the whole suite with
+`FileNotFoundError` in a toolchain-less environment. Before that abort, 5 of the
+38 gates pass on the applied tree; `--list` reports 38, matching the README.
+
+Nothing here was compiled, and the mirror says so in its own "What is NOT
+verified" section: rustup, `static.rust-lang.org`, `index.crates.io`,
+`registry-1.docker.io` and GitHub release assets were probed and are all
+unreachable from this sandbox.

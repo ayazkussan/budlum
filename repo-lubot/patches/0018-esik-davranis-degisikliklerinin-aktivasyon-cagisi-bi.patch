@@ -1,30 +1,9 @@
-From fc0bde2eef29332efb1ded4a5fc1ebb5f558fc59 Mon Sep 17 00:00:00 2001
+From f4821c3912015c3621163e93e62180677f6f36f6 Mon Sep 17 00:00:00 2001
 From: ayazkussan <ayazkussan@users.noreply.github.com>
 Date: Thu, 10 Sep 2026 10:12:57 +0000
-Subject: [PATCH] esik: davranis degisikliklerinin aktivasyon cagisi bir
+Subject: [PATCH 18/20] esik: davranis degisikliklerinin aktivasyon cagisi bir
  veridir
-MIME-Version: 1.0
-Content-Type: text/plain; charset=UTF-8
-Content-Transfer-Encoding: 8bit
 
-Budlum tarafinda boyle bir defter var: BDLM_MAINTENANCE_PLACEMENT_V1 gibi
-isimler bir kademede acilir. Ayni seyin Lubot tarafindaki karsiligi bu crate:
-"yeni kural 4410'dan itibaren canlı" cumlesi ya kayitlidir ya da yorumdur,
-ve yorum olan hali F-16'nin ertelenen yarisi - ReplicationDeficit biletinin
-fiyati state root'unu oynattigi icin kendi aktivasyon kademeye muhtac.
-
-Kuralar: kademe 0 reddedilir (kimse vazgecemez); karsilastirma tek yerde
-(>=, plan sabitler); planin anlastigi bayrak listesi sonradan buyumez;
-iki canli plan ayni kademede acilamaz; zamaninda acilmamis degisiklik
-MissedActivation'dir; emeklilik silmek degildir ve hic calismamis bir
-sey emekliye ayrilamaz; kaydettigin kademeyi sonradan degistirmek
-RewriteOfRecord'dur.
-
-Canlil uc durumdur: On / Off / Unratified. 'Plan geldi, kimse isareti
-koymedi' ile 'daha gelmedi' ayni sey degil - birini digeri sanan kod,
-eski kurali calistirirken yeni calisiyormus gibi raporlar.
-
-1428 satir, 20 test, std-only, uretim tarafinda unwrap/expect yok. Derlenmedi.
 ---
  Cargo.toml             |    1 +
  crates/esik/Cargo.toml |   13 +
@@ -35,10 +14,10 @@ eski kurali calistirirken yeni calisiyormus gibi raporlar.
  create mode 100644 crates/esik/src/lib.rs
 
 diff --git a/Cargo.toml b/Cargo.toml
-index 921c06b..7e5f5aa 100644
+index 1548d28..d2512f7 100644
 --- a/Cargo.toml
 +++ b/Cargo.toml
-@@ -28,6 +28,7 @@ members = [
+@@ -20,6 +20,7 @@ members = [
      "crates/kuyruk",
      "crates/erisim",
      "crates/anlama",

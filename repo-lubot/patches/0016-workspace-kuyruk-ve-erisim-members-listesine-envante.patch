@@ -1,25 +1,19 @@
-From 39a0ac36612af9095725eaa1d2d43e1623c5865e Mon Sep 17 00:00:00 2001
+From 965fdc673ae43431c442233045676a3f4867e6de Mon Sep 17 00:00:00 2001
 From: Lubo's Ruler <ayazkussann@gmail.com>
 Date: Thu, 10 Sep 2026 09:00:12 +0000
-Subject: [PATCH 16/16] workspace: kuyruk ve erisim members listesine, envanter
+Subject: [PATCH 16/20] workspace: kuyruk ve erisim members listesine, envanter
  iki satir daha
-MIME-Version: 1.0
-Content-Type: text/plain; charset=UTF-8
-Content-Transfer-Encoding: 8bit
 
-Altinci ve yedinci crate: muhasebesi olan kuyruk ve daralmayan yetki defteri.
-Envanter satirlari da ayni commit'te - bir crate'in neyi reddettigi satirda
-yoksa, o crate'in bir kapi oldugu iddiası okunamaz.
 ---
  Cargo.toml     | 2 ++
  docs/CRATES.md | 3 ++-
  2 files changed, 4 insertions(+), 1 deletion(-)
 
 diff --git a/Cargo.toml b/Cargo.toml
-index cd2f336..49c561f 100644
+index 88e43fd..46c3b6d 100644
 --- a/Cargo.toml
 +++ b/Cargo.toml
-@@ -25,6 +25,8 @@ members = [
+@@ -17,6 +17,8 @@ members = [
      "crates/mimari",
      "crates/takip",
      "crates/muhur",
