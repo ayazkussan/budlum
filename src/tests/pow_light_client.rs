@@ -219,7 +219,9 @@ fn pow_fixture(first_state_root: [u8; 32]) -> (
                 state_root,
                 tx_root: [2u8; 32],
                 event_root: [5u8; 32],
-                timestamp_ms: 1_000 + height,
+                // `height` is the `u64` from the range, and this field is `u128`:
+                // `1_000 + height` infers `u64` and the field then refuses it (E0308).
+                timestamp_ms: 1_000 + u128::from(height),
                 nonce: 0,
                 difficulty_bits: 4,
             },

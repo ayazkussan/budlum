@@ -936,3 +936,58 @@ ran - there is no runner or toolchain in this sandbox - so actionlint and the re
 scheduling behaviour arrive in the next run, and this branch's `Format` debt stays
 red on purpose: the gate suite no longer depends on it.
 
+## 21. The three errors, found by line and column, and one red check that is not mine
+
+Run 51 (`389bb31`) is the first run whose failure surface can be read end to end,
+because the surface step now pairs each `error[...]` with its `--> file:line:col`.
+`budlum-core (lib test)` had three errors. Two were the ones fixed in the previous
+commit (the missing `use` for `Executor`, the `let _ = challenge_id;` silencer of a
+name bound in a different test), and clearing them let rustc reach type and borrow
+checking, which is where the remaining complaints live - an onion, not a surprise:
+a resolution error suppresses the borrowck pass that would have named them.
+
+The located set, all in test-only code:
+
+- `src/chain/storage_economics_tests.rs:525:9` and `:529:19`, two `E0502`:
+  "cannot borrow `blockchain` as mutable because it is also borrowed as immutable".
+  `all_reallocation_tickets` returns `Vec<&StorageReallocationTicket>`, and the test
+  kept the reference across a balance credit and an escrow call. Fixed by copying
+  the one field the test later reads (`ticket_id`) out of a scoped block, rather
+  than cloning the ticket and keeping the borrow alive for no reason.
+- `src/tests/pow_light_client.rs:222:31`, one `E0308`: `timestamp_ms` is `u128`
+  while `1_000 + height` infers `u64` from the `height` of `(1u64..=4)`. Fixed with
+  `1_000 + u128::from(height)`, which is what the neighbouring lines in that file
+  already spell out (`timestamp_ms: 1_000,` needs no annotation because a bare
+  literal infers).
+
+Whether the target now compiles is a question for run 52, not for this document:
+there is no toolchain in this sandbox, so nothing here was type-checked.
+
+### The Typos check on this PR is not caused by this branch
+
+At run 51 the spell gate was still red, and the local tree with the *same* pinned
+version reported nothing - a discrepancy worth chasing to the bottom rather than
+calibrating away. Two facts explain it:
+
+- `pull_request` runs check out the **merge ref**, not the branch head, so the
+  scan sees files that exist only on `main`.
+- `main` (d07225d, "Add files via upload", today) contains
+  `01a08674-f696-72cd-b135-24e6cc8e1539 (2).patch` at the repository root: 2 310 869
+  bytes, 37 000+ lines, a browser-suffixed duplicate of an Arena patchset artifact,
+  unreferenced by any file in the tree.
+
+`typos` 1.48.0 on a worktree of `origin/main` reports exactly 6 findings, every one
+of them inside that file (`tha`, `ser` x2, `Objec`, `flate` x2) - the same six words
+run 51 showed once the patch mirrors I authored were excluded. So this branch's
+contribution is fixed (the `sentinal` x2 in the exported commit messages, now out of
+scope for the gate because they are generated text re-verified by `git am`, not
+hand-edited here), and the remaining red belongs to `main`: it needs `git rm`, not a
+whitelist entry, and not from this PR.
+
+The download path was also measured, because it will matter to the next reader:
+`release-assets.githubusercontent.com` - where release tarballs redirect - is
+unreachable from this sandbox, the same class of block as the Actions log host. The
+pinned binary could not be fetched to reproduce CI's findings; a worktree of
+`origin/main` run through the same version from PyPI could, which is the route to
+write down.
+

@@ -506,14 +506,23 @@ mod tests {
             .finalize_missed_storage_challenges(20)
             .unwrap();
         assert_eq!(finalized, 1, "the missed challenge finalizes and slashes");
-        let ticket = blockchain
-            .state
-            .storage_registry
-            .all_reallocation_tickets()
-            .into_iter()
-            .find(|t| t.failed_deal_id == deal_id)
-            .expect("the slash opens a ticket");
-        assert_eq!(ticket.slashed_operator, operator);
+        // `all_reallocation_tickets` yields `Vec<&Ticket>`, so a `ticket` kept
+        // past here holds an immutable borrow on `blockchain` - and the rest of
+        // this test credits a balance and calls the escrow, both of which need it
+        // mutably (E0502 twice in the failing build). The one field the test reads
+        // afterwards is copied out and the borrow ends with the block. Cloning the
+        // whole ticket would compile too, and would hide which field matters.
+        let ticket_id = {
+            let ticket = blockchain
+                .state
+                .storage_registry
+                .all_reallocation_tickets()
+                .into_iter()
+                .find(|t| t.failed_deal_id == deal_id)
+                .expect("the slash opens a ticket");
+            assert_eq!(ticket.slashed_operator, operator);
+            ticket.ticket_id
+        };
 
         let params = StorageDomainParams::default();
         let economics = StorageEconomicsParams {
@@ -528,7 +537,7 @@ mod tests {
 
         let err = blockchain
             .accept_storage_reallocation_with_escrow(
-                ticket.ticket_id,
+                ticket_id,
                 operator,
                 payer,
                 0,
@@ -546,7 +555,7 @@ mod tests {
         let after = blockchain
             .state
             .storage_registry
-            .get_reallocation_ticket(ticket.ticket_id)
+            .get_reallocation_ticket(ticket_id)
             .expect("ticket exists");
         assert_eq!(after.status, ReallocationStatus::Pending);
     }
