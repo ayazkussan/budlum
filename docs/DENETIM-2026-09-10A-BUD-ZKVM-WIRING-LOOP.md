@@ -644,3 +644,47 @@ shape of a 101 here is a small number of real assertion failures in
 `cargo build --all-targets` in another job and was not. If instead the surface
 prints `error[E`, the correction to write here is that `--all-targets` was not
 run anywhere in this workflow.
+
+## 17. The instrument I added was itself lying, and how that was measured
+
+Run 43 (`81c3b01`) is the first run where `Build` was green, `Run tests` was
+red, and the `Test failure surface` step I wrote *ran successfully*. It reported:
+
+```
+0 failing suites reported by `cargo test --no-fail-fast`; 36 lines of output were produced
+```
+
+Zero, with a red step and 36 lines of output - and every one of my grep
+patterns anchored at the start of a line. The reason is in the workflow file,
+three lines above the step: `env: CARGO_TERM_COLOR: always`. Cargo therefore
+emits `ESC[1mESC[91merrorESC[0m: ...`, so `^error(`\[|`:)` cannot match, and the
+count `grep -cE 'test result: FAILED'` returns 0. The same defect was in all
+five surfaces I had added (build, format, typos, miri, asan); the earlier one
+line of ANSI that survived in run 37's annotations - `^[[1m^[[91merror^[[0m:
+failed to run custom build command` - was the evidence sitting in plain sight,
+because that step grepped nothing and printed everything.
+
+So the reading of section 14 was right about the cause and *wrong* about the
+fix being complete, and the shape of the mistake is worth recording: a
+diagnostic that prints nothing when it succeeds and nothing when it fails is
+indistinguishable from a clean run. Every surface now strips the escape
+sequences before selecting, and the strip was verified locally before the
+commit:
+
+```
+$ printf '\033[1m\033[91merror\033[0m: failed to run custom build command\n' \
+    | sed -e 's/\x1b\[[0-9;]*m//g' | grep -E '^error(\[|:)'
+error: failed to run custom build command          # matches after the strip
+$ <same input> | grep -E '^error(\[|:)'            # matches nothing before it
+```
+
+Pre-registered for run 44, before reading it: if `Build` stays green and the
+surface still prints nothing, the next hypothesis is not "the strip failed" but
+"the 36 lines are cargo refusing to resolve dev-dependencies" - which would put
+the fork's `Cargo.lock` in scope instead of its sources.
+
+The step count is unchanged (all six blocks still pass `bash -n`), the verdict
+steps are still untouched, and the annotation budget is still <= 9 lines plus
+the count line. What run 44 should now show: either `error[E...]` lines from a
+test-only target that does not compile, or a `failures:` block naming the tests
+that lost - and the 36-line output means one of the two, not a slow suite.
