@@ -9,12 +9,17 @@ aynalaniyor; dagitim kullaniciya ait.
 git -C <workspace-klonu> checkout main
 git -C <workspace-klonu> am patches/*.patch
 ```
-Patch sirasi 0001..0034 (sira kritik; hafiza.md append'lari birbiri
-uzerine yazilir). 0034 ayrica `git am` ile temiz bir base'de sinandi
+Patch sirasi 0001..0041 (sira kritik; hafiza.md append'lari birbiri
+uzerine yazilir). Sayi bu commit'te olculdu; bayatlamasin diye turetme komutu:
+`ls repo-workspace/patches/*.patch | wc -l` ve en buyuk ad:
+`ls repo-workspace/patches/ | tail -1`. Iki satir birden guncellenmiyorsa
+ikincisi onceki turu gosterir - bu satirin kendisi de bir baglanti iddiasi ve
+agaca karsi yeniden turetilmesi gerekir. 0034 ayrica `git am` ile temiz bir
+base'de sinandi
 (110 satirlik dosya olusturuyor, rc=0) — apply edilebilirlik iddiasi
 gozleme dayali, varsayima dayali degil.
 
-## Icerik (liste 1..17'yi sayiyor; ayna 0034'te — 18..34 denetim dalga kayitlari)
+## Icerik (liste 1..17'yi sayiyor; ayna 0041'de — 18..41 denetim dalga kayitlari)
 1. DENETIM-2026-09-09G: AR-GE-6 F-12 + Lubot izolasyon raporu + hafiza.
 2. DENETIM-2026-09-09H: AR-GE-6 production writer + larva bulgusu +
    Lubot denetim + hafiza.
@@ -52,7 +57,8 @@ Onceki komut `am patches/000*.patch` idi; glob `000*` yalnizca 0001..0009'u
 esler. Yani 0010..0034 — yirmi bes patch — talimata uyan bir klon tarafından
 HIC uygulanmiyordu ve hicbir sey hata vermiyordu: `git am` kendisine verilmeyen
 dosyayi ozetmez. `git am patches/*.patch` kullanimi siralamayi dosya adindaki
-sifir dolgudan alir (0001..0034 icin lexicographic = sayisal), bu yuzden guvenli.
+sifir dolgudan alir (0001..0041 icin lexicographic = sayisal), bu yuzden guvenli;
+dort hane 9999'a kadar ayni kalir, bes haneye geciste siralama tekrar dusunulmeli.
 
 Ayni hata `repo-lubot/README.md`'de de vardi; orada 5 patch'in 5'i de `000*`
 araligina dustugu icin zararsizdi, ama 6. patch'te sessizce dusururdu — o da
