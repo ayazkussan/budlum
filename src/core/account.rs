@@ -153,9 +153,26 @@ impl Validator {
         self.has_role(&roles::AI_OPERATOR)
     }
 
-    /// Cross-role slashing: when any role is slashed, ALL roles are jailed.
-    /// This ensures a validator cannot continue operating in other roles
-    /// After being caught misbehaving in one role.
+    /// WIRING: unwired - kept as the `AccountState` view of a rule the chain
+    /// enforces one layer down. Nothing on any production path calls this.
+    ///
+    /// The live cross-role sweep is
+    /// [`PermissionlessRegistry::slash_cross_role`](crate::registry::permissionless),
+    /// reached from `PermissionlessRegistry::slash`; the consensus paths jail
+    /// through [`AccountState::slash_validator`] and through the liveness pass
+    /// in the blockchain, which set `slashed` / `active` / `jailed` /
+    /// `jail_until` here directly. The AI inference role is deliberately
+    /// excluded from any sweep: `slash_role_only` cuts the role's bond and
+    /// leaves the rest, because an equivocation proved in the inference layer
+    /// is not consensus evidence against a validator's stake.
+    ///
+    /// What this function used to claim - "this ensures a validator cannot
+    /// continue operating in other roles" - is true of the system and false of
+    /// this function, which is the worse combination: a reader of this file
+    /// concludes the guarantee lives here and does not go look. It stays
+    /// because the field writes are the shape `jail_until` needs, and deleting
+    /// an unused setter pair without a decision on that shape is its own
+    /// change. See `docs/AUDIT-DEAD-PUB-API-2026-09-10.md`.
     pub fn slash_all_roles(&mut self, jail_until_epoch: u64) {
         self.slashed = true;
         self.jailed = true;

@@ -375,3 +375,44 @@ any code change on this branch should be written as "verified"**, including my
 own `assign_object` wiring in section 8 - which is exactly why that section says
 "not compiled" instead of implying otherwise.
 
+## 11. Dead public API: measured, classified, two alarms withdrawn
+
+Inventory: `docs/AUDIT-DEAD-PUB-API-2026-09-10.md`. **205** of 1438 `pub fn`s in
+`src/` have no reference outside `#[cfg(test)]`, tree-wide, with no quoted-string
+dispatch either. 14 say so in their own comment; 191 do not; 28 of those carry a
+security or consensus verb.
+
+Read before filing any of them as a hole, and two claims were withdrawn:
+
+* **Withdrawn:** "`slash_all_roles` dead ⇒ a slashed operator keeps validating."
+  Not true. `AccountState::slash_validator` (account.rs:1357) sets
+  `slashed/active/jailed/jail_until` and mirrors into the registry; the liveness
+  path (blockchain.rs:2733) does the registry sweep *and* the account flags;
+  the other pass (blockchain.rs:3978) sets `jailed` with a comment recording
+  that the two paths once disagreed on the **state root** because `jailed` is
+  hashed. The cross-role sweep is real (`registry::slash_cross_role`, reached
+  from `registry::slash`), and the AI-role exclusion from it is deliberate and
+  written down. `slash_all_roles` is a **duplicate of a policy that lives one
+  layer down**, not a missing enforcement.
+* **Withdrawn:** "`is_valid_chain` / `is_authorized_now` uncalled ⇒ validation
+  skipped." Both are convenience wrappers; the wrapped functions
+  (`validate_candidate_chain`, `PoAWhitelist::contains`) are the ones the
+  production path uses.
+* **Kept:** `store_bls_key` / `store_pq_key` / `bls_signing_available` /
+  `pq_signing_available` - the PKCS#11 capability model exists and is tested,
+  and **no binary or provisioning entry point calls it**. That is the directive's
+  "HSM/PKCS#11" open point, seen from the other side: not "unsupported", but
+  "supported and unreachable".
+* **Action taken:** `Validator::slash_all_roles` now declares
+  `WIRING: unwired` and names the live path, because its old doc claimed the
+  guarantee at the wrong layer. That is the resolution the guard baseline itself
+  prescribes ("moving it into a module that honestly declares `WIRING: unwired`"
+  lowers the count; deleting a field-write pattern without deciding its shape is
+  a different change).
+
+The class, not the count: `no_idle_code` and `guards-are-reachable` both exist,
+and the reason `assign_object`, `slash_all_roles` and 190 others sit outside them
+is that both gates are keyed on names (`check/verify/validate/...`) or on
+*reachability from a test*. A ratchet keyed on the `path:name` pair instead of
+the verb is the only version of this that cannot be satisfied by renaming.
+
