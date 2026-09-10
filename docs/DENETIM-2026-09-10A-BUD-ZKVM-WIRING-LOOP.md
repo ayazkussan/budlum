@@ -542,3 +542,60 @@ Dependency Review advisory, and the two determinism jobs - those workflows
 install protoc, so their 101s are their own, and the reading in section 12 that
 attributed them to a single compile error is now **corrected**: the shared cause
 was `rust.yml` plus the fmt debt, not all eight.
+
+## 15. F-16's actionable half: a lost replica's slot is now ticketed
+
+The repair band measured two things and acted on one. `objects_below_own_repair_margin`
+opened tickets for shards with **zero** active replicas; `under_replicated_shards`
+- a shard at 1 of a target of 3 - was computed, logged, and left alone, so the
+object with the *most* common failure mode got a warning. Reading the two
+ticket constructors explains why the band had stopped there: `open_never_placed_ticket`
+refuses a shard that already has a live deal (correctly), and
+`open_expiry_reallocation` needs a `deal_id` the band never consulted.
+
+The `deal_id`s are there. A shard at 1 of 3 got there by *losing* replicas, and
+each loss left a closed deal behind - a free slot. `StorageRegistry::
+open_repair_tickets_for_free_slots` now walks the under-target shards and opens
+a replacement ticket per free slot, and the maintenance pass counts the result
+into `registry_changed`, because a ticket is registry state and an epoch that
+opened tickets must persist like any other.
+
+Three decisions in it worth naming, since each is a place where a plausible
+patch would be wrong:
+
+* the guard is `(shard_id, replica_index)`, not `shard_id`. "This shard has an
+  active deal" and "this slot has an active deal" are different statements, and
+  only the second one means paying two operators for one slot - which is the
+  exact hazard the never-placed path already refuses;
+* only `DealStatus::Expired` history is reopened. A slashed deal's slot belongs
+  to the slash path: it already opened the ticket, and it records which operator
+  to bar. A ticket opened here would carry `slashed_operator = 0` and hand the
+  slot back to the operator that just lost its bond;
+* a shard whose whole history is still active yields nothing, and that is the
+  stated limit rather than a silent skip: adding a copy that nobody lost is a
+  replication request, not a reallocation, and the ticket type has no cause for
+  it. Pinning it in a test is what keeps it from being read later as "the sweep
+  is broken".
+
+Five tests in `demand_driven_replication_tests` (`src/domain/storage_deal.rs`):
+free slot ticketed (2 of 2 slots), slashed slot left alone (1 of 2), all-live
+history yields no ticket, idempotence across two epochs (dedupe by
+`failed_deal_id`, which is what makes an every-tick sweep safe), and a healthy
+object untouched. `cargo fmt`/`clippy`/`cargo test` are not run here - no
+toolchain; the file's delimiter balance and line widths were checked
+mechanically instead, and the added lines break where rustfmt would break them.
+
+### The AR-GE question this leaves open (written down, not blocking)
+
+*Why asked*: the remaining half of F-16 needs a ticket that is not a
+reallocation. *What it would do*: add a `ReallocationCause::ReplicationDeficit`
+(or an equivalent registry-side demand queue) that `accept_reallocation_ticket`
+can price, so an object at 1 of 3 with no lost deals can be brought up to
+target. *Why it is not done here*: the acceptance path prices a *replacement*
+against a *failed* deal's bond and deadline; inventing a cause without touching
+`accept_reallocation_ticket` would open tickets that no operator can correctly
+take, and the ticket map is registry state that reaches the state root - so the
+change needs its own epoch-gated maintenance bump, the way
+`BDLM_MAINTENANCE_PLACEMENT_V1` did. That is a consensus-visible decision, and
+this loop's rule is to leave such decisions documented rather than smuggled in
+through a helper.

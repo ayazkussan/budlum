@@ -24,6 +24,15 @@
 //! Data-sovereignty rule (plan §0.5): anyone (any account, no
 //! Role required) may open a `RetrievalChallenge` and may submit a
 //! `StorageDeal`. There is no team-gated "official monitor" role.
+//!
+//! WIRING: wired - the durability half of this module is driven from
+//! `run_storage_maintenance` in `src/chain/chain_actor.rs`: the per-object
+//! repair margin from `objects_below_own_repair_margin`, the shard view from
+//! `under_replicated_shards`, the repair action from
+//! `open_repair_tickets_for_free_slots`, and the placement advisory from
+//! `annotate_expected_holders`. Re-derive before trusting this paragraph -
+//! a wiring note is a claim with an expiry date, not a property of the text it
+//! sits next to.
 
 use crate::core::address::Address;
 use crate::core::hash::hash_fields_bytes;
@@ -3429,6 +3438,62 @@ impl StorageRegistry {
             .collect()
     }
 
+    /// Open replacement tickets for the free replica slots of shards that are
+    /// under their target.
+    ///
+    /// The actionable half of the repair band. A shard below its
+    /// demand-adjusted target used to produce a warning and nothing else:
+    /// [`StorageRegistry::open_never_placed_ticket`] correctly refuses a shard
+    /// that already has a live deal, and [`StorageRegistry::open_expiry_reallocation`]
+    /// needs a deal id - which the band never consulted. The deal ids are
+    /// there. A shard at 1 of a target of 3 got there by *losing* replicas, and
+    /// each loss left a closed deal behind. That slot is free, and a
+    /// replacement for it is the same repair the zero-replica path performs.
+    ///
+    /// Slot, not shard. The guard is `(shard_id, replica_index)`, because
+    /// "the shard has an active deal" and "this slot has an active deal" are
+    /// different statements, and only the second one means paying two operators
+    /// for one slot.
+    ///
+    /// Only [`DealStatus::Expired`] history is considered. A slashed deal's
+    /// slot belongs to the slash path: that path already opened the ticket and
+    /// it knows which operator to bar, and a ticket opened here would carry
+    /// `slashed_operator = 0` and let the barred operator take the slot back.
+    ///
+    /// Returns how many tickets were opened. A shard whose whole history is
+    /// still active yields nothing at all: adding a copy nobody lost is a
+    /// replication request, not a reallocation, and the ticket type has no
+    /// cause for it. That limit is stated here and pinned by a test, rather
+    /// than closed by inventing a cause the acceptance path would then have to
+    /// learn to price.
+    pub fn open_repair_tickets_for_free_slots(&mut self, now_epoch: u64) -> usize {
+        let gaps = self.under_replicated_shards(now_epoch);
+        let mut opened = 0usize;
+        for (manifest_id, shard_id, _active) in &gaps {
+            let history: Vec<(u64, u8, DealStatus)> = self
+                .deals_for_shard(manifest_id, shard_id)
+                .into_iter()
+                .map(|deal| (deal.deal_id, deal.replica_index, deal.status))
+                .collect();
+            let openable: Vec<u64> = history
+                .iter()
+                .filter(|(_, _, status)| *status == DealStatus::Expired)
+                .filter(|(_, index, _)| {
+                    !history
+                        .iter()
+                        .any(|(_, live, active)| *active == DealStatus::Active && live == index)
+                })
+                .map(|(deal_id, _, _)| *deal_id)
+                .collect();
+            for deal_id in openable {
+                if self.open_expiry_reallocation(deal_id, now_epoch).is_some() {
+                    opened += 1;
+                }
+            }
+        }
+        opened
+    }
+
     /// How many of an object's distinct shards still have an active deal.
     ///
     /// This is the number erasure coding cares about, and it is not the one
@@ -6746,6 +6811,161 @@ mod demand_driven_replication_tests {
             "the refusal must name the authorisation, got {err}"
         );
         assert!(reg.get_confidential_commit(&m.manifest_id).is_none());
+    }
+
+    /// A slot the object lost, not a slot it never had.
+    ///
+    /// One live replica of three, with two matured-and-lapsed deals behind it:
+    /// the lapsed slots are free, and each must get a replacement ticket. This
+    /// is the difference between a repair band that logs and one that acts.
+    #[test]
+    fn a_free_slot_gets_a_replacement_ticket() {
+        let mut reg = StorageRegistry::new();
+        let bytes = b"content with a lost replica".to_vec();
+        let manifest =
+            ContentManifest::from_bytes_sliced(&bytes, bytes.len() as u32).expect("manifest");
+        reg.register_manifest(&manifest);
+        let manifest_id = manifest.manifest_id;
+        let shard_id = manifest.shards.first().expect("shard").shard_id;
+        reg.insert_test_deal(1, manifest_id, shard_id, 0, DealStatus::Active);
+        reg.insert_test_deal(2, manifest_id, shard_id, 1, DealStatus::Expired);
+        reg.insert_test_deal(3, manifest_id, shard_id, 2, DealStatus::Expired);
+        assert_eq!(reg.under_replicated_shards(0).len(), 1);
+        assert_eq!(
+            reg.open_repair_tickets_for_free_slots(0),
+            2,
+            "both lapsed slots must be offered"
+        );
+        assert_eq!(reg.reallocation_ticket_count(), 2);
+    }
+
+    /// A slashed deal's slot is the slash path's business.
+    ///
+    /// The slash path already opened the ticket and it records who to bar; a
+    /// ticket opened here would carry no barred operator and hand the slot back
+    /// to the one that just lost its bond.
+    #[test]
+    fn a_slashed_slot_is_left_to_the_slash_path() {
+        let mut reg = StorageRegistry::new();
+        let bytes = b"content with a slashed replica".to_vec();
+        let manifest =
+            ContentManifest::from_bytes_sliced(&bytes, bytes.len() as u32).expect("manifest");
+        reg.register_manifest(&manifest);
+        let manifest_id = manifest.manifest_id;
+        let shard_id = manifest.shards.first().expect("shard").shard_id;
+        reg.insert_test_deal(1, manifest_id, shard_id, 0, DealStatus::Active);
+        reg.insert_test_deal(2, manifest_id, shard_id, 1, DealStatus::Expired);
+        reg.insert_test_deal(3, manifest_id, shard_id, 2, DealStatus::Slashed);
+        assert_eq!(
+            reg.open_repair_tickets_for_free_slots(0),
+            1,
+            "only the lapsed slot is ours to reopen"
+        );
+    }
+
+    /// The stated limit of this path, pinned so it cannot be mistaken for a
+    /// silent drop: a shard whose every past replica is still active has no
+    /// free slot, so nothing is offered. Growing the count from one to three
+    /// with no deal ever lost is replication, not reallocation.
+    #[test]
+    fn an_object_that_lost_nothing_gets_no_ticket() {
+        let mut reg = StorageRegistry::new();
+        let bytes = b"content at one replica".to_vec();
+        let manifest =
+            ContentManifest::from_bytes_sliced(&bytes, bytes.len() as u32).expect("manifest");
+        reg.register_manifest(&manifest);
+        let manifest_id = manifest.manifest_id;
+        let shard_id = manifest.shards.first().expect("shard").shard_id;
+        reg.insert_test_deal(1, manifest_id, shard_id, 0, DealStatus::Active);
+        assert_eq!(reg.under_replicated_shards(0).len(), 1);
+        assert_eq!(reg.open_repair_tickets_for_free_slots(0), 0);
+        assert_eq!(reg.reallocation_ticket_count(), 0);
+    }
+
+    /// The band is re-measured every epoch, so this must be safe to call on
+    /// every tick. `open_expiry_reallocation` dedupes by `failed_deal_id`; the
+    /// second pass must find nothing left to open, and must not stack tickets.
+    #[test]
+    fn the_sweep_is_idempotent() {
+        let mut reg = StorageRegistry::new();
+        let bytes = b"content swept twice".to_vec();
+        let manifest =
+            ContentManifest::from_bytes_sliced(&bytes, bytes.len() as u32).expect("manifest");
+        reg.register_manifest(&manifest);
+        let manifest_id = manifest.manifest_id;
+        let shard_id = manifest.shards.first().expect("shard").shard_id;
+        reg.insert_test_deal(1, manifest_id, shard_id, 0, DealStatus::Active);
+        reg.insert_test_deal(2, manifest_id, shard_id, 1, DealStatus::Expired);
+        assert_eq!(reg.open_repair_tickets_for_free_slots(0), 1);
+        assert_eq!(
+            reg.open_repair_tickets_for_free_slots(1),
+            0,
+            "a sweep that reopens what it already opened pays twice for one slot"
+        );
+        assert_eq!(reg.reallocation_ticket_count(), 1);
+    }
+
+    /// A healthy object is not a candidate, and must not be touched at all.
+    #[test]
+    fn an_object_at_its_target_is_not_a_repair_candidate() {
+        let mut reg = StorageRegistry::new();
+        let bytes = b"well replicated content".to_vec();
+        let manifest =
+            ContentManifest::from_bytes_sliced(&bytes, bytes.len() as u32).expect("manifest");
+        reg.register_manifest(&manifest);
+        let manifest_id = manifest.manifest_id;
+        let shard_id = manifest.shards.first().expect("shard").shard_id;
+        for slot in 0..3u8 {
+            reg.insert_test_deal(
+                10 + u64::from(slot),
+                manifest_id,
+                shard_id,
+                slot,
+                DealStatus::Active,
+            );
+        }
+        assert!(reg.under_replicated_shards(0).is_empty());
+        assert_eq!(reg.open_repair_tickets_for_free_slots(0), 0);
+    }
+
+    /// Test-only deal construction. The registry keeps its deal maps private,
+    /// and this band is about the *relationship* between the two maps, so the
+    /// fixture lives next to the invariant instead of being a second copy of
+    /// the fields somewhere else.
+    impl StorageRegistry {
+        fn insert_test_deal(
+            &mut self,
+            deal_id: u64,
+            manifest_id: ContentId,
+            shard_id: ContentId,
+            replica_index: u8,
+            status: DealStatus,
+        ) {
+            let deal = StorageDeal {
+                deal_id,
+                domain_id: 0,
+                manifest_id,
+                shard_id,
+                operator: Address::zero(),
+                economics: StorageEconomicsParams {
+                    operator_bond: 1_000,
+                    fee_per_byte_epoch: 1,
+                },
+                shard_bytes: 1_024,
+                replica_index,
+                deal_start_epoch: 0,
+                deal_end_epoch: if status == DealStatus::Active { 999 } else { 5 },
+                status,
+                merkle_proof: None,
+                storage_root: None,
+                merkle_depth: 64,
+            };
+            self.deals.insert(deal_id, deal);
+            self.deals_by_shard
+                .entry((manifest_id, shard_id))
+                .or_default()
+                .push(deal_id);
+        }
     }
 
     fn generated_registry() -> (StorageRegistry, ContentId) {

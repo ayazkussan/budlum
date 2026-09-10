@@ -2949,6 +2949,24 @@ impl ChainActor {
             );
         }
 
+        // The action the demand band was missing. Each shard under its target
+        // gets a replacement ticket for every replica slot that is actually
+        // free, which is the same repair the zero-replica path performs; the
+        // guard is per slot, not per shard, because "the shard has an active
+        // deal" and "this slot has one" are different statements and only the
+        // second one means paying two operators for one slot. Tickets are
+        // registry state, so the count below feeds the persist decision.
+        let repair_tickets = self
+            .blockchain
+            .state
+            .storage_registry
+            .open_repair_tickets_for_free_slots(current_epoch);
+        if repair_tickets > 0 {
+            tracing::warn!(
+                "B.U.D. storage maintenance opened {repair_tickets} repair tickets for free replica slots at epoch {current_epoch}"
+            );
+        }
+
         let under_replicated = self
             .blockchain
             .state
@@ -2971,8 +2989,11 @@ impl ChainActor {
         // An advisory written into a pending ticket is registry state too: a
         // tick that only annotated used to skip the write, and a crash before
         // the next persisting tick dropped every advisory of this epoch.
-        let registry_changed =
-            annotated > 0 || under_replicated > 0 || swept > 0 || !repair_band.is_empty();
+        let registry_changed = annotated > 0
+            || under_replicated > 0
+            || swept > 0
+            || repair_tickets > 0
+            || !repair_band.is_empty();
         if registry_changed {
             if let Err(error) = self.blockchain.persist_storage_registry() {
                 tracing::error!("Failed to persist storage reallocation status: {error}");
