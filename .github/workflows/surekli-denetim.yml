@@ -1,0 +1,65 @@
+name: surekli-denetim
+
+# Mekanik katman: toolchain gerektirmez, ucuncu-taraf action yok
+# (checkout dahil her sey git+gh+sistem python3 ile). Olcumu calistirir,
+# sonucu kosu ozetine yazar, dalda acik PR varsa oraya yorum atar.
+# Kaynak: docs/audit-2026-09-10/04-OTOMASYON.md
+#
+# Not: zamanlanmis kosular yalnizca varsayilan dalda ateslenir; bu dosya
+# main'e girene kadar tetik `gh workflow run` iledir.
+
+on:
+  schedule:
+    - cron: "17 */6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: surekli-denetim
+  cancel-in-progress: false
+
+jobs:
+  olcum:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - name: agaci al
+        run: |
+          git clone --depth 1 --branch "${{ github.ref_name }}" \
+            "https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}.git" tree
+          cd tree && git rev-parse HEAD
+      - name: wiring olcumu
+        id: olcum
+        run: |
+          cd tree
+          python3 -m py_compile tools/audit/wiring_check.py
+          set +e
+          set -o pipefail
+          python3 tools/audit/wiring_check.py 2>&1 | tee ../olc.log
+          echo "exit=$?" >> "$GITHUB_OUTPUT"
+      - name: ozet + PR yorumu
+        if: always()
+        run: |
+          {
+            echo "## Surekli denetim — $(date -u +%F\ %T) UTC"
+            echo ""
+            echo "dal: ${{ github.ref_name }} @ ${{ github.sha }}"
+            echo "exit: ${{ steps.olcum.outputs.exit }}"
+            echo ""
+            echo '```'
+            cat olc.log 2>/dev/null || echo "(olc.log yok)"
+            echo '```'
+            echo "run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          } | tee ozet.md >> "$GITHUB_STEP_SUMMARY"
+          PR=$(gh pr list -R "${{ github.repository }}" --head "${{ github.ref_name }}" --json number --jq '.[0].number // empty')
+          if [ -n "$PR" ]; then
+            gh pr comment "$PR" -R "${{ github.repository }}" --body-file ozet.md || true
+          fi
+      - name: sonuc
+        if: steps.olcum.outputs.exit != '0'
+        run: exit 1
