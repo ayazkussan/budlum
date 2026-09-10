@@ -10,11 +10,16 @@ git -C <lubot-klonu> fetch origin olcum-disiplini
 git -C <lubot-klonu> checkout olcum-disiplini
 git -C <lubot-klonu> am patches/*.patch
 ```
-Patch sirasi 0001..0010 (0010 en son; glob degil dosya adinin tamamini ver).
+Patch sirasi 0001..0013; 0010 ve 0013 kok `Cargo.toml`'a dokunur ve bu ikisi
+tek satir baglamla uretildi (`git -c diff.context=1`). Neden olculdu: uc
+satirlik baglam, bos satir duzeni farkli olan bir kok manifeste dustu; tek
+satirla iki duzende de gecti. 0013'ün `docs/CRATES.md` huntesinin on-goruntusu
+bu serinin kendisi tarafindan olusturulur, yani baglam garantili - zincir
+sira ile uygulandiginda.
 Base disinda uygulaniyorsa
 `git am -3` veya dosyalar elle kopyalanir.
 
-## Icerik (10 commit)
+## Icerik (13 commit, 0006..0013 bu turda eklendi)
 1. izolasyon crate (lubot-izolasyon): session izolasyon siniri, checkable
    contract (4 test).
 2. denetim crate (lubot-denetim): scan -> validate -> fix kanitli defter
@@ -45,16 +50,41 @@ Base disinda uygulaniyorsa
    sembol, tablonun "burada" dedigi dosyada bir bildirim anahtariyla gecmek
    zorunda; sozlesmesi bos satir, bos tablo ve tek satirlik tablo gecermez.
    Bayat WIRING yorumu / isim degismis sembol hastaliginin kapiya baglanmis hali.
-10. workspace: dort crate members listesine + docs/CRATES.md envanteri. Bu
-    patch tek satir baglamla uretildi (`-c diff.context=1`), cunku kok
-    Cargo.toml'un geri kalanini gormuyoruz; farkli bir duzende bile uygulandigi
-    ayri bir klon uzerinde test edildi.
+11. takip crate (lubot-takip, 715 satir / 12 test): baglanti iddiasi veri
+    olarak tutulur - sembol, Wired/Unwired, ve Wired ise cagri noktasi + rota.
+    `recompute(tree, commit)` agaci tekrar tarayip iki yonu de kirar: bagli
+    iddianin cagrisi kaybolmussa `SiteNoLongerHolds`, baglisiz denilen sembole
+    cagri geldigini goruyorsan `UnwiredClaimNowHolds` (yalniz kuculen bir
+    ratchet'in goremedigi yon), commit degistiyse once `CommitMoved`, hic iddia
+    yoksa `Empty`. Budlum'daki bayat `WIRING:` yorumlari, 205 olu `pub fn` ve
+    hic declare edilmemis kapi hastaliklarinin Lubot tarafindaki karsiligi;
+    metin aramanin cagri grafigi olmadigi crate'in kendi dokumaninda vekalet
+    olarak adlandiriliyor - bu yuzden dogruluk degil sapma raporlar.
+12. muhur crate (lubot-muhur, 631 satir / 11 test): sadece-eklenen zincir; her
+    girdi onceki ucu mühurler, `finalize()` son ucu saklar ve `verify()`
+    baytlari yeniden sayar. Yeniden yazma (`Rewritten`), kuyruk silme
+    (`TailMoved`), orta girdi koparma (`Gap`), finalize-edilmemis zincir
+    (`NeverFinalized`), ayri indeksin suruklenmesi (`IndexDrift`) ayri hatalar.
+    FNV-1a seciminin siniri - saldirgan zinciri yeniden hesaplayabiliyorsa bu
+    katman yetmez, anahtarli insa gerekir - dokumanda yazili; anahtarli gereken
+    yerde bunu bir tip soyleyecek, bir yorum degil.
+13. workspace: takip ve muhur `members` listesine + envanterin iki yeni satiri
+    (`docs/CRATES.md`). Envanterin kendisi de bir baglanti iddiasidir; ihlal
+    sutunu da bu yuzden ayni commit'te guncelleniyor.
 
-Uygulama sirasinda 0006..0010 sirasi kritik degil (0010 en son), ama 0010
-uygulanmazsa dort crate `cargo test`'e girmez: kapiye baglanmayan kod gibi,
-listeye baglanmayan crate de yoktur - gorunmez kodun iki bicimi.
+Test ratchet'i: 191 -> 259. Yeni testler 68 = yetenek 13 + olcek 10 + kanit 12
++ mimari 10 + takip 12 + muhur 11. Lubot'un `training/ratchet.json` dosyasi
+0003'te 191'e baglandi; o sayiyi buradan degistirmiyoruz - guncelleme Lubot
+kosusunda `cargo test` gercekten kostuktan sonra, gercek sayiyla yapilir.
 
-Test ratchet'i: 191 -> 236 (yeni 45). Dort crate de std disinda bagimlilik
-kullanmiyor, I/O yapmiyor, saat/rastgele okumuyor; 2968 satir, prod tarafinda
-sifir unwrap/expect (not: hicbirisi bu kum havuzunda derlenmedi - Lubot'ta
-`cargo test -p lubot-yetenek -p lubot-olcek -p lubot-kanit -p lubot-mimari`).
+Altı crate de std disinda bagimlilik
+kullanmiyor, I/O yapmiyor, saat/rastgele okumuyor; toplam 4314 satir, prod
+tarafinda sifir unwrap/expect. Delimiter dengesi (paren/brace/bracket,
+stringler ve yorumlar cikarildiktan sonra) alti dosyada da sifir — bu kum
+havuzunda yapilabilen tek yapi kontrolu buydu.
+
+**Derlenmedi.** Rust araci yok ve indirilemiyor; dolayisiyla "testler gecti"
+diye bir iddia yok, iddia su: patch'ler uygulaniyor, dosyalar yerinde, kurallar
+test olarak yazili. Lubot'ta kosulacak komut:
+`cargo test -p lubot-yetenek -p lubot-olcek -p lubot-kanit -p lubot-mimari
+-p lubot-takip -p lubot-muhur`.

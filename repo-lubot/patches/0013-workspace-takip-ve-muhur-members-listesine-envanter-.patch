@@ -1,0 +1,44 @@
+From 384104e56d012f92a6466155327372de87270b7c Mon Sep 17 00:00:00 2001
+From: Lubo's Ruler <ayazkussann@gmail.com>
+Date: Thu, 10 Sep 2026 08:44:41 +0000
+Subject: [PATCH 13/13] workspace: takip ve muhur members listesine, envanter
+ iki satir
+
+Envanterin kendisi de bir baglantilik iddiasidir; bu yuzen satirlar eklenirken
+tablonun ihlal sutunu da guncelleniyor - neyin reddedilmedigi yazilmayan bir
+crate, sonraki turde "neden hicbir sey gectirmiyor" diye okunur.
+---
+ Cargo.toml     | 2 ++
+ docs/CRATES.md | 3 ++-
+ 2 files changed, 4 insertions(+), 1 deletion(-)
+
+diff --git a/Cargo.toml b/Cargo.toml
+index 42b5ddf..cd2f336 100644
+--- a/Cargo.toml
++++ b/Cargo.toml
+@@ -23,6 +23,8 @@ members = [
+     "crates/olcek",
+     "crates/kanit",
+     "crates/mimari",
++    "crates/takip",
++    "crates/muhur",
+ ]
+ 
+ # The panic limit: a reader that panics is a reader that stops answering.
+diff --git a/docs/CRATES.md b/docs/CRATES.md
+index a18a33f..d577343 100644
+--- a/docs/CRATES.md
++++ b/docs/CRATES.md
+@@ -6,7 +6,8 @@
+ | `olcek` | ceiling, watermark, reserved floor, and the drop ledger | an admission past the ceiling, an uncounted eviction, a reserve spent by reading |
+ | `kanit` | scope, evidence, findings, paths, closure | observation before a plan, evidence outside the scope, closure without an observation that can carry it |
+ | `mimari` | the pipeline table and the tree it must match | a row naming a symbol that is not declared, an empty contract, an empty table |
+-
++| `takip` | wiring claims about reachability, and the commit each was written at | a wired claim with no call site, a site whose call text is gone, an unwired label the code outgrew, an empty registry |
++| `muhur` | an append-only digest-sealed record and its optional actor index | a rewritten entry, a removed tail, a numbering gap, an index that points at nothing, an unfinalized chain |
+ None of the four depends on another. All are `std` only, no I/O, no clock, no
+ randomness: a run that reads them can be reproduced from its inputs, which is
+ the only property that makes a review finding reviewable a second time.
+-- 
+2.39.5
+
