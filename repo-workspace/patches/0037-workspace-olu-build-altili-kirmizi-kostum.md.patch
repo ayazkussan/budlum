@@ -1,0 +1,57 @@
+From 82ce7d900379fd86f2875aab0ac6a999c062f760 Mon Sep 17 00:00:00 2001
+From: ayazkussan <149924814+ayazkussan@users.noreply.github.com>
+Date: Thu, 10 Sep 2026 08:06:40 +0000
+Subject: [PATCH] denetim-2026-09-10A devam-3: tek bozuk build = 6 kirmizi
+ kontrol (101 triyaji) + geri alinan 3 iddia kaydi
+
+---
+ ...IM-2026-09-10A-olu-build-altili-kirmizi.md | 37 +++++++++++++++++++
+ 1 file changed, 37 insertions(+)
+ create mode 100644 DENETIM-2026-09-10A-olu-build-altili-kirmizi.md
+
+diff --git a/DENETIM-2026-09-10A-olu-build-altili-kirmizi.md b/DENETIM-2026-09-10A-olu-build-altili-kirmizi.md
+new file mode 100644
+index 0000000..9e3ed61
+--- /dev/null
++++ b/DENETIM-2026-09-10A-olu-build-altili-kirmizi.md
+@@ -0,0 +1,37 @@
++# DENETIM-2026-09-10A (devam 3) — tek bozuk build, alti kirmizi kontrol kiyafetinde
++
++Adim-adi + annotation exit-code triyaji (log hostuna ihtiyac kalmadi; bölüm 10'da
++eklenen `if: failure()` annotation adimi bu okumayi ilk kez mumkun kildi):
++
++- `build` (rust.yml) :: Build :: 101 → **derlenmiyor**
++- `Budlum Core` (ci.yml) :: Format :: 1 → fmt borcu, `9a23126`'dan beri
++- Cross-arch determinism (x86 + arm64) :: genesis reproducibility :: **101**
++- Node Classification :: tests :: **101**
++- StorageProvider Gate :: tests :: **101**
++- Fork-Choice Invariants :: tests :: **101**
++- Miri (crypto) :: 1 — kendi derdi; Typos :: 2 — gercek bulgu; Dependency Review — advisory
++
++Okuma: pano "sekiz sorun" demiyor; **"tek bir derleme hatasi ve `cargo test`'e
++ihtiyaci olan her is o hatayi kendi basarisizligi olarak raporluyor"** diyor.
++
++Sonuclar:
++1. "Determinism: failure" → "genesis mimari-bagimli" DEGIL. O is kanit uretmedi;
++   hata bir derleme hatasi. Kirmizi bir kontrol, bir derleme hatasinin
++   asagisindaysa bulgu degildir — ayni hatanin kostumudur.
++2. Bu satirda gercekten acik olan seylerin sayisi panodan cok daha az; ama kalan
++   hatanın biri kokte, yani diger her sey — bölüm 8'deki `assign_object`
++   baglantisi dahil — ona takili. Build annotation'i bu commit aninda hala
++   `in_progress`'ti; adim agacta, sonraki okuma onu gorecek.
++3. Acik kalan ve build ile aciklanmayan dört sey: Typos bulguları, fmt borcu,
++   Miri'nin kendi hatasi, Dependency Review danismanlik kontrolu.
++
++Ayni turde olculup **geri alinan** iddialar (kod degisikligi yok, kayit var):
++- `is_valid_chain`, `is_authorized_now` → kullanimda olan dogrulayicilarin
++  convenience sarmalayicilari; kontrol atlanmiyor.
++- `slash_all_roles` "olu ⇒ slash edilen operator validate etmeye devam eder" →
++  hayir. Cross-role sweep `registry::slash_cross_role` icinde canli; konsensus
++  yollari `AccountState::slash_validator` ve liveness pass'i uzerinden
++  `slashed/active/jailed/jail_until` yaziyor; `blockchain.rs:3978` civarindaki
++  yorum iki yolun bir ara ayni kanitla **farkli state root** urettiğini de
++  kaydediyor. Fonksiyonun kendisi katman-asagi bir duplikasyon — dokumani
++  yanlis katmanda iddia ettigi icin `WIRING: unwired` ile etiketlendi.
+-- 
+2.39.5
+

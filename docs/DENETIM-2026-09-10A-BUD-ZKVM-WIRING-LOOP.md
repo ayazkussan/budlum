@@ -416,3 +416,40 @@ is that both gates are keyed on names (`check/verify/validate/...`) or on
 *reachability from a test*. A ratchet keyed on the `path:name` pair instead of
 the verb is the only version of this that cannot be satisfied by renaming.
 
+## 12. One broken build is wearing six red checks
+
+Triage by step name + annotation exit code (no log host needed - the channel
+added in section 10 is what makes this readable at all):
+
+| job (8ebf838) | failing step | exit code | reading |
+|---|---|---|---|
+| `build` (rust.yml) | Build (`cargo build --verbose`) | 101 | **does not compile** |
+| `Budlum Core` (ci.yml) | Format | 1 | fmt debt, pre-existing since `9a23126` |
+| Cross-arch determinism (x86 + arm64) | Determinism test (genesis reproducibility) | **101** | not a determinism failure: cargo could not build the test |
+| Node Classification | node classification tests | **101** | same |
+| StorageProvider Gate | StorageProvider tests | **101** | same |
+| Fork-Choice Invariants (38a64fe) | fork-choice tests | **101** | same |
+| Miri UB Inspection | Miri - crypto crate | 1 | its own problem, not the build |
+| Typos | Repository scan (a finding = fail) | 2 | real findings |
+| Dependency Review | Dependency Review | - | advisory on the PR diff |
+
+So the dashboard says "the fork lineage has eight problems". Measured, it says:
+**one compile error, and everything that needs `cargo test` is reporting it as
+its own failure.** Two consequences worth stating plainly:
+
+1. Nobody should read "Determinism: failure" as "the genesis is
+   arch-dependent". It is not evidence of that, and the job produced none. A
+   red check that is downstream of a build error is not a finding; it is the
+   build error wearing a costume.
+2. The count of genuinely open items on this lineage is therefore much smaller
+   than the CI page suggests - but the one that remains is at the root, so it
+   gates everything else, including my `assign_object` wiring from section 8.
+
+What is *not* explained by the build: Typos (real findings), the Format debt,
+Miri's own failure, and the Dependency Review advisory. Those stay open.
+
+The build error text itself: the `Build error surface` step is the first thing
+on this lineage that can print it into the API. As of this commit that job is
+still running, so the errors land in the next loop's reading; the step is in
+the tree now, so it will be there for every run after it.
+
