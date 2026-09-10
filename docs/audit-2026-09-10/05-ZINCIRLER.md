@@ -59,3 +59,23 @@ akışı bu ikisi arasında köprü ister; köprü araması:
 mimari R&D maddesidir (`03`'e eklenecek).
 
 Ölçüm v2 adayı: L2/L4 ratchet'leri `wiring_check.py`'ye taşınacak.
+
+## DÜZELTME (2026-09-10, aynı gün)
+
+L1/L2 hükümleri el-grep hatasıyla verilmişti (BRE `\(` tuzağı:
+`\.submit_request\(` kalıbı çağrıları tutmadı). Apply-yolu okumasıyla
+düzeltildi:
+
+- **L2 → BAĞLI**: `state.ai_registry.submit_request(...)`
+  (`src/execution/executor.rs:1379-81`) + prod admission gate'i
+  `admit_inference_request` (`src/ai_inference/mod.rs:112`, çağrı
+  :1373). Registry state alanı olarak taşınıyor
+  (`blockchain.rs:259`, `chain_actor.rs:2999+` okumaları); kurulum
+  izi (`Default`/literal?) kuyrukta (tek-satırlık grep).
+- **L1 → BAĞLI (apply-time)**: `marketplace.validate_ai_read_ref` +
+  `consume_ai_read_grant` (:1375-86), fail-closed
+  (`ai_data_access_denied`). Executor dokümanındaki "(1) Pollen grant
+  verification" ifadesi sistem seviyesinde DOĞRU; yaptırım
+  build-anında değil apply-anında (katman farkı, gap değil).
+- Metodoloji kuralı (bu turdan itibaren): el-grep ile "yok" hükmü
+  verilmez; yok-hükmü checker'a yazılır ya da apply-yolu okunur.
