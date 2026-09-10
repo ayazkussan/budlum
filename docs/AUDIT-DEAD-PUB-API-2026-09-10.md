@@ -87,3 +87,33 @@ A `dead-pub-api` ratchet with the same shape as the guard baseline: a sorted
 gate in `xtask/gates`, not a shell script (`no-new-shell-gates` pins that set),
 and it must land with its 205 entries recorded first - a gate that fails on
 arrival gets switched off, which the tree has already learned twice.
+
+---
+
+## Correction, recorded where the numbers are read
+
+The ratchet this document asked for exists: `xtask/gates/src/gates/dead_pub_api.rs`,
+run in CI as `dead-public-api-is-ratcheted`, with
+`.github/dead-pub-api-baseline.txt` holding **219** entries.
+
+The counts above do not re-derive, and saying so here is cheaper than letting the
+next reader rediscover it. The rule exactly as stated in `## Method` - every
+`pub fn` in `src/**`, live if the name appears as a whole token anywhere in the
+corpus outside `#[cfg(test)]` modules, minus its own declaration lines - measured
+at the commit this document was written (`8ebf838`) gives **2037** declarations
+and **209** unreferenced ones. Deduplicating by name instead of by `path:name`
+gives **1536** and **212**. Neither pair is 1438 and 205; the extractor that
+produced those numbers is not reproducible from anything written in this file, so
+the baseline is generated from the gate and the figures above should be read as a
+contemporaneous count, not as a definition.
+
+The gap from 209 to 219 is two adjustments, both measured: **13** entries added
+because the gate also walks `pub const fn`, which the method above did not, and
+**3** removed by the exemption token. 209 - 3 + 13 = 219.
+
+The conclusion the numbers were carrying is untouched. Every entry in the baseline
+is silent by construction - a declaration with a `WIRING:` or `Convenience:` line
+near it is exempt and therefore not in the file at all - so "191 are silent" was
+an understatement of the shape rather than the count: silence is what the measure
+selects for. The security-named subset is not re-counted here; this document is
+the record of that pass, and the gate's list is the record of the surface.

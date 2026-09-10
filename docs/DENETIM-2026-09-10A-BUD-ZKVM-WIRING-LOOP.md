@@ -792,3 +792,86 @@ worth noting which one of the two surfaces was *ever* executed: the test surface
 because it was the only one whose job reached a state where `if: failure()` was
 true. A diagnostic that runs once a month is a diagnostic that is tested once a
 month.
+
+## 19. The dead-API ratchet the audit asked for, and the number that would not re-derive
+
+`docs/AUDIT-DEAD-PUB-API-2026-09-10.md` closed with a proposal not taken: a
+`dead-pub-api` ratchet, sorted `path:name`, may-only-shrink, one exemption token,
+Rust not shell, and - the sentence that decided the shape of this work - *"it must
+land with its 205 entries recorded first: a gate that fails on arrival gets
+switched off, which the tree has already learned twice."*
+
+That constraint is the reason most of this section is about measurement. A gate
+whose baseline does not match its own measure is worse than no gate: it teaches
+the next person that the answer to a red ratchet is to switch it off.
+
+Shipped: `xtask/gates/src/gates/dead_pub_api.rs` (437 lines), `pub mod` plus a
+`GATES` entry in `xtask/gates/src/main.rs`, two `ci.yml` steps (canary then run)
+next to `guards-are-reachable`, a README bullet, and
+`.github/dead-pub-api-baseline.txt` with **219** `path:name` lines. It borrows
+`strip_test_mods` from the sibling gate by widening that one function to
+`pub(crate)` - two gates that disagree about what a production file is would be
+worse than one gate with one bug, so the definition is shared rather than copied.
+
+### What the measure says at the current tree
+
+2168 candidate declarations in `src/**` (excluding `*_tests.rs` and `tests/`
+files, `#[cfg(test)]` modules removed), **219** with no whole-token occurrence of
+their name anywhere in `src/ crates/ examples/ benches/ budzero/ xtask/ ops/
+.github/ config/ proto/` across `.rs .toml .yml .md .sh .py .json`, once their own
+declaration lines and the fourteen-line `WIRING:`/`Convenience:`/`exposed for`
+exemption are subtracted. Re-measured after the gate's own source and the CI edits
+were added, because the corpus includes `xtask/`: the gate's module doc mentions a
+`registry::seed`, and a name borrowed as an example is a name now counted as live.
+Findings 219, baseline 219, new 0, stale 0.
+
+### The audit's own number, and why it is not here
+
+At `8ebf838`, the commit the audit was written at, the rule *as the audit states it*
+measures 2037 declarations and 209 unreferenced. Deduplicated by name: 1536 and
+212. The audit's 1438 and 205 are neither. No variant tried here reproduces them,
+and the honest reading is that the method paragraph in that document is not a full
+specification of the extractor that ran. The correction is written into the audit
+itself, where the numbers live, rather than left for someone to trip over.
+
+209 - 3 + 13 = 219: three entries released by the exemption token, thirteen added
+by walking `pub const fn`, which the audit's extractor skipped. Skipping `const` is
+not a cosmetic gap - `pub const fn` is exactly where a pure, tempting, uncalled
+helper goes - so the gate is broader than the report and the baseline header says
+so with arithmetic instead of an adjective.
+
+### The verification, and the false alarm that produced it
+
+No toolchain here: nothing was compiled, clippy-checked or formatted, and six
+commits including this one are unpushed because the GitHub token in this sandbox
+expired ("The github.com token in GH_TOKEN is no longer valid"), so CI has not
+seen any of it. What could be checked without a compiler was:
+
+- A byte-level re-implementation of the gate's rules, written from the Rust source
+  line by line, reproduces the same 219 entries as an independent regex-based
+  implementation. Both agree with the committed baseline exactly.
+- All seven canary phases of `self_test` were simulated against the same rules and
+  each produced the verdict the Rust asserts, for the reason the assert names.
+  Two of them were wrong before that simulation and are worth listing, because both
+  were the kind of canary that passes while testing nothing:
+  - the staleness phase failed for growth instead of staleness until both fixture
+    entries were recorded first, after which the only complaint left is the stale one;
+  - the exemption phase had a fixture whose helper *was* called by a driver, so it
+    proved that a call site counts, not that the doc token exempts. The driver is
+    gone; the helper is uncalled and the token alone has to save it.
+- Long lines, `#[allow]`s, `unwrap`/`expect`/`panic` in `run()` (the
+  `gates_do_not_panic` ratchet may only shrink, and a new file joining its baseline
+  would have been a fresh debt), and function length against `too_many_lines`'
+  default 100-line threshold: `run()` is 57 lines after the scan, the dead-set, the
+  baseline reader and the report were split into four helpers.
+
+### One thing the gate cannot do, kept in the open
+
+A name mentioned in a `.md` file counts as a reference. That is the audit's rule,
+kept so the two counts are the same measure, and it means prose can buy what a call
+site earns - writing `/// Convenience:` is an exemption you can read in the diff,
+and writing a README paragraph is one you can too. The gate does not police the
+difference and this section does not pretend it does: what it polices is the
+direction of the list, and 219 lines with authors' names on them in `git log` are
+harder to wave through than an uncounted drift.
+

@@ -189,6 +189,15 @@ jobs:
         run: cargo run --release --manifest-path xtask/gates/Cargo.toml -- guards-are-reachable --self-test
       - name: Unreachable gate count did not grow
         run: cargo run --release --manifest-path xtask/gates/Cargo.toml -- guards-are-reachable
+      # `guards-are-reachable` covers the refusal-shaped subset. The rest of the
+      # public surface had no ratchet at all: docs/AUDIT-DEAD-PUB-API-2026-09-10.md
+      # measured what that costs and asked for this file, and a gate added here is
+      # worthless if nothing runs it, which is the failure the comment above this
+      # block was written about.
+      - name: Dead public API canary
+        run: cargo run --release --manifest-path xtask/gates/Cargo.toml -- dead-public-api-is-ratcheted --self-test
+      - name: Dead public API did not grow
+        run: cargo run --release --manifest-path xtask/gates/Cargo.toml -- dead-public-api-is-ratcheted
       - name: Self-source-reading test canary
         run: cargo run --release --manifest-path xtask/gates/Cargo.toml -- source-reading-tests-are-narrowed --self-test
       - name: Self-source-reading tests are narrowed

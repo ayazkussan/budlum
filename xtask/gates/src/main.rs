@@ -68,6 +68,7 @@ mod gates {
     pub mod content_encryption_is_declared_and_bound;
     pub mod coverage;
     pub mod cross_table_checks;
+    pub mod dead_pub_api;
     pub mod derived_content;
     pub mod docker_toolchain;
     pub mod domain_tags;
@@ -1073,6 +1074,14 @@ const GATES: &[Gate] = &[
         run_log: None,
         run_args: None,
         self_test: gates::guards_reachable::self_test,
+    },
+    Gate {
+        name: "dead-public-api-is-ratcheted",
+        replaces: None,
+        run: gates::dead_pub_api::run,
+        run_log: None,
+        run_args: None,
+        self_test: gates::dead_pub_api::self_test,
     },
     Gate {
         name: "cross-table-checks-use-last-row",
