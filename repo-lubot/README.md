@@ -16,7 +16,7 @@ git -C <lubot-klonu> fetch origin main
 git -C <lubot-klonu> checkout main
 git -C <lubot-klonu> am patches/000*.patch
 ```
-Patch sirasi 0001..0005 (sira kritik). Base disinda uygulaniyorsa
+Patch sirasi 0001..0006 (sira kritik). Base disinda uygulaniyorsa
 `git am -3` veya dosyalar elle kopyalanir.
 
 ## Icerik (5 commit)
@@ -28,3 +28,4 @@ Patch sirasi 0001..0005 (sira kritik). Base disinda uygulaniyorsa
 3. README + ratchet: 191 test (178+4+9), 0 pedantic, layout tablosu.
 4. rustfmt hizalamasi (1 test cagrisi).
 5. kapi: review-crate-holds-ledger-rules (38. kapi, canary'li self-test).
+6. kapi-runner izolasyonu: --all kosusunda tek gate env-hatasi abort etmiyor (FAIL + devam).

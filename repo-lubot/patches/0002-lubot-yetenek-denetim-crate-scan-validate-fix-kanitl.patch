@@ -1,7 +1,7 @@
 From d27f1acb2b125d02287644b3c9c21cf32092bd6b Mon Sep 17 00:00:00 2001
 From: Lubo's Ruler <ayazkussann@gmail.com>
 Date: Wed, 9 Sep 2026 15:54:39 +0000
-Subject: [PATCH 2/5] lubot yetenek: denetim crate (scan -> validate -> fix,
+Subject: [PATCH 2/6] lubot yetenek: denetim crate (scan -> validate -> fix,
  kanitli defter)
 
 ---
