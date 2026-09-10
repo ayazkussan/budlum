@@ -10,7 +10,7 @@ git -C <lubot-klonu> fetch origin olcum-disiplini
 git -C <lubot-klonu> checkout olcum-disiplini
 git -C <lubot-klonu> am patches/*.patch
 ```
-Patch sirasi 0001..0016; 0010 ve 0013 kok `Cargo.toml`'a dokunur ve bu ikisi
+Patch sirasi 0001..0017; 0010 ve 0013 kok `Cargo.toml`'a dokunur ve bu ikisi
 tek satir baglamla uretildi (`git -c diff.context=1`). Neden olculdu: uc
 satirlik baglam, bos satir duzeni farkli olan bir kok manifeste dustu; tek
 satirla iki duzende de gecti. 0013'ün `docs/CRATES.md` huntesinin on-goruntusu
@@ -19,7 +19,7 @@ sira ile uygulandiginda.
 Base disinda uygulaniyorsa
 `git am -3` veya dosyalar elle kopyalanir.
 
-## Icerik (16 commit, 0006..0016 bu turda eklendi)
+## Icerik (17 commit, 0006..0017 bu turda eklendi)
 1. izolasyon crate (lubot-izolasyon): session izolasyon siniri, checkable
    contract (4 test).
 2. denetim crate (lubot-denetim): scan -> validate -> fix kanitli defter
@@ -90,20 +90,48 @@ Base disinda uygulaniyorsa
     edilebilir. Anahtar/paraf yok: defter neye izin verildigine karar verir,
     tokenin gercekligine iddia etmez. `verify()` izi kayitlara karsi sayar.
 16. workspace: kuyruk ve erisim `members` listesine + envanterin iki satiri.
+17. anlama crate (lubot-anlama, 2443 satir / 24 test): komutu, emretmeden once
+    oku. Kelime kelime kayit: her kelimenin ne kattigi (rol) ve nereden bilindigi
+    (stated / inferred / assumed). Kirildigi yerler: kelimesi desteklemeyen kapsam
+    (`ScopeWithoutWord`), gevsek eslesip duzeltmesi kaydedilmemis kelime
+    (`SilentCorrection`), listelenmemis varsayim (`UnlistedAssumption`), ek
+    metnindeki emrin eylem listesine inmesi (`InstructionInData`), ve sozcukle
+    desteklenmeyen her eylem (`ActionWithoutWord`: `claim()` bir iddiadir,
+    inanilmaz - `Command` iddiasi kelime listesinde geri arandirilir).
+    Negatiflik (V+ma/me) sozlukten ONCE bakilir ve yalniz bilinen filere
+    uygulanir: `yazma` asla `WriteCode` olmaz, `yuzme` de bir yasak uydurmaz;
+    `silmesin` iki katmanli dusurulur (`sil`+`me`+`sin`) - bir olumsuzlugu emir
+    okumak bu tablonun yapabilecegi en kotu hata. Tolerance kademeli: <=6 harf
+    hic, 7-9 bir, >=10 iki; bes harfli bir kelimenin tek mesafesi iki fiili ayni
+    anda esitleyebilir, o yuzden orada tahmin yok. Tirnak ici veridir:
+    `Role::QuotedData` eslesmez, eylem uretmez, sorgu dogurmaz. Ek dosyalarinin
+    emirleri `Attachment::new`'de karantinaya alinir; `verify()` karantinayi
+    degil SONUCU kontrol eder, cunku tip karantinayi kendisi kuruyor - ve
+    `mentions()` tek kapi oldugu icin ek metin yalniz sozlugu zenginlestirir.
+    Kayit elle duzeltilebilir (`revise`, `extend_scope`); ikisi de dogrulama
+    ister ve `verify()` o duzenlemelerin biraktigi izi arar. Ambiguity listesi
+    kayitla birlikte kurulur, ayri duzenlenemez - "sessizce secildi" hastaligi
+    kontrolle degil kurulusla engellenir; bu sinir crate'in `verify()` dokumaninda
+    yazili.
 
-Test ratchet'i: 191 -> 351. Yeni testler 92 = yetenek 13 + olcek 10 + kanit 12
-+ mimari 10 + takip 12 + muhur 11 + kuyruk 11 + erisim 13. Lubot'un `training/ratchet.json` dosyasi
+Test ratchet'i: 191 -> 399. Yeni testler 116 = yetenek 13 + olcek 10 + kanit 12
++ mimari 10 + takip 12 + muhur 11 + kuyruk 11 + erisim 13 + anlama 24. Lubot'un `training/ratchet.json` dosyasi
 0003'te 191'e baglandi; o sayiyi buradan degistirmiyoruz - guncelleme Lubot
 kosusunda `cargo test` gercekten kostuktan sonra, gercek sayiyla yapilir.
 
-Sekiz crate de std disinda bagimlilik
-kullanmiyor, I/O yapmiyor, saat/rastgele okumuyor; toplam 5984 satir, prod
+Dokuz crate de std disinda bagimlilik
+kullanmiyor, I/O yapmiyor, saat/rastgele okumuyor; toplam 8427 satir, prod
 tarafinda sifir unwrap/expect. Delimiter dengesi (paren/brace/bracket,
-stringler ve yorumlar cikarildiktan sonra) sekiz dosyada da sifir — bu kum
-havuzunda yapilabilen tek yapi kontrolu buydu.
+stringler ve yorumlar cikarildiktan sonra) dokuz dosyada da sifir - bu kum
+havuzunda yapilabilen tek yapi kontrolu buydu. Ek olarak her satir 100
+karakteri gecmiyor (Turkce karakter karakterle sayilir, byte ile degil) ve
+hicbir fonksiyon 100 satiri asmiyor: `too_many_lines` pedantic'te uyaridir ve
+`-D warnings` onu hataya cevirir. `read()` bir keresinde 276 satira cikmisti;
+`read_word` + `apply_glossary` + `infer_the_obvious_work` + `record_the_gaps`
+olarak kirildi.
 
 **Derlenmedi.** Rust araci yok ve indirilemiyor; dolayisiyla "testler gecti"
 diye bir iddia yok, iddia su: patch'ler uygulaniyor, dosyalar yerinde, kurallar
 test olarak yazili. Lubot'ta kosulacak komut:
 `cargo test -p lubot-yetenek -p lubot-olcek -p lubot-kanit -p lubot-mimari -p
-lubot-takip -p lubot-muhur -p lubot-kuyruk -p lubot-erisim`.
+lubot-takip -p lubot-muhur -p lubot-kuyruk -p lubot-erisim -p lubot-anlama`.
