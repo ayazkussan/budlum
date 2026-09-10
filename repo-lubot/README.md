@@ -1,13 +1,19 @@
 # repo-lubot — tek PR aynasi
 
-Kod: `ayazkussan/lubot`, dal `olcum-disiplini` (PR#1), base `12bc9ac`.
+Kod: `ayazkussan/lubot`, dal `main`, base `37d32c9bdf50e8a28ac590d8ec31a83629002b4a`.
 Bot bu fork'a push edemedigi (403) icin commit'ler format-patch olarak
 aynalaniyor; dagitim kullaniciya ait.
 
+2026-09-10 notu: onceki base `12bc9ac` (dal `olcum-disiplini`, PR#1)
+silinmis; 5 yama main uzerine rebase edildi. Tek elle mudahale:
+0002'deki `ajan.jsonl` satiri (dosya icerigi ayrismis, anchor yok)
+dosya sonuna eklendi, icerik ayni + JSON dogrulandi; diger 4 yama
+degisikliksiz uygulandi.
+
 ## Uygulama
 ```
-git -C <lubot-klonu> fetch origin olcum-disiplini
-git -C <lubot-klonu> checkout olcum-disiplini
+git -C <lubot-klonu> fetch origin main
+git -C <lubot-klonu> checkout main
 git -C <lubot-klonu> am patches/000*.patch
 ```
 Patch sirasi 0001..0005 (sira kritik). Base disinda uygulaniyorsa
