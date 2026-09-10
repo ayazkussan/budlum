@@ -185,6 +185,26 @@ jobs:
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
           shared-key: budlum-core
+      # Every step below invokes the same binary, and until now the first one that
+      # invoked it was a canary: a build failure in `xtask/gates` (its own workspace,
+      # so no other job's clippy covers it) was reported as "the gate found a defect"
+      # in six jobs at once - measured on 2026-09-10, where Budscan's canary flipped
+      # success -> exit 101 while its own Format and Clippy steps stayed green, which
+      # proves nothing about this crate. A build step of its own names the real cause;
+      # the surface below puts rustc's lines in annotations because the log host is
+      # not reachable from everywhere, and a red job whose reason lives only in a log
+      # nobody can open is a red job with no finding.
+      - name: Build the gate binary
+        run: cargo build --release --manifest-path xtask/gates/Cargo.toml 2>&1 | tee /tmp/gates-build.log; exit "${PIPESTATUS[0]}"
+      - name: Build surface (annotations)
+        if: failure()
+        run: |
+          set +o pipefail
+          tmp=$(mktemp)
+          sed -e 's/\x1b\[[0-9;]*m//g' /tmp/gates-build.log > "$tmp" 2>/dev/null || true
+          grep -E "^error" -A4 "$tmp" | head -n 40 | sed -e 's/^/::error::/'
+          printf '::error::build surface: %s error line(s), first 40 shown - the Build step holds the rest\n' "$(grep -cE '^error' "$tmp")"
+          rm -f "$tmp"
       # `badges-are-current` reads the test log the badge is derived from. In `budlum`
       # that log is written by the authoritative `Test` step; here it is regenerated for
       # the gate, and `continue-on-error` because the verdict on the suite belongs to
@@ -341,6 +361,24 @@ jobs:
         run: cargo run --release --manifest-path xtask/gates/Cargo.toml -- reduction-claims-state-both-units
 
 
+      # A canary prints its reason to stderr, which belongs to the log host. On
+      # failure the self-tests are re-run here and every FAIL/panic line becomes an
+      # annotation: "a canary must fail for exactly one reason" is worthless if the
+      # reason is unreadable, and the count line last so an empty surface cannot be
+      # mistaken for a clean one.
+      - name: Canary surface (annotations)
+        if: failure()
+        run: |
+          set +o pipefail
+          tmp=$(mktemp)
+          cargo run --release --manifest-path xtask/gates/Cargo.toml -- --self-test > "$tmp" 2>&1 || true
+          # `thread 'main' panicked at ...` does not start with the word panicked, so
+          # the first version of this filter dropped the panic and kept only the line
+          # after it - the one thing it existed to report. `thread ` is matched, and
+          # -A1 carries the message that follows both a panic and a rustc error.
+          sed -e 's/\x1b\[[0-9;]*m//g' "$tmp" | grep -E "^(FAIL |error|thread |panicked)" -A1 | head -n 20 | sed -e 's/^/::error::/'
+          printf '::error::canary surface: %s reason line(s) above; 0 means the self-tests pass when re-run - the failing step itself is the finding\n' "$(sed -e 's/\x1b\[[0-9;]*m//g' "$tmp" | grep -cE '^(FAIL |error|thread |panicked)')"
+          rm -f "$tmp"
   budzero:
     name: BudZero / BudZKVM
     runs-on: ubuntu-latest

@@ -1042,3 +1042,60 @@ Nothing here was compiled, and the mirror says so in its own "What is NOT
 verified" section: rustup, `static.rust-lang.org`, `index.crates.io`,
 `registry-1.docker.io` and GitHub release assets were probed and are all
 unreachable from this sandbox.
+
+## 23. Six red canaries, one unreadable reason, and the job that now says it
+
+Pushing `154dfb3` produced a run where the new `gates` job executed for the first
+time: `Test log for the badge gate` ran, then `Badge canary (independent of the
+log)` failed and every later step was skipped. The check-run annotations for it,
+and for five other jobs' canary steps, contain exactly one useful fact each:
+`Process completed with exit code 101.` That is all a `run:` step can say, and the
+log itself is on `productionresultssa6.blob.core.windows.net`, which is blocked
+from this sandbox - the same class of block as the Actions log host and GitHub
+release assets. So the run could not be read, only described.
+
+What the API does answer is attribution. At the branch point (`88970e3`) the
+Budscan job was fully green, its canary included; at `fc08330` - the commit that
+added `xtask/gates/src/gates/dead_pub_api.rs` and registered it - Budscan's canary
+is failure/101, Coverage's moves from its real red (`Measurement + ratchet gate`)
+to `Gate canary (vacuous-gate protection)`, and Node Classification and
+Fork-Choice flip the same way. Six jobs, one shared thing: they all invoke
+`cargo run --manifest-path xtask/gates/Cargo.toml`. Since `main` exits 1 on a gate
+finding, 101 is not a gate finding: it is cargo failing to build the crate, or a
+panic in a canary. Both hypotheses survive locally:
+
+- build error in the `xtask/gates` workspace - plausible because that crate is its
+  own workspace, so Budscan's green `Clippy (pedantic, -D warnings)` step (a root
+  `--workspace` run) proves nothing about it; `gates_are_wired` was written exactly
+  because a gate nobody runs is not protection, and the mirror image - a gate that
+  nobody *builds* - is the same blind spot;
+- panic in the new `self_test` - less likely: the fixture uses no `unwrap`/`expect`,
+  every slice is bounded (`saturating_sub` for the lookback window, `j < len` before
+  `j + 1`), and `for_each_token`/`read_baseline` cannot index off a char boundary.
+
+Guessing which one is worth nothing to the next reader, so the job was made to say
+it. Two new steps in `gates`, both verified by executing their extracted bodies
+against a stub `cargo` on `PATH` (the workflow-text rule from §20, applied here):
+
+1. `Build the gate binary` - `cargo build --release | tee`, then
+   `exit "${PIPESTATUS[0]}"`, because `bash -e` without `pipefail` would otherwise
+   take `tee`'s status and a red build would report success; its
+   `Build surface (annotations)` companion strips ANSI, greps `^error` with four
+   context lines, and prints a count line last, so a truncated sample cannot be
+   mistaken for the whole error and a green build cannot be mistaken for a silent
+   red one. Measured: exit 101 propagated, five annotations, `1 error line(s)`.
+2. `Canary surface (annotations)` at the end of the job, `if: failure()`, re-runs
+   `-- --self-test` and annotates `FAIL |error|thread |panicked` with `-A1`. The
+   first version matched `^panicked` and missed the line a real panic prints,
+   `thread 'main' panicked at ...` - found by running it against a stub whose
+   stderr was a genuine panic, which is the only way this class of bug gets caught
+   before a push. Measured: three annotations plus the count line, exit 0, so the
+   surface never becomes a second failure on top of the first.
+
+Not done, deliberately: nothing was weakened to make six red canaries green - the
+gate is not commented out, no `#[allow]` was added, and the baseline was not
+touched (it is settled, and re-deriving it from a tree this sandbox cannot build
+would be exactly the unmeasured number this report keeps complaining about). The
+next run's `gates` job will name the cause in an annotation; if it is the build, the
+fix is a source edit and a re-push, if it is the canary, the canary is wrong and
+gets corrected to fail for one reason.
