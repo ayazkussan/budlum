@@ -50,3 +50,21 @@ jobs:
           | awk '{print "::error::" $0}'
     - name: Run tests
       run: cargo test --verbose
+    # Measured, not assumed: with protoc installed `Build` goes green, so a red
+    # `Run tests` on this job is one of two different bugs that look identical
+    # from the job title - a test that fails, or a target only `cargo test`
+    # compiles (the test modules import more than the library does). The surface
+    # says which: an `error[E...]` line means the test tree does not compile, a
+    # `failures:` block names the tests that ran and lost. `--no-fail-fast` so a
+    # single pass lists every failing suite; the verdict step above is untouched.
+    - name: Test failure surface (annotations)
+      if: failure()
+      run: |
+        set +o pipefail
+        tmp=$(mktemp)
+        cargo test --no-fail-fast 2>&1 | tee "$tmp" > /dev/null
+        grep -E "^error(\[|:)|panicked at|^failures:|^---- |test result: FAILED" "$tmp" \
+          | head -n 8 | sed -e "s@^@::error::@"
+        printf '::error::%s failing suites reported by `cargo test --no-fail-fast`; %s lines of output were produced\n' \
+          "$(grep -cE 'test result: FAILED' "$tmp")" "$(grep -c '' "$tmp")"
+        rm -f "$tmp"

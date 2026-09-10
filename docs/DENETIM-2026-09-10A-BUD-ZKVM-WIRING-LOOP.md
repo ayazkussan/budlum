@@ -599,3 +599,48 @@ change needs its own epoch-gated maintenance bump, the way
 `BDLM_MAINTENANCE_PLACEMENT_V1` did. That is a consensus-visible decision, and
 this loop's rule is to leave such decisions documented rather than smuggled in
 through a helper.
+
+## 16. Headline, corrected: the fork compiles. The tests are the red thing.
+
+Run 39 (`6fba22a`) is the first run in this session whose steps could be read,
+and it refutes section 10's headline. The `build` job of `Rust`:
+
+| step | conclusion |
+|---|---|
+| Install protoc | **success** |
+| Build (`cargo build --verbose`) | **success** |
+| Build error surface | skipped (nothing to surface) |
+| Run tests | **failure**, exit 101 |
+
+So "the lineage does not compile" was true only of the workflow, not of the
+repository: the tree builds. What is actually broken is `cargo test`, and that
+is a different job - smaller, specific, and no longer describable as "everything
+is red because nothing compiles". Two consequences, stated so they are not lost:
+
+1. Section 12's attribution was wrong in one direction and right in the other.
+   Right: several red checks were downstream of a shared cause and were wearing
+   its costume. Wrong: the shared cause was not a source-level compile error, it
+   was a missing apt package in one workflow - and jobs that install protoc
+   (Determinism, and the gate jobs) were never downstream of it, so their 101s
+   are their own and must be read individually.
+2. Every claim in this report that I marked "not compiled" still stands as
+   written, because the sandbox has no toolchain and I did not run `cargo`. What
+   changes is what the next run can tell us: the edits in `0d01f0c` (the F-16
+   repair sweep and its five tests) will be compiled and executed by CI on the
+   next push, so they arrive with a verdict rather than with my word for it.
+
+The `Test failure surface` step added in the same commit as this section is what
+makes the next reading specific. A red `Run tests` is one of two bugs that look
+alike from the job title: a test that failed, or a target only `cargo test`
+compiles (the test modules import more than the library does, so an
+unresolved-import in `src/tests/` is a red test step with a green build step).
+The surface prints `error[E...]` lines for the second case and the `failures:`
+block plus a failing-suite count for the first, with `--no-fail-fast` so one
+pass enumerates every suite instead of the first one only.
+
+Pre-registered, before reading run 41: with the tree building, the most likely
+shape of a 101 here is a small number of real assertion failures in
+`src/tests/*`, because a *test-tree compile error* would have been reported by
+`cargo build --all-targets` in another job and was not. If instead the surface
+prints `error[E`, the correction to write here is that `--all-targets` was not
+run anywhere in this workflow.
