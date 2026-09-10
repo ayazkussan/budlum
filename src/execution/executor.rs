@@ -2446,6 +2446,7 @@ mod tests {
         use crate::core::transaction::{
             DEFAULT_CHAIN_ID, Transaction, TransactionType,
         };
+        use crate::execution::executor::Executor;
 
         let team = Address::from([7u8; 32]);
         let mut state = AccountState::new();

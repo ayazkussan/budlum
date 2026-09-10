@@ -66,8 +66,16 @@ jobs:
         set +o pipefail
         tmp=$(mktemp)
         cargo test --no-fail-fast 2>&1 | sed -e 's/\x1b\[[0-9;]*m//g' | tee "$tmp" > /dev/null
-        grep -E "^error(\[|:)|panicked at|^failures:|^---- |test result: FAILED" "$tmp" \
-          | head -n 8 | sed -e "s@^@::error::@"
-        printf '::error::%s failing suites reported by `cargo test --no-fail-fast`; %s lines of output were produced\n' \
+        # A check run keeps ten annotations, so the budget is spent on pairs:
+        # each error line travels with the `--> file:line:col` line under it,
+        # which is the half that says where. Run 49's surface carried three
+        # `error[E...]` lines and no location at all, and two of the three were
+        # found by hand afterwards - a diagnostic that names the symptom and
+        # hides the address is half a diagnostic.
+        {
+          grep -A 1 -E "^error(\[|:)" "$tmp" | grep -v "^--$"
+          grep -E "panicked at|^failures:|^---- |test result: FAILED" "$tmp"
+        } | awk '!seen[$0]++' | head -n 9 | sed -e "s@^@::error::@"
+        printf '::error::%s failing suites reported by cargo test --no-fail-fast; %s lines of output were produced\n' \
           "$(grep -cE 'test result: FAILED' "$tmp")" "$(grep -c '' "$tmp")"
         rm -f "$tmp"

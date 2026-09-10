@@ -58,7 +58,12 @@ jobs:
           tmp=$(mktemp)
           cargo fmt --all -- --check 2>&1 | sed -e 's/\x1b\[[0-9;]*m//g' | grep -E "^Diff in " > "$tmp" || true
           head -n 8 "$tmp" | sed -e "s/^/::error::/"
-          printf "::error::%s `Diff in` hunks total (first 8 shown)%s\n" "$(grep -c . "$tmp")" ""
+          # The backticks around Diff in were a live command substitution inside a
+          # double-quoted printf format: the step ran `Diff in`, and the message it
+          # printed was whatever that left behind, which is nothing. Quoting is now
+          # single, and the fragment is plain text - actionlint's SC2006 fired on
+          # exactly this, and security-audit.yml already documents the trap.
+          printf '::error::%s "Diff in" hunks total (first 8 shown)\n' "$(grep -c . "$tmp")"
           rm -f "$tmp"
       - name: Format (kani proof harnesses)
         # kani/ is not a member of the root workspace, so the step above never

@@ -514,7 +514,6 @@ mod tests {
             .find(|t| t.failed_deal_id == deal_id)
             .expect("the slash opens a ticket");
         assert_eq!(ticket.slashed_operator, operator);
-        let _ = challenge_id;
 
         let params = StorageDomainParams::default();
         let economics = StorageEconomicsParams {
