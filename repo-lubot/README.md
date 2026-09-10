@@ -8,7 +8,7 @@ aynalaniyor; dagitim kullaniciya ait.
 ```
 git -C <lubot-klonu> fetch origin olcum-disiplini
 git -C <lubot-klonu> checkout olcum-disiplini
-git -C <lubot-klonu> am patches/000*.patch
+git -C <lubot-klonu> am patches/*.patch
 ```
 Patch sirasi 0001..0005 (sira kritik). Base disinda uygulaniyorsa
 `git am -3` veya dosyalar elle kopyalanir.
