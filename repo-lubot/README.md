@@ -10,7 +10,7 @@ git -C <lubot-klonu> fetch origin olcum-disiplini
 git -C <lubot-klonu> checkout olcum-disiplini
 git -C <lubot-klonu> am patches/*.patch
 ```
-Patch sirasi 0001..0013; 0010 ve 0013 kok `Cargo.toml`'a dokunur ve bu ikisi
+Patch sirasi 0001..0016; 0010 ve 0013 kok `Cargo.toml`'a dokunur ve bu ikisi
 tek satir baglamla uretildi (`git -c diff.context=1`). Neden olculdu: uc
 satirlik baglam, bos satir duzeni farkli olan bir kok manifeste dustu; tek
 satirla iki duzende de gecti. 0013'ün `docs/CRATES.md` huntesinin on-goruntusu
@@ -19,7 +19,7 @@ sira ile uygulandiginda.
 Base disinda uygulaniyorsa
 `git am -3` veya dosyalar elle kopyalanir.
 
-## Icerik (13 commit, 0006..0013 bu turda eklendi)
+## Icerik (16 commit, 0006..0016 bu turda eklendi)
 1. izolasyon crate (lubot-izolasyon): session izolasyon siniri, checkable
    contract (4 test).
 2. denetim crate (lubot-denetim): scan -> validate -> fix kanitli defter
@@ -71,20 +71,39 @@ Base disinda uygulaniyorsa
 13. workspace: takip ve muhur `members` listesine + envanterin iki yeni satiri
     (`docs/CRATES.md`). Envanterin kendisi de bir baglanti iddiasidir; ihlal
     sutunu da bu yuzden ayni commit'te guncelleniyor.
+14. kuyruk crate (lubot-kuyruk, 708 satir / 11 test): sinirli bakim is kuyrugu.
+    Degismez: `submitted == in_flight + done + dead_letters + dropped + refused`,
+    `verify()` bunu sayaclardan yeniden sayarak. Dolu kuyruk yalniz daha ucuz
+    sinifi cikarir; `Repair` bir `Repair`'i cikarmaz - sigmiyorsa gelen red
+    *sayilir*. Ayni key'e ikinci gonderim merge edilmez: bir shard icin iki bilet
+    iki operatörün parasidir. Deneme hakki biten is olu-mektuba gider ve
+    liste yer acmak icin kisaltilmaz. `fail` `Some(Dead)`/`None` döndürür -
+    "vazgectik" bir hata degil, raporlanacak bir sonuc.
+15. erisim crate (lubot-erisim, 962 satir / 13 test): yetki defteri. Kapsama
+    ayiracli yol (`src/storage` → `src/storage/deal.rs` evet,
+    `src/storagesecreta`/`src/storage-deal` hayir - saf `starts_with`'in
+    yaptigi sey buradaki testin tek amaci); devir alma parent'in KAYITLI
+    sinirlarina karsi kontrol edilir ve genisleyen boyut adlandirilir; iptal
+    silmek degildir ve ebeveyn iptali alt agaci da iptal eder (aksi halde iptal
+    edilen kok, iptaldan once cikarilmis dar kopya uzerinden calismaya devam
+    eder); saat okunmaz, `at` parametredir - `>=` siniri o yuzden test
+    edilebilir. Anahtar/paraf yok: defter neye izin verildigine karar verir,
+    tokenin gercekligine iddia etmez. `verify()` izi kayitlara karsi sayar.
+16. workspace: kuyruk ve erisim `members` listesine + envanterin iki satiri.
 
-Test ratchet'i: 191 -> 259. Yeni testler 68 = yetenek 13 + olcek 10 + kanit 12
-+ mimari 10 + takip 12 + muhur 11. Lubot'un `training/ratchet.json` dosyasi
+Test ratchet'i: 191 -> 351. Yeni testler 92 = yetenek 13 + olcek 10 + kanit 12
++ mimari 10 + takip 12 + muhur 11 + kuyruk 11 + erisim 13. Lubot'un `training/ratchet.json` dosyasi
 0003'te 191'e baglandi; o sayiyi buradan degistirmiyoruz - guncelleme Lubot
 kosusunda `cargo test` gercekten kostuktan sonra, gercek sayiyla yapilir.
 
-Altı crate de std disinda bagimlilik
-kullanmiyor, I/O yapmiyor, saat/rastgele okumuyor; toplam 4314 satir, prod
+Sekiz crate de std disinda bagimlilik
+kullanmiyor, I/O yapmiyor, saat/rastgele okumuyor; toplam 5984 satir, prod
 tarafinda sifir unwrap/expect. Delimiter dengesi (paren/brace/bracket,
-stringler ve yorumlar cikarildiktan sonra) alti dosyada da sifir — bu kum
+stringler ve yorumlar cikarildiktan sonra) sekiz dosyada da sifir — bu kum
 havuzunda yapilabilen tek yapi kontrolu buydu.
 
 **Derlenmedi.** Rust araci yok ve indirilemiyor; dolayisiyla "testler gecti"
 diye bir iddia yok, iddia su: patch'ler uygulaniyor, dosyalar yerinde, kurallar
 test olarak yazili. Lubot'ta kosulacak komut:
-`cargo test -p lubot-yetenek -p lubot-olcek -p lubot-kanit -p lubot-mimari
--p lubot-takip -p lubot-muhur`.
+`cargo test -p lubot-yetenek -p lubot-olcek -p lubot-kanit -p lubot-mimari -p
+lubot-takip -p lubot-muhur -p lubot-kuyruk -p lubot-erisim`.
