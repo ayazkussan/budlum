@@ -111,6 +111,7 @@ mod gates {
     pub mod no_new_shell_gates;
     pub mod no_orphan_source_files;
     pub mod no_unicode_dashes;
+    pub mod no_upstream_brands;
     pub mod node_classification_gate;
     pub mod one_house_guards;
     pub mod paid_content;
@@ -511,6 +512,14 @@ const GATES: &[Gate] = &[
         run: gates::no_unicode_dashes::run,
         run_args: None,
         self_test: gates::no_unicode_dashes::self_test,
+        run_log: None,
+    },
+    Gate {
+        name: "no-upstream-brands",
+        replaces: None,
+        run: gates::no_upstream_brands::run,
+        run_args: None,
+        self_test: gates::no_upstream_brands::self_test,
         run_log: None,
     },
     Gate {

@@ -177,6 +177,15 @@ jobs:
         run: cargo run --release --manifest-path xtask/gates/Cargo.toml -- no-conflict-markers --self-test
       - name: No conflict markers in the tree
         run: cargo run --release --manifest-path xtask/gates/Cargo.toml -- no-conflict-markers
+      # The gate existed for weeks as a file: declared in no module, invoked in
+      # no list, named in no workflow. `no-orphan-source-files` cannot see it
+      # (its SCAN_ROOTS are src/budzero/wallet-core) and `gates-are-wired` only
+      # walks scripts that already belong to a list. A protection that is not
+      # compiled is not a protection.
+      - name: Researched-product naming canary
+        run: cargo run --release --manifest-path xtask/gates/Cargo.toml -- no-upstream-brands --self-test
+      - name: No researched product is named in the tree
+        run: cargo run --release --manifest-path xtask/gates/Cargo.toml -- no-upstream-brands
       - name: Repair trigger canary
         run: cargo run --release --manifest-path xtask/gates/Cargo.toml -- repair-fires-on-loss --self-test
       - name: Repair fires on loss

@@ -264,3 +264,61 @@ change would need an epoch-gated V1/V2 tag on the placement entropy**, and the
   `assign_*` is invisible). Fixing it means widening a gate, which will find
   more names than this one - separate change, next loop.
 
+## 9. G-1 / G-2: a protection that was never compiled (found and wired)
+
+**G-1.** `xtask/gates/src/gates/no_upstream_brands.rs` - 315 lines, a complete
+gate with `run` and an 8-canary `self_test` - was **declared in no module,
+listed in no `Gate`, named in no workflow**. Measured, not guessed:
+
+| quantity | count |
+|---|---|
+| gate files on disk | 126 |
+| `pub mod` declarations inside `mod gates` | 125 |
+| declared but never invoked from `main.rs` | 3 (`exact_named_tests`, `named_tests`, `rust_literals`) - **refuted as a finding**: they are shared helpers, called by other gates (`super::exact_named_tests::check_exact_log`, `crate::gates::rust_literals::exclusive_scratch_dir`). Checked before claiming; the count difference is explained, not a hole. |
+| files on disk that no declaration reaches | 1: `no_upstream_brands` |
+
+**G-2 - why nothing caught G-1.** The two gates that exist to catch this are
+blind in exactly the complementary way:
+
+* `no_orphan_source_files::SCAN_ROOTS = ["src", "budzero", "wallet-core"]` -
+  `xtask/` is not scanned, so a dead file inside the gate tooling itself is
+  invisible to the orphan gate.
+* `gates_are_wired` walks `scripts/check-*.sh` - shell gates only. A Rust gate
+  module is not a script, so it is out of scope by construction.
+
+So the file was never compiled either, which is the part that matters: an
+uncompiled gate cannot fail, cannot be measured, and its canaries - written to
+be run - were never run once.
+
+**Fixed in this commit:**
+1. `pub mod no_upstream_brands;` + a `Gate` entry (`name: "no-upstream-brands"`)
+   in `xtask/gates/src/main.rs`.
+2. Two steps in `.github/workflows/ci.yml` (`--self-test` then the real run),
+   with a comment recording *why* the file was dead, so the next reader does
+   not re-invent it.
+3. **The gate as written would have failed the tree's own licence compliance.**
+   Its exemption list was `["LICENSE.md","NOTICE.md","THIRD-PARTY.md"]`
+   (root-relative), but the tree's attribution register is `docs/NOTICE` - no
+   extension, under `docs/` - and the reading register is
+   `docs/PROVENANCE_NOTES.md`. Both contain the names the gate forbids, which
+   is exactly what its own header calls the worst outcome ("a gate that forbade
+   attribution ... pushes a project toward a licence violation to stay green").
+   Exemption is now by **stem** (`LICENSE`, `NOTICE`, `THIRD-PARTY`,
+   `PROVENANCE_NOTES`) plus the two audit-mirror directories, whose whole
+   content is the record of what was read.
+4. Canaries 9 and 10 pin both halves: `docs/NOTICE` passes, `docs/ARCHITECTURE.md`
+   with a researched name still fails - an exemption that widens to a directory
+   is a disabled gate with extra steps.
+
+**Predicted CI outcome, written before the result:** the gate runs clean.
+Replicating its filter outside Rust: 855 files scanned (vacuity floor is 50),
+**0 findings**; `system_prompts_leaks` has no occurrence anywhere in the tree.
+If CI says otherwise, the gate is wrong and this section gets a follow-up
+commit rather than an edit.
+
+**Left open on purpose:** extending `no_orphan_source_files::SCAN_ROOTS` to
+`xtask` would catch the next G-1 mechanically. Not done in this commit because
+it also has to decide what it finds in `xtask/tools/src/bin/` and the crate-root
+rules for a nested workspace - that is a change to the gate's scope, and it
+should land green with its own measurement, not as a side effect.
+
