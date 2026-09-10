@@ -189,3 +189,19 @@ the `BAGLANTILIK-LOG` row updates:
 * `B.U.D. placement spreading (assign_object): KODLANMIS AMA BAGLANMAMIS` - new
 * `BudZKVM VerifyMerkle: KAPALI, gerekce = external review` (unchanged verdict,
   re-derived live)
+
+## 7. Kanit baglantisi (CI)
+
+* commit `d4b6b8d` -> push `arena/01a08a1a-budlum` -> PR `ayazkussan/budlum#3`.
+* Fork workflows are keyed on `push: [main]` + `pull_request: [main]`, so a bare
+  branch push triggers nothing; the PR is what starts CI. 19 runs queued on
+  `d4b6b8d` (main CI run id `34449158073`, cargo-deny/nextest jobs pending).
+* Prediction, written before the outcome: this commit touches no Rust source,
+  so the jobs that were red on the previous branch's run #29 (Determinism,
+  Diverse Double Compiling, Typos, Miri, Supply Chain Extra) will be red here
+  too. If that holds, those failures are **pre-existing on the fork lineage**,
+  not introduced by this loop - which is the whole point of running a
+  doc-only commit through the pipeline. If a job flips green that was red, the
+  baseline itself is flaky and that is a separate finding.
+* No merge: PR #3 is left open by policy; `budlum-xyz/budlum#50` untouched.
+
