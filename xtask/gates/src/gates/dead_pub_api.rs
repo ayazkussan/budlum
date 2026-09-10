@@ -352,6 +352,20 @@ pub fn run(root: &Path) -> Result<String, String> {
     Ok(msg)
 }
 
+/// Write a fixture file for the canary.
+///
+/// `impl AsRef<str>` and not `&str`: the closure this replaced fixed its
+/// parameter type at the first call site, so the two later fixtures built by
+/// `.concat()` - owned `String`s - were a type error. Nothing in this crate can
+/// be compiled from the sandbox that wrote it, and CI said so precisely
+/// (`error[E0308]: mismatched types` at two call sites) while the step that
+/// reported it was named "Badge canary", which is how a build failure spends a
+/// day wearing a gate's clothes. A helper that accepts either cannot reintroduce
+/// it, and it stays private so it cannot grow the public-API baseline it guards.
+fn write_fixture(path: std::path::PathBuf, text: impl AsRef<str>) -> Result<(), String> {
+    std::fs::write(path, text.as_ref().as_bytes()).map_err(|e| e.to_string())
+}
+
 /// # Errors
 ///
 /// Returns a finding when a defect fixture passes.
@@ -360,9 +374,6 @@ pub fn self_test() -> Result<String, String> {
     let fail = |why: &str| {
         let _ = std::fs::remove_dir_all(&dir);
         String::from(why)
-    };
-    let write = |path: std::path::PathBuf, text: &str| {
-        std::fs::write(path, text).map_err(|e| e.to_string())
     };
     let created = std::fs::create_dir_all(dir.join("src"))
         .and_then(|()| std::fs::create_dir_all(dir.join(".github")));
@@ -373,15 +384,15 @@ pub fn self_test() -> Result<String, String> {
     let orphan = "pub fn lonely_helper(x: u8) -> u8 {\n    x\n}\n";
     let recorded = "src/lib.rs:lonely_helper\n";
 
-    write(dir.join("src/lib.rs"), orphan)?;
-    write(baseline.clone(), recorded)?;
+    write_fixture(dir.join("src/lib.rs"), orphan)?;
+    write_fixture(baseline.clone(), recorded)?;
     if run(&dir).is_err() {
         return Err(fail("canary: a recorded dead function still failed the gate"));
     }
 
     // A second unreached function has to grow the set, not the tolerance.
     let grown = format!("{orphan}pub fn second_orphan() -> u8 {{\n    1\n}}\n");
-    write(dir.join("src/lib.rs"), &grown)?;
+    write_fixture(dir.join("src/lib.rs"), &grown)?;
     if run(&dir).is_ok() {
         return Err(fail("canary: new dead public api passed against a stale baseline"));
     }
@@ -389,12 +400,12 @@ pub fn self_test() -> Result<String, String> {
     // Wiring one up is allowed; leaving the baseline loose is not. Both entries
     // are recorded first, so the only thing left to complain about is the stale one.
     let wired = format!("{orphan}pub fn second_orphan() -> u8 {{\n    lonely_helper(1)\n}}\n");
-    write(dir.join("src/lib.rs"), &wired)?;
-    write(baseline.clone(), "src/lib.rs:lonely_helper\nsrc/lib.rs:second_orphan\n")?;
+    write_fixture(dir.join("src/lib.rs"), &wired)?;
+    write_fixture(baseline.clone(), "src/lib.rs:lonely_helper\nsrc/lib.rs:second_orphan\n")?;
     if run(&dir).is_ok() {
         return Err(fail("canary: a baseline that names a wired-up function did not nag"));
     }
-    write(baseline.clone(), "src/lib.rs:second_orphan\n")?;
+    write_fixture(baseline.clone(), "src/lib.rs:second_orphan\n")?;
     if run(&dir).is_err() {
         return Err(fail("canary: a call site was not seen, so the entry could not be dropped"));
     }
@@ -405,8 +416,8 @@ pub fn self_test() -> Result<String, String> {
         "pub fn documented_helper(x: u8) -> u8 {\n    x\n}\n",
     ]
     .concat();
-    write(dir.join("src/lib.rs"), documented)?;
-    write(baseline.clone(), "")?;
+    write_fixture(dir.join("src/lib.rs"), documented)?;
+    write_fixture(baseline.clone(), "")?;
     if run(&dir).is_err() {
         return Err(fail("canary: the documented exemption was not honoured"));
     }
@@ -415,7 +426,7 @@ pub fn self_test() -> Result<String, String> {
         "pub fn naked_helper(x: u8) -> u8 {\n    x\n}\n",
     ]
     .concat();
-    write(dir.join("src/lib.rs"), naked)?;
+    write_fixture(dir.join("src/lib.rs"), naked)?;
     if run(&dir).is_ok() {
         return Err(fail("canary: an undecorated dead function passed an empty baseline"));
     }
@@ -427,8 +438,8 @@ pub fn self_test() -> Result<String, String> {
         "    #[test]\n    fn covers() {\n        let _ = test_only(1);\n    }\n}\n",
     ]
     .concat();
-    write(dir.join("src/lib.rs"), &tested)?;
-    write(baseline.clone(), "src/lib.rs:test_only\n")?;
+    write_fixture(dir.join("src/lib.rs"), &tested)?;
+    write_fixture(baseline.clone(), "src/lib.rs:test_only\n")?;
     if run(&dir).is_err() {
         return Err(fail("canary: a test-module caller was treated as a production call"));
     }
