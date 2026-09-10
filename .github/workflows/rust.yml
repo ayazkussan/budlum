@@ -18,5 +18,15 @@ jobs:
     - uses: actions/checkout@v4
     - name: Build
       run: cargo build --verbose
+    # The log host (blob storage) is unreachable from an audit sandbox: the
+    # API answers, the log download returns EOF. Annotations travel on the API
+    # host, so a failing build is still readable where a log is not. This step
+    # only runs when Build already failed and cannot change the verdict: the
+    # failing step stays failing, and the job is red either way.
+    - name: Build error surface (annotations)
+      if: failure()
+      run: |
+        set +o pipefail
+        cargo build --message-format short 2>&1 | sed -n -e 's/^/::error::/' -e '1,60p'
     - name: Run tests
       run: cargo test --verbose

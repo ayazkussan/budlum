@@ -322,3 +322,56 @@ it also has to decide what it finds in `xtask/tools/src/bin/` and the crate-root
 rules for a nested workspace - that is a change to the gate's scope, and it
 should land green with its own measurement, not as a side effect.
 
+## 10. Headline: the lineage does not compile, and CI cannot say why (fixed)
+
+Step-level evidence (job → first failed step), which does not need the log host:
+
+| job | failing step | prior SHA `9a23126` | my SHA `38a64fe` |
+|---|---|---|---|
+| `build` (rust.yml) | **Build** = `cargo build --verbose` | failure | failure |
+| `Budlum Core` (ci.yml) | **Format** = `cargo fmt --all -- --check` | failure | failure |
+| `Typos` | Repository scan (a finding = fail) | failure | failure |
+| `Fork-Choice Invariants` | fork-choice tests | failure | failure |
+
+Reading:
+
+1. **`cargo build` fails on this lineage and failed on the previous session's
+   SHA too.** Nothing committed on top of it has ever been compiled by CI, and
+   the previous session's log entries that say "fix e4f472b", "fix fe5461e",
+   "fix 8ba7eab" are, at best, unverified by the repo's own standard - "CI is
+   the sole authority". A change to a non-compiling tree cannot be verified by
+   a pipeline that dies at its first step: every job after Build is skipped or
+   vacuous, and the 23 "pass" checks in the summary are the jobs that do not
+   depend on compiling (gitleaks, semgrep, actionlint, zizmor, license, ...).
+   That is not a green repo with four red jobs; it is a repo whose verdict is
+   unknown and whose green checks are the cheap ones.
+2. **`fmt` has been red since before this session**, so the fork's +1539 lines
+   of Rust were never run through `cargo fmt` either.
+3. **Why nobody caught it in the audit: the log host is unreachable, not
+   broken.** `gh api .../logs` and `gh run view --log` both fail on
+   `productionresultssa11.blob.core.windows.net` with EOF after ~1s while
+   `api.github.com` answers instantly (probe: direct URL, not a CLI quirk).
+   The workspace log recorded this as "fork log altyapisi EOF bulgusu" and left
+   it as an open GitHub-side mystery. It is an egress property of the audit
+   environment. **Closed with a mechanism, not a workaround:** annotations
+   travel on the API host, so a failure step that would otherwise print to a
+   log now also prints `::error::` lines.
+
+Added in this commit (pure diagnostics, nothing softened):
+
+* `rust.yml` / `build`: an `if: failure()` step re-running
+  `cargo build --message-format short` and emitting its first 60 lines as
+  annotations.
+* `ci.yml` / after `Format`: same for `cargo fmt --all -- --check`, first 120
+  lines.
+* Both guarded with `set +o pipefail` only inside the diagnostic step - the
+  verdict-producing steps are untouched, the original steps still fail, and the
+  job is red either way. `security-scans-can-fail` still has nothing to object
+  to: no `continue-on-error`, no `|| true` on a gate.
+
+Consequence for the next loop: the build errors become readable, so the real
+work is fixing the compile failure itself. Until that is green, **no claim about
+any code change on this branch should be written as "verified"**, including my
+own `assign_object` wiring in section 8 - which is exactly why that section says
+"not compiled" instead of implying otherwise.
+
