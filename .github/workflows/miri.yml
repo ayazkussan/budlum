@@ -86,7 +86,7 @@ jobs:
           set +o pipefail
           for f in /tmp/miri-crypto.txt /tmp/miri-budvm.txt /tmp/miri-storage.txt; do
             [ -s "$f" ] || continue
-            sed -e '\x1b\[[0-9;]*m//g' "$f" \
+            sed -e 's/\x1b\[[0-9;]*m//g' "$f" \
               | grep -E "error|Undefined Behavior|panicked|test result|FAILED|failures:" \
               | head -n 9 | sed -e "s@^@::error::$f @"
           done
@@ -201,7 +201,7 @@ jobs:
         run: |
           set +o pipefail
           if [ -s /tmp/asan-lib.log ]; then
-            sed -e '\x1b\[[0-9;]*m//g' /tmp/asan-lib.log \
+            sed -e 's/\x1b\[[0-9;]*m//g' /tmp/asan-lib.log \
               | grep -E "ERROR|runtime error|SUMMARY|panicked|test result|error\[" \
               | head -n 9 | sed -e "s@^@::error::@"
             printf '::error::%s log lines; first 9 matching shown\n' "$(grep -c '' /tmp/asan-lib.log)"

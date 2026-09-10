@@ -688,3 +688,107 @@ steps are still untouched, and the annotation budget is still <= 9 lines plus
 the count line. What run 44 should now show: either `error[E...]` lines from a
 test-only target that does not compile, or a `failures:` block naming the tests
 that lost - and the 36-line output means one of the two, not a slow suite.
+
+## 18. The strip fix did not ship: the sed program was missing its command letter
+
+Run 45, 46 and 47 all completed, and run 47 is the one to read because it is the
+newest of them (`cancel-in-progress` retires the rest). Its `build` job:
+
+```
+Install protoc: success          Build: success
+Build error surface: skipped     Run tests: failure
+Test failure surface: success
+```
+
+and the annotation the surface produced, verbatim:
+
+```
+0 failing suites reported by `cargo test --no-fail-fast`; 0 lines of output were produced
+```
+
+Run 43 produced `36 lines of output were produced`. So the fix changed the line
+count from 36 to 0, which is not "the ANSI lines stopped matching" - the tee'd
+file itself became empty. Only one stage sits between `cargo test` and that file,
+and the committed text of it is:
+
+```
+sed -e '\x1b\[[0-9;]*m//g'
+```
+
+There is no `s` in front of the expression. `sed` does not see a substitution, it
+sees a stray `\` and then reads the rest as an address, and says so:
+
+```
+$ printf 'x\n' | sed -e '\x1b\[[0-9;]*m//g'
+sed: -e expression #1, char 17: unterminated address regex
+```
+
+`sed` exits, the pipe closes, `tee` writes an empty file, and the surface - whose
+`set +o pipefail` line exists precisely so that a red step stays red - reports
+"0 lines of output were produced" as a *fact about cargo*. It was a fact about the
+one command that was supposed to have been fixed.
+
+Six occurrences, four files: `rust.yml` (build surface, test surface), `ci.yml`
+(fmt), `typos.yml`, `miri.yml` (miri, asan). One mechanical substitution, applied
+six times, wrong every time. The five that were not executed - `Build error
+surface` skipped because `Build` is green, fmt/typos/miri on other workflows whose
+own verdicts were already red for other reasons - carried the same defect silently
+for the whole time.
+
+### What the local verification missed, and why
+
+Section 17 records a shell transcript proving the strip works. That transcript is
+true, and it verified a command *retyped in the transcript*, not the command as it
+appears in the file. The check that would have caught it is one line long and now
+runs on the file rather than on the intent:
+
+```
+prog=$(python3 - <<'PY'
+import re
+print(re.search(r"sed -e '((?:[^']|'')*)'", open('.github/workflows/rust.yml').read()).group(1))
+PY
+)
+printf 'a\033[31mb\033[m\n' | sed -e "$prog"       # must exit 0 and must print 'ab'
+```
+
+`bash -n` was run on all six blocks and passed - it validates the shell grammar,
+and a quoted `sed` program is opaque to it. A workflow edit is only verified once
+the extracted string has been handed to the program that will consume it.
+
+Measured the same way, on a fixture shaped like real colored cargo output (an
+`error:` line behind four escape sequences, a `failures:` block, a `panicked at`
+line, a `test result: FAILED` line), the pipeline in the file now selects 5 lines
+with the strip and 4 without: the escape-prefixed `error:` line is exactly the one
+that was invisible before, which is the whole point of the change.
+
+### The pre-registered prediction, scored
+
+Section 17 committed to a reading before looking: *"if `Build` stays green and the
+surface still prints nothing, the next hypothesis is not 'the strip failed' but
+'the 36 lines are cargo refusing to resolve dev-dependencies'"*. The first half
+came true - green build, nothing printed - and the second half is wrong, and it
+was wrong in the way most worth writing down: I had pre-committed to an explanation
+of the *content* of the output while the actual failure was in the *existence* of
+it. The count line that §16 added as decoration (`N lines of output were
+produced`) is what overruled the prediction, because 0 and 36 are different
+answers and only one of them is about cargo.
+
+So the failing test list is still unread after four runs, and no statement about
+which tests are red belongs in this report yet.
+
+### Corrected next reading
+
+Run 49 or 50 (whichever survives the cancel-in-progress rule) is the first run
+where this surface can be believed. Two outcomes, both already actionable:
+
+- `error[E...]` / `could not compile` lines selected - then a test-only target is
+  broken, `Cargo.lock` and dev-dependencies are in scope, and section 14's verdict
+  ("the fork compiles") needs to be narrowed to "the library compiles".
+- a `failures:` block naming tests - then the fork is sound, specific tests lose,
+  and the audit goes to those tests one by one.
+
+`Build error surface`'s copy of the same defect also gets fixed here, and it is
+worth noting which one of the two surfaces was *ever* executed: the test surface,
+because it was the only one whose job reached a state where `if: failure()` was
+true. A diagnostic that runs once a month is a diagnostic that is tested once a
+month.

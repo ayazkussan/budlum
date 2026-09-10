@@ -56,7 +56,7 @@ jobs:
           # first: under `CARGO_TERM_COLOR: always` the diff is colored, and an anchored
           # pattern would report an empty debt while hunks waited.
           tmp=$(mktemp)
-          cargo fmt --all -- --check 2>&1 | sed -e '\x1b\[[0-9;]*m//g' | grep -E "^Diff in " > "$tmp" || true
+          cargo fmt --all -- --check 2>&1 | sed -e 's/\x1b\[[0-9;]*m//g' | grep -E "^Diff in " > "$tmp" || true
           head -n 8 "$tmp" | sed -e "s/^/::error::/"
           printf "::error::%s `Diff in` hunks total (first 8 shown)%s\n" "$(grep -c . "$tmp")" ""
           rm -f "$tmp"

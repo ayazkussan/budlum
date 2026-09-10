@@ -42,7 +42,7 @@ jobs:
         # tail of sixty lines is a noise burst that loses the cause. Nine
         # selected lines survive, in order, deduplicated: the first error, not
         # the last one.
-        cargo build --message-format short 2>&1 | sed -e '\x1b\[[0-9;]*m//g' \
+        cargo build --message-format short 2>&1 | sed -e 's/\x1b\[[0-9;]*m//g' \
           | grep -E 'error|panicked|Caused by|No such file|Could not find|protoc' \
           | sed -e 's/^[[:space:]]*//' \
           | awk '!seen[$0]++' \
@@ -65,7 +65,7 @@ jobs:
       run: |
         set +o pipefail
         tmp=$(mktemp)
-        cargo test --no-fail-fast 2>&1 | sed -e '\x1b\[[0-9;]*m//g' | tee "$tmp" > /dev/null
+        cargo test --no-fail-fast 2>&1 | sed -e 's/\x1b\[[0-9;]*m//g' | tee "$tmp" > /dev/null
         grep -E "^error(\[|:)|panicked at|^failures:|^---- |test result: FAILED" "$tmp" \
           | head -n 8 | sed -e "s@^@::error::@"
         printf '::error::%s failing suites reported by `cargo test --no-fail-fast`; %s lines of output were produced\n' \
