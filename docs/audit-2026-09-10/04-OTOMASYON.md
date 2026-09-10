@@ -6,20 +6,23 @@ beklenmez. Bu dosya döngünün nasıl döndüğünü tanımlar.
 ## İki katman
 
 1. **Mekanik katman** (`.github/workflows/surekli-denetim.yml`): cron
-   6 saatte bir + `workflow_dispatch`. Sıfır üçüncü-taraf action
-   (checkout dahil; `git clone` + sistem `python3`/`gh` kullanılır),
-   toolchain gerektirmez: `wiring_check.py` çalıştırır, sonucu koşu
-   özetine yazar, dalda açık PR varsa oraya yorum atar. Secret yok.
-   Fork'ta issue'lar kapalı olduğundan issue günlüğü kullanılmaz;
-   kalıcı kayıt = koşu özetleri + PR yorumları.
+   6 saatte bir + `workflow_dispatch` + bootstrap push tetikleyici.
+   Sıfır üçüncü-taraf action (checkout dahil; `git clone` + sistem
+   `python3`/`gh` kullanılır), toolchain gerektirmez:
+   `wiring_check.py` çalıştırır, sonucu koşu özetine yazar, dalda açık
+   PR varsa oraya yorum atar. Secret yok. Fork'ta issue'lar kapalı
+   olduğundan issue günlüğü kullanılmaz; kalıcı kayıt = koşu özetleri
+   + PR yorumları.
 2. **Ajan katmanı** (bu oturum): kod okuma, bulgu, kodlama, commit+push.
-   Her ajan turu sonunda workflow `dispatch` edilir (kanıt zinciri).
+   Her push, bootstrap tetikleyiciyle ölçümü ateşler (kanıt zinciri);
+   main sonrası cron+dispatch devralır.
 
-## Sınırlar (dürüst notlar)
+## Sınırlar (dürüst notlar, kanıtlı)
 
-- GitHub zamanlanmış koşular **yalnızca varsayılan dalda** çalışır:
-  cron, bu PR `main`'e girene kadar ateşlenmez; o zamana kadar tetik
-  `gh workflow run surekli-denetim.yml --ref <dal>` iledir.
+- GitHub'da cron VE `workflow_dispatch`, workflow tanımını **yalnızca
+  varsayılan daldan** okur: dosya `main`'de yokken dispatch 404 verdi
+  (2026-09-10, kanıtlandı). O zamana kadar tetik = session dalına
+  push (bootstrap bloğu; merge'de kaldırılacak).
 - Fork'larda 60 gün hareketsizlikte cron otomatik kapanır; repo aktif
   olduğu sürece sorun değil.
 - Rust adımları (fmt/clippy/test) v1'de YOK: sandbox'ta toolchain yok,
@@ -37,5 +40,6 @@ beklenmez. Bu dosya döngünün nasıl döndüğünü tanımlar.
 ## Ajan turu devam protokolü
 
 1. `03-SIRADAKI-IS.md` + PR yorumları + PR diff özeti.
-2. Sıradaki kuyruk maddesi: kod → ölçüm → commit → push (PR birikir).
-3. `gh workflow run` ile ölçümü tetikle; sonucu izleyen turda işle.
+2. Sıradaki kuyruk maddesi: kod → ölçüm → commit → push (PR birikir,
+   push aynı anda ölçümü ateşler).
+3. Bir sonraki turda koşu sonucunu kanıta işle.

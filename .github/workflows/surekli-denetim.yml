@@ -12,6 +12,11 @@ on:
   schedule:
     - cron: "17 */6 * * *"
   workflow_dispatch:
+  push:
+    # Bootstrap: dosya main'e girene kadar kanit kosusu bu dalda push ile
+    # ateslenir (cron+dispatch tanimi main'den okur; dispatch 404 verdi).
+    # Merge sirasinda bu blogu kaldir (cron+dispatch kalir).
+    branches: [arena/01a089e3-budlum]
 
 permissions:
   contents: read
