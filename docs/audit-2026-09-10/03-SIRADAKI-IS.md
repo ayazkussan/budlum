@@ -1,7 +1,8 @@
 # 03 — Sıradaki İş Kuyruğu (2026-09-10)
 
 Öncelik sırasına göre. `ask_user` = mimari/ekonomik/kapsam kararı
-gerektirir (toplu sorulur); diğerleri act-and-log.
+gerektirir (toplu sorulur, ekran yoksa PR yorumlarında birikir);
+diğerleri act-and-log.
 
 1. **R&D (`ask_user`): B.U.D. encode yolu tasarım kararı.** Placement
    (`assign_shard`) bağlı; encode/repair değil. Seçenekler: (a) deal
@@ -11,6 +12,8 @@ gerektirir (toplu sorulur); diğerleri act-and-log.
    (manifest → deal → placement zinciri).
 3. AiRegistry → Pollen AccessGrant → BNS → B.U.D. 4 zincirinin bu
    HEAD'de yeniden doğrulanması (önceki log "BAĞLI" diyordu).
+   → Hüküm `05-ZINCIRLER.md`'de: L1 kısmi (verify yok), L2 UNWIRED,
+   L3 zayıf (tip-seviyesi), L4 BAĞLI.
 4. Deneme tabakalı örneklemesi: #493, #464 + her parçadan 1 PR;
    review/CI durumu + bulgu-içeriği ayrımı.
 5. **R&D (`ask_user`): headroom/arcbox vendoring stratejisi.**
@@ -27,3 +30,5 @@ gerektirir (toplu sorulur); diğerleri act-and-log.
    ve sonuçların kanıt standardına işlenmesi.
 9. VerifyMerkle prod-açılış önkoşulları: dış opcode denetimi +
    verifier-tarafı bağlam kontrolü (01'daki araştırma notu).
+10. Post-merge otomasyon v2: upstream'da issue'lar açık (şu an boş);
+    yazma yetkisi denenmedi. Cron main'e girince issue-günlüğü adayı.
