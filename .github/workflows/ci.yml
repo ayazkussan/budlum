@@ -159,6 +159,42 @@ jobs:
           set -euo pipefail
           RUSTDOCFLAGS="-D warnings" cargo doc --no-deps --features pq-ml-dsa 2>&1 | tee /tmp/doc.log
           echo "cargo doc: warnings as errors - passed"
+  # The gate suite used to sit at the tail of `budlum`, after Format, Clippy and Test.
+  # GitHub Actions skips every step after the first failure of a job, and run 50
+  # measured what that costs on a branch carrying a formatting diff: one red `Format`,
+  # and 47 of 56 steps skipped - including all 126 gates this repository is made of, and
+  # the canary that is supposed to prove they can fail. A protection that cannot run is
+  # not a protection, and nothing about that job said so: the failing step reported its
+  # own diff, which is exactly what it is for. So the gates are a job of their own; a red
+  # `cargo fmt --check` can no longer reach them, and `budlum` keeps the verdict on
+  # format, clippy, tests and docs, where a formatting failure should stop the job.
+  gates:
+    name: Gates (a suite that cannot run is not a protection)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@6c977a6ca4077a0ceb28ffbe03f59d46e9ac8772 # master 2026-07-16
+        with:
+          toolchain: "1.97.1"
+          components: clippy, rustfmt
+      - name: Install protoc
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq protobuf-compiler
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          shared-key: budlum-core
+      # `badges-are-current` reads the test log the badge is derived from. In `budlum`
+      # that log is written by the authoritative `Test` step; here it is regenerated for
+      # the gate, and `continue-on-error` because the verdict on the suite belongs to
+      # `budlum`: a job whose only failing step is a copy of another job's verdict teaches
+      # nothing and hides the steps after it, which is the disease being cured.
+      - name: Test log for the badge gate (the verdict lives in budlum)
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          cargo test --lib --verbose 2>&1 | tee /tmp/libtests.log
       - name: Badge canary (independent of the log)
         run: cargo run --release --manifest-path xtask/gates/Cargo.toml -- badges-are-current --self-test
       - name: Is the badge current (README = measured test count)
