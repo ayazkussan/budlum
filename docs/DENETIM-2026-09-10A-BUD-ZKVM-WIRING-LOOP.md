@@ -453,3 +453,92 @@ on this lineage that can print it into the API. As of this commit that job is
 still running, so the errors land in the next loop's reading; the step is in
 the tree now, so it will be there for every run after it.
 
+
+## 13. Lubot training loop: four crates, 2968 lines, 45 tests
+
+The loop ran against the pattern sources listed in the directive and produced
+four new Lubot crates, mirrored as `repo-lubot/patches/0006..0010`. The pattern
+record - which source, which mechanism, what was deliberately *not* taken -
+lives in the workspace repo as `skills/lubot/2026-09-10A-kalip-defteri.md`
+(patch `0038`). No line was copied; the crates are `std`-only Rust written
+here, and Lubot's own tree names no source repository.
+
+| crate | holds | the invariant it enforces |
+|---|---|---|
+| `yetenek` (782 / 13) | skill cards plus the ledger of what proved them | a card is a *trigger*, and it reaches `Active` only when a run that closes it is recorded; a contradicting run demotes it without deleting it |
+| `olcek` (715 / 10) | ceiling, watermark, reserved floor, two pools, drop ledger | a refusal carries numbers; an eviction carries a record; a silent truncation is impossible because `verify()` recomputes the sums |
+| `kanit` (883 / 12) | scope lock, evidence, findings, paths, closure | no observation before a plan, no support from outside the scope, no closure on prose, and a closure that loses its evidence stops being a closure |
+| `mimari` (588 / 10) | the pipeline table checked against the tree | every symbol the table names must be declared in the file the table names; an empty contract, an empty table and a one-row table are all violations |
+
+`kanit` is the direct answer to the failure mode the directive asks to be
+detected - an auditor writing the finding text where the fix should be. Prose
+is admitted, counted, listed by `described_only()`, and can never close a claim.
+
+**Not compiled.** There is no Rust toolchain in this sandbox and none can be
+fetched (see section 7), so these numbers are line and test counts, not a
+passing suite. What *was* verified here is the delivery mechanism: the five
+patches were applied with `git am` to a scratch tree standing in for Lubot, and
+the fourth one is generated with one line of context (`git -c diff.context=1`)
+because a three-line-context hunk against the root `Cargo.toml` was measured to
+fail on a manifest whose surrounding blank lines differ. That is the same
+disease as G-1 and as the 205 dead `pub fn`s, in a new costume: **a crate that
+is not in `members` is code that does not exist**, so the wiring hunk is its own
+patch (`0010`) at the end of the series - if it fails to apply, four lines are
+added by hand, and the four crates still land.
+
+## 14. "The lineage does not compile" was an environment verdict
+
+The annotation channel added in section 10 works. For job `102794189883`
+(run 37, `6a2a951`) the API returned eleven annotations - the first CI output
+this session has been able to read at all:
+
+```
+error: failed to run custom build command for `budlum-core v0.1.0`
+Caused by:
+  process didn't exit successfully: `.../build-script-build` (exit status: 101)
+  --- stdout
+  cargo:rerun-if-changed=proto/budlum/network/protocol.proto
+Process completed with exit code 101.
+```
+
+`build.rs` is 35 lines: it locates `protoc` (`PROTOC` env, three known paths,
+then `PATH`) and calls `prost_build` on `proto/budlum/network/protocol.proto`;
+the `.expect(...)` is the 101. Grep across all 23 workflows in this fork:
+
+| workflow | compiles? | installs protoc? |
+|---|---|---|
+| `ci.yml` | yes (250 cargo refs) | yes, 14 steps |
+| `determinism.yml` | yes | yes, per-OS (incl. a checksum-pinned Windows download) |
+| `miri.yml`, `rust-quality.yml`, `extra-tooling.yml`, `security-hardening.yml`, `benchmark.yml`, `semver.yml`, `diverse-double-compiling.yml`, `supply-chain-extra.yml`, `fuzz-nightly.yml`, `security-audit.yml`, `cargo-vet.yml`, `provenance.yml`, `docker-smoke.yml` | yes | yes (1-11 mentions each) |
+| **`rust.yml`** | **yes (3 cargo refs)** | **no** |
+
+So the `Rust` workflow - the one whose verdict section 10 recorded as "the tree
+does not compile" - was failing in *codegen*, on a missing apt package, and its
+`Run tests` step never started. The fork's source tree is not what that red X
+described.
+
+Two changes follow, neither of which touches an assertion:
+
+1. `rust.yml` gains the same `Install protoc` step every compiling workflow
+   already has. Adding a dependency cannot make a red check green; it can only
+   let the check reach the point where it has an opinion of its own.
+2. Both diagnostic steps are reworked for a fact measured from the response:
+   **a check run keeps ten annotations and drops the earlier ones.** The 60-line
+   tail I emitted became ~10 lines of the *end* of a build-script burst, and the
+   actual cause line was truncated away. The steps now emit at most nine
+   *selected* lines (for `Format`: up to eight `Diff in` headers plus a count
+   line last, since the last ones are what survives). Nobody should "restore"
+   the wide tail: a channel that overflows is a channel that lies.
+
+Pre-registered for the next run, before reading it: with protoc installed, the
+`Build` step of `rust.yml` either goes green or prints real `error[E....]`
+lines from the sources - and the previous "eight independent failures" count
+should shrink by exactly the jobs that were only ever downstream of this one. If
+the build *still* says "failed to run custom build command", the suspect is apt
+package resolution on the runner image, not this repository. What is already
+known to be independent of this fix, and stays open: Typos (real findings), the
+`Format` debt (a gate step, not a compile step), Miri's own failure, the
+Dependency Review advisory, and the two determinism jobs - those workflows
+install protoc, so their 101s are their own, and the reading in section 12 that
+attributed them to a single compile error is now **corrected**: the shared cause
+was `rust.yml` plus the fmt debt, not all eight.

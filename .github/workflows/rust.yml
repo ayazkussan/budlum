@@ -16,6 +16,17 @@ jobs:
 
     steps:
     - uses: actions/checkout@v4
+    # `budlum-core` has a build script that runs protoc (build.rs). This job had
+    # no protoc: every other workflow that compiles installs it (`Install
+    # protoc` in ci.yml, determinism.yml, miri.yml, rust-quality.yml, ...), and
+    # the build script's own PATH search finds nothing on a bare ubuntu-latest
+    # image. So the panic was not in the sources: the only workflow that reads
+    # "Build = cargo build failed" was failing in codegen, and `Run tests` never
+    # ran. This adds a dependency, not an assertion: nothing here can make a
+    # red check green, it can only let the check reach the point where it has an
+    # opinion of its own.
+    - name: Install protoc
+      run: sudo apt-get update -qq && sudo apt-get install -y -qq protobuf-compiler
     - name: Build
       run: cargo build --verbose
     # The log host (blob storage) is unreachable from an audit sandbox: the
@@ -27,6 +38,15 @@ jobs:
       if: failure()
       run: |
         set +o pipefail
-        cargo build --message-format short 2>&1 | sed -n -e 's/^/::error::/' -e '1,60p'
+        # A check run keeps ten annotations and drops the earlier ones, so a
+        # tail of sixty lines is a noise burst that loses the cause. Nine
+        # selected lines survive, in order, deduplicated: the first error, not
+        # the last one.
+        cargo build --message-format short 2>&1 \
+          | grep -E 'error|panicked|Caused by|No such file|Could not find|protoc' \
+          | sed -e 's/^[[:space:]]*//' \
+          | awk '!seen[$0]++' \
+          | head -n 9 \
+          | awk '{print "::error::" $0}'
     - name: Run tests
       run: cargo test --verbose

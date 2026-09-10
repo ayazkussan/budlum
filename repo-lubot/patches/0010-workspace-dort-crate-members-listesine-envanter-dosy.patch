@@ -1,0 +1,50 @@
+From f11fd4de8c7d50bcd8c28c88406bc76e1109afd5 Mon Sep 17 00:00:00 2001
+From: Lubo's Ruler <ayazkussann@gmail.com>
+Date: Thu, 10 Sep 2026 08:28:53 +0000
+Subject: [PATCH] workspace: dort crate members listesine, envanter dosyasi
+
+Kart defteri (yetenek), limit defteri (olcek), kanit zinciri (kanit), mimari
+tablo kontrolu (mimari). Dordun bir digerine bagimliligi yok; hepsi std,
+hicbirisi I/O yapmiyor.
+
+Envanter ayrica docs/CRATES.md icinde: her crate'in ne tuttugu ve neyi
+reddettigi tek satirda. Bir crate'in neyi reddettigi yazili degilse o crate
+bir tercih degil bir katmandir - ve katmanlar kaydirilabilir.
+---
+ Cargo.toml     |  4 ++++
+ docs/CRATES.md | 12 ++++++++++++
+ 2 files changed, 16 insertions(+)
+ create mode 100644 docs/CRATES.md
+
+diff --git a/Cargo.toml b/Cargo.toml
+index bf9117a..42b5ddf 100644
+--- a/Cargo.toml
++++ b/Cargo.toml
+@@ -21,2 +21,6 @@ members = [
+     "crates/denetim",
++    "crates/yetenek",
++    "crates/olcek",
++    "crates/kanit",
++    "crates/mimari",
+ ]
+diff --git a/docs/CRATES.md b/docs/CRATES.md
+new file mode 100644
+index 0000000..a18a33f
+--- /dev/null
++++ b/docs/CRATES.md
+@@ -0,0 +1,12 @@
++# Crate inventory, four entries added in this series
++
++| crate | holds | fails closed on |
++|---|---|---|
++| `yetenek` | skill cards and the ledger of what proved them | a card with no trigger, no steps, or prose-only exit evidence |
++| `olcek` | ceiling, watermark, reserved floor, and the drop ledger | an admission past the ceiling, an uncounted eviction, a reserve spent by reading |
++| `kanit` | scope, evidence, findings, paths, closure | observation before a plan, evidence outside the scope, closure without an observation that can carry it |
++| `mimari` | the pipeline table and the tree it must match | a row naming a symbol that is not declared, an empty contract, an empty table |
++
++None of the four depends on another. All are `std` only, no I/O, no clock, no
++randomness: a run that reads them can be reproduced from its inputs, which is
++the only property that makes a review finding reviewable a second time.
+-- 
+2.39.5
+
