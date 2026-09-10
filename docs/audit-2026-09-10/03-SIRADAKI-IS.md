@@ -42,3 +42,7 @@ diğerleri act-and-log.
     revizyonu.
 12. HPKE: kodda adı geçen 5 dosyanın taraması (gerçek kullanım mı
     işaret mi) + "HPKE zorunlu uygulaması" R&D'sine girdi (`07`).
+13. **E-7 tamamlama (kısmen R&D):** `RelayCompletion` varyant+kol
+    patch'te hazır ama eksik-set (geçiş fn'ı yok, proto kolları yok).
+    Tasarım + proto + testler; mint/credit ekonomisi R&D kararı.
+    Kaynak: `08`.
