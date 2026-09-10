@@ -205,3 +205,62 @@ the `BAGLANTILIK-LOG` row updates:
   baseline itself is flaky and that is a separate finding.
 * No merge: PR #3 is left open by policy; `budlum-xyz/budlum#50` untouched.
 
+## 8. Second half of the loop: BUD-P-1 wired (user decision `a`)
+
+Decision recorded: wire the spread into production, not demote, not only compare.
+
+* `StorageRegistry::annotate_expected_holders` no longer places one shard per
+  ticket. It groups the pending, unannotated tickets by `manifest_id` and hands
+  each group to `storage::assignment::assign_object`, so several missing shards
+  of one object cannot all be advised to the same operator while another staked
+  validator is free. The fallback pool rule inside `assign_object` is what makes
+  this best-effort rather than a refusal: a validator set smaller than the code
+  word still gets an advisory for every shard.
+* `assign_object`'s contract now states the subset case explicitly (the repair
+  path passes the missing shards, not the whole code word), and the module's
+  `WIRING:` block was rewritten: **wiring a rule is not the same as having the
+  rule run**, which is the sentence this finding deserves.
+* Two tests in `src/storage/assignment.rs`:
+  `a_multi_shard_subset_still_spreads` (the new property) and
+  `a_single_shard_subset_places_exactly_as_the_per_shard_rule` (the regression
+  lock - an object with one shard to repair must be placed exactly as before,
+  so the change cannot silently move anything).
+* Stale doc killed: `annotate_expected_holders` claimed "Today there is no
+  comparison at all between who took a ticket and who the placement chose".
+  `placements_that_diverged` exists and the maintenance pass logs it
+  (`src/chain/chain_actor.rs:2917`). The comment described a world the code had
+  already left behind - found while writing the new doc, not by a gate.
+
+### Consensus blast radius, checked before writing
+
+`expected_holder` is not a metric. `StorageRegistry::root()`
+(`src/domain/storage_deal.rs:1063`) folds every ticket through bincode
+(`:1103`) and `storage_root` is committed in the block header
+(`src/core/block.rs:41,126`). So a changed recommendation **is** a changed state
+root, and the ordering rule (BTreeMap key order = ticket-id order) is now part
+of the consensus-relevant contract - it is written in the comment for exactly
+that reason. No activation gate was invented: the tree is pre-genesis
+(`MainnetActivation` defaults closed, mainnet bootnodes are placeholders per
+F-01), so there is no history to replay into a fork. **After genesis this same
+change would need an epoch-gated V1/V2 tag on the placement entropy**, and the
+`BDLM_MAINTENANCE_PLACEMENT_V1` tag is where that would go.
+
+### What this loop cannot claim
+
+* **Not compiled.** The user chose "install a toolchain"; it is not possible
+  here: `static.rust-lang.org`, `sh.rustup.rs`, `crates.io` all return no
+  connection (probed), `apt-cache` has no `rustc`. So `cargo fmt`/`clippy`/
+  `test` did not run. First verifier is CI on `ayazkussan/budlum#3`. If `fmt`
+  disagrees with my wrapping, the next commit applies exactly what CI prints -
+  I am not going to guess twice and call it a fix.
+* No end-to-end advisory test. Building a second pending ticket on the same
+  object means `open_deal -> open_challenge -> finalize_missed_challenge`
+  twice, and `operator_cooldowns` is keyed by operator alone
+  (`src/domain/storage_deal.rs:712`) - the fixture would need a second
+  operator or a wider cooldown, which is a test-infra change, not this change.
+  Logged as an open item; the primitive-level lock covers the rule.
+* `unwired-guards` naming hole remains open (baseline counts only
+  check/verify/validate/require/enforce/assert/reject/refuse/deny/guard;
+  `assign_*` is invisible). Fixing it means widening a gate, which will find
+  more names than this one - separate change, next loop.
+

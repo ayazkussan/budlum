@@ -3048,16 +3048,28 @@ impl StorageRegistry {
 
     /// Write the placement advice onto the pending tickets.
     ///
-    /// `assign_shard` uses rendezvous hashing to choose one deterministic holder
-    /// per shard: the same shard, the same entropy and the same
-    /// candidate set give the same answer on every node. The answer here is a
-    /// **recommendation**, whoever accepts the ticket takes it
-    /// (`accept_reallocation_ticket` did not change).
+    /// Rendezvous hashing chooses one deterministic holder per shard: the same
+    /// shard, the same entropy and the same candidate set give the same answer
+    /// on every node. The answer here is a **recommendation**, whoever accepts
+    /// the ticket takes it (`accept_reallocation_ticket` did not change).
     ///
-    /// The reason it is written is to make divergence visible. Today there is
-    /// no comparison at all between who took a ticket and who the placement
-    /// computation chose, so neither the computation failing to reflect real
-    /// capacity nor assigned operators skipping their obligation can be seen.
+    /// The placement runs per *object*, not per ticket. Two shards of one
+    /// object can be missing at the same epoch - that is the correlated case
+    /// the erasure scheme was sized against - and placing each ticket on its
+    /// own lets the highest-scoring operator win both advisories, so one
+    /// departure would take the whole repair set twice over. Grouping the
+    /// tickets by manifest and handing the group to
+    /// [`assign_object`](crate::storage::assignment::assign_object) makes it
+    /// name a distinct operator per shard whenever the pool has one to give;
+    /// when it does not, the spread falls back to the full pool, which is the
+    /// same best-effort answer the per-ticket loop produced.
+    ///
+    /// The reason the advice is recorded at all is measurability:
+    /// [`placements_that_diverged`] compares the recommendation against the
+    /// operator who actually accepted the ticket, and the maintenance pass
+    /// logs the gap. Neither failure mode - a placement that does not reflect
+    /// real capacity, and assigned operators skipping their obligation - is
+    /// visible without that comparison.
     ///
     /// Only `Pending` tickets and only once: writing a recommendation onto an
     /// already accepted ticket would be inventing the recommendation after the
@@ -3067,21 +3079,43 @@ impl StorageRegistry {
         entropy: &crate::domain::Hash32,
         candidates: &[crate::storage::assignment::ShardCandidate],
     ) -> usize {
-        let mut written = 0;
-        for ticket in self.reallocations.values_mut() {
+        use crate::storage::assignment;
+
+        // Plan first, mutate second. The spread has to see every ticket of an
+        // object at once, and holding `values_mut()` while doing that would
+        // borrow the map twice.
+        //
+        // `reallocations` is a `BTreeMap` keyed by ticket id, so both the group
+        // order and the order inside a group are the ticket-id order on every
+        // node: the same map walk, the same placement answers, the same
+        // registry root.
+        let mut groups: BTreeMap<ContentId, Vec<(u64, ContentId)>> = BTreeMap::new();
+        for ticket in self.reallocations.values() {
             if ticket.status != ReallocationStatus::Pending || ticket.expected_holder.is_some() {
                 continue;
             }
-            // One replica: a ticket fills a single slot, not the set.
-            let Ok(placed) =
-                crate::storage::assignment::assign_shard(&ticket.shard_id, entropy, candidates, 1)
-            else {
-                // No candidate, no recommendation. An empty recommendation
-                // is better than a wrong one.
+            groups
+                .entry(ticket.manifest_id)
+                .or_default()
+                .push((ticket.ticket_id, ticket.shard_id));
+        }
+        let mut placements: BTreeMap<u64, Address> = BTreeMap::new();
+        for members in groups.into_values() {
+            let shard_ids: Vec<ContentId> = members.iter().map(|(_, shard)| *shard).collect();
+            let placed = assignment::assign_object(&shard_ids, entropy, candidates);
+            let Ok(holders) = placed else {
+                // No staked candidate at all, so nothing to recommend. An
+                // empty recommendation is better than a wrong one.
                 continue;
             };
-            ticket.expected_holder = placed.first().copied();
-            if ticket.expected_holder.is_some() {
+            for ((ticket_id, _), holder) in members.iter().zip(holders) {
+                placements.insert(*ticket_id, holder);
+            }
+        }
+        let mut written = 0;
+        for ticket in self.reallocations.values_mut() {
+            if let Some(holder) = placements.get(&ticket.ticket_id) {
+                ticket.expected_holder = Some(*holder);
                 written += 1;
             }
         }
