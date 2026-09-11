@@ -1842,3 +1842,16 @@ anchor) pushed while auth held; the remaining four sit on
 `arena/01a08a1a-budlum` locally, each pushed on the first retry after auth returns. CI verdicts
 after `9a6c2ca` are unknown AT RECORD TIME (the queue kept draining while `gh` was dead); the
 "not compiled: no cargo (measured)" labels stand on all six until the PR's compile gates disagree.
+
+The outage then produced the arc's final measurement, and it belongs in the same paragraph as
+the rest: the sandbox came back with the working files of the full tip but the `.git` pointer
+rolled to the session's base - every branch commit through `9a6c2ca` showing as "dirty", the five
+local-only commits' objects gone. The recovery was content, not heroics: files were already the
+tip's state, `git fetch` restored the pushed history, a mixed reset re-grounded the pointer, and
+the diff that remained was checked to be EXACTLY the five commits' file footprints (the account.rs
+residue counting 0 `execution_domain` lines proved the base already carried the pushed slice -
+the check that distinguishes a recovery from a rewrite). The five commits were recreated at their
+original boundaries with their original messages and pushed as `888094d..3e3cd6d`: same content,
+new hashes, and this paragraph is the record that they are not the same objects. A workspace that
+persists files but not git state is a workspace whose commits must be small, self-describing and
+pushed early - the arc's per-commit-push habit is what made the loss zero-content.
