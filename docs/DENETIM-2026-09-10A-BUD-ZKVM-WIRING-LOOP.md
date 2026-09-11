@@ -1099,3 +1099,114 @@ would be exactly the unmeasured number this report keeps complaining about). The
 next run's `gates` job will name the cause in an annotation; if it is the build, the
 fix is a source edit and a re-push, if it is the canary, the canary is wrong and
 gets corrected to fail for one reason.
+
+## 24. The six red canaries: closed by the surface, in one round
+
+The push that added `Build the gate binary` answered the question the previous
+section left open, in the annotation stream rather than in a log:
+
+```
+error[E0308]: mismatched types
+   --> src/gates/dead_pub_api.rs:408:35
+error[E0308]: mismatched types
+   --> src/gates/dead_pub_api.rs:418:35
+error: could not compile `budlum-gates` (bin "budlum-gates") due to 2 previous errors
+```
+
+Both sites are `write(dir.join("src/lib.rs"), <String>)` inside the dead-pub-API
+canary's fixture builder. The fixture writer was a local closure annotated
+`(PathBuf, &str)`, and a closure's parameter type is fixed by the first call site:
+the fixtures spelled as string literals type-checked, the two built with
+`.concat()` - owned `String`s - did not. `a6d1c1c` replaces the closure with a
+private `write_fixture(PathBuf, impl AsRef<str>)`, so the spelling that was wrong
+is no longer the only spelling available, and it stays private because a `pub fn`
+in this file would grow the very public-API baseline this gate ratchets.
+
+Causal chain, worth keeping because it is the general shape of the problem:
+`xtask/gates` is its own cargo workspace; the root `Clippy` step in Budlum Core and
+the per-crate clippy in Budscan never build it; the first step anywhere that invokes
+`cargo run --manifest-path xtask/gates/Cargo.toml` was a canary; a build failure in
+a canary step is reported as the gate finding a defect; six jobs went red on
+`fc08330` and stayed red for the whole session, including one (`Budscan`) that was
+fully green at the branch point. A gate that nobody builds and a gate that finds
+something are the same CI shape from the outside.
+
+What the surfaces did: the failure moved onto a step named for the build, carried
+rustc's message plus its `-->` location as annotations, and the `Canary surface`
+step that re-runs `-- --self-test` reported 3 reason lines instead of silence. The
+first version of that surface would have reported nothing at all - its filter was
+`^(FAIL |panicked|error)` and a real panic prints `thread 'main' panicked at ...`,
+found by executing the extracted step body against a stub `cargo`, which is the
+same rule the Format surface was built under (§20) and the reason the rule exists.
+
+Still open after this fix, with the local command that measures it:
+
+- `cargo test --lib` at the root fails with exit 101 in the `gates` job (its
+  `Test log for the badge gate` step, deliberately `continue-on-error`) - the real
+  verdict is Budlum Core's `Test` step, which is skipped because `Format` is red;
+  rustfmt debt cannot be paid from this sandbox, so `cargo fmt --all` is the fix and
+  the 8-file list is in the Format annotations;
+- whether `budlum-gates` now compiles is the next run's answer, not a claim here;
+- the lubot mirror at `repo-lubot/` stands at 21 patches, `git am -3` 21/21 on a
+  clean clone of `main`@`37d32c9`, with `tools/rebuild_series.py --table` generating
+  the README table from the patch files themselves (verified byte-for-byte against
+  the committed table before it was written down).
+
+## 25. Making the loop usable from the outside: order, visibility, and the recovery that worked
+
+Four things changed after the type error was closed, all of them about whether a
+maintainer can act on what this repo reports.
+
+**Style checks no longer stand in front of verdicts.** `Format` was the fifth step in
+`budlum` (masking Clippy, the pedantic ratchet, the feature canary, `Test`, `cargo
+doc`), the fourth in `budzero` (masking `Check`, `Clippy`, `Test`) and the fourth in
+`budscan` (masking that job's tests and both canary steps). Each `Format` moved to
+the end of its job. The edit was verified as a *pure move* - the sorted line
+multisets of the old and new file are identical apart from the load-bearing comment
+added above the trio in `budlum` - because a step reorder done by hand is exactly
+where a dropped `run:` block hides.
+
+**The gates workspace gets measured, not yet enforced.** `cargo clippy --release
+--manifest-path xtask/gates/Cargo.toml --all-targets` now runs in the `gates` job
+with `continue-on-error`, and its `Clippy surface (annotations)` step publishes the
+headline warnings with their `--> file:line:col` and a total count as `::notice::`.
+Monitoring-first is the existing `izleme modu` shape of the pedantic ratchet, and the
+reason for it is procedural: a lint surface that becomes visible and binding in the
+same commit is a surface that gets its visibility reverted. The separator lines
+`grep -A1` inserts between groups are filtered out; an annotation that reads `--` is
+noise wearing a diagnostic's clothes.
+
+**Both step bodies were executed, not inspected**, against a stub `cargo` that emits
+coloured clippy-shaped output - including the case where the log is empty, which
+must still exit 0. The same harness is how the earlier surfaces were checked, and it
+is cheap: extract the step's `run:` from the YAML, put a fake binary first on `PATH`,
+run `bash -e`. `bash -n` cannot see any of the three bugs this session found in
+workflow text (the `^panicked` filter that missed a real panic line, a `printf`
+format whose backticks were live command substitutions, and a `-A1` group separator
+that would have become an annotation).
+
+**The sandbox reset is now a known procedure, not an emergency.** The repository
+directory was re-cloned underneath the session while the working tree kept its
+files: HEAD was at `88970e3`, the branch tip and all its commits were on the remote,
+and `ea11834` existed only as file content on disk. `git fetch` + `git reset --mixed
+FETCH_HEAD` (moves the ref, leaves the worktree alone) put HEAD at the remote tip,
+the surviving work appeared as a normal delta - 20 re-exported patches differing by
+the `[PATCH NN/21]` counter plus one untracked file - and it was committed as
+`28238be`. What did *not* survive was anything outside the repo: the sidecar scripts
+in `/home/user` and every `/tmp` clone. That is why the series generator and the
+README-table generator now live in `repo-lubot/tools/`, and why `--table`'s output
+was diffed byte-for-byte against the committed table before the file claimed it.
+
+Open, with the command that closes each:
+
+- does `budlum-gates` compile now? next run's `Build the gate binary` step, and if it
+  is green, whatever the six canaries then say is true about the tree;
+- rustfmt debt: `cargo fmt --all` locally, in the first job that has a toolchain; the
+  file list is in the `Format diff surface` annotations;
+- `cargo test --lib` at the root (Budlum Core's `Test` step, now no longer masked) -
+  the suite's own verdict, which this sandbox can only cite from CI annotations;
+- GitHub auth from this sandbox expired mid-work (`gh api` → `Bad credentials`,
+  `git push` → credential prompt refused), so four commits sit locally:
+  the mirror's 21st patch, the report's §24-§25, the `--table` generator and the two
+  CI steps above. They push in one go when the token comes back; nothing was stashed
+  or rebased to make that true, and the tree is clean while waiting.
