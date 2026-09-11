@@ -41,7 +41,8 @@ pub use identity::{
     address_of_did, did_of, field_commitment, IdentityError, IdentityOp, IdentityRecord,
     IdentityRegistry, MethodKind, VerificationMethod, CredentialCommitment,
     DisclosureProof, FieldCommitment, credential_id, disclosure_proof, merkle_root,
-    verify_disclosure, credential_issue_digest, credential_revoke_digest, recovery_digest, DID_METHOD_NAME,
+    verify_disclosure, authorize_recovery, credential_issue_digest, credential_revoke_digest,
+    recovery_digest, GuardianApproval, IdentityTx, DID_METHOD_NAME,
 };
 pub use invalid_vote::InvalidVoteTracker;
 pub use liveness::LivenessTracker;

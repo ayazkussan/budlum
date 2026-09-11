@@ -779,6 +779,77 @@ pub fn recovery_digest(
 ///
 /// WIRING: the identity transaction door (full-cycle slice) is the
 /// caller; the rules are unit-tested here exactly as it will use them.
+/// The exact payload the identity transaction door will carry, and the
+/// authorization rules beside it. Defined in the registry - not in
+/// `core::transaction` - so the executor's future single arm is `match`
+/// over this type and nothing else: the shape and its semantics cannot
+/// drift, and the door's work stays one screen.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum IdentityTx {
+    /// Register the sender's own DID document.
+    Register { record: IdentityRecord },
+    /// Issue a credential commitment to a registered subject.
+    Issue { credential: CredentialCommitment },
+    /// Revoke a credential the sender issued.
+    Revoke { credential: CredentialCommitment },
+    /// Rotate the DID to a new key on a guardian quorum.
+    Recover {
+        subject: Address,
+        new_key: [u8; 32],
+        approvals: Vec<GuardianApproval>,
+    },
+}
+
+/// One guardian's word on a recovery, as bytes at the door: the public key
+/// (full ML-DSA-87 key - addresses cannot carry 2,592 bytes, so the
+/// transaction does) and the signature over [`recovery_digest`].
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct GuardianApproval {
+    pub public_key: Vec<u8>,
+    pub signature: Vec<u8>,
+}
+
+/// Verify every approval at the crypto door, then run the rotation. The
+/// two rules live here, not in the executor, because they ARE the recovery
+/// semantics: the approving address is DERIVED from the key (a guardian
+/// cannot sign its way into a different guardian's seat), and the signature
+/// speaks this exact digest - subject, new key, the epoch it takes effect
+/// at, this chain. A build without `wallet-ml-dsa` refuses every approval
+/// through the same door, which is the grant layer's behavior and stays
+/// the behavior here: recovery is unavailable, never guessable.
+///
+/// # Errors
+///
+/// [`IdentityError::BadApproval`] at the first unsound approval, then
+/// whatever [`IdentityRegistry::guardian_recovery`] refuses (unknown DID,
+/// no guardians, quorum short, live key collision).
+pub fn authorize_recovery(
+    registry: &mut IdentityRegistry,
+    subject: Address,
+    new_key: [u8; 32],
+    approvals: &[GuardianApproval],
+    epoch: u64,
+    chain_id: u64,
+) -> Result<(), IdentityError> {
+    let digest = recovery_digest(&subject, &new_key, epoch, chain_id);
+    let mut guardians = Vec::with_capacity(approvals.len());
+    for approval in approvals {
+        let guardian =
+            crate::crypto::primitives::wallet_address_from_ml_dsa_87_public_key(
+                &approval.public_key,
+            )
+            .map_err(|e| IdentityError::BadApproval(format!("key: {e}")))?;
+        crate::crypto::primitives::verify_ml_dsa_87_signature(
+            &digest,
+            &approval.signature,
+            &approval.public_key,
+        )
+        .map_err(|e| IdentityError::BadApproval(format!("signature: {e}")))?;
+        guardians.push(guardian);
+    }
+    registry.guardian_recovery(subject, new_key, &guardians, epoch)
+}
+
 /// The mutations the PoA gate wraps.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum IdentityOp {
@@ -840,6 +911,12 @@ pub enum IdentityError {
     NotLive { issued_at: u64, expiry: Option<u64>, now: u64 },
     /// The subject's on-chain root and the credential's own fields disagree.
     RootMismatch { did: String },
+    /// A recovery approval failed at the crypto door before counting: the
+    /// key does not derive an address, or the signature does not speak this
+    /// digest with this key. An approval is either real or the whole
+    /// operation is refused; a skipped approval is not "quorum short", it is
+    /// a silent downgrade, which this crate names in its own headers.
+    BadApproval(String),
 }
 
 impl std::fmt::Display for IdentityError {
@@ -893,6 +970,7 @@ impl std::fmt::Display for IdentityError {
             Self::RootMismatch { did } => {
                 write!(f, "{did}'s on-chain root and this credential's own fields disagree")
             }
+            Self::BadApproval(why) => write!(f, "a recovery approval is not sound: {why}"),
         }
     }
 }
@@ -1194,11 +1272,15 @@ mod tests {
         // A second node that reached the same state by applying the same ops
         // agrees without exchanging anything but the root:
         let mut twin = IdentityRegistry::new();
-        twin.apply(&ConsensusKind::PoA, IdentityOp::Register { record: subject_record() }, 100).unwrap();
-        twin.apply(&ConsensusKind::PoA, IdentityOp::Register { record: issuer_record() }, 100).unwrap();
+        twin.apply(&ConsensusKind::PoA, IdentityOp::Register { record: subject_record() }, 100)
+            .unwrap();
+        twin.apply(&ConsensusKind::PoA, IdentityOp::Register { record: issuer_record() }, 100)
+            .unwrap();
         let (fresh, _) = credential();
-        twin.apply(&ConsensusKind::PoA, IdentityOp::Issue { credential: fresh.clone() }, 100).unwrap();
-        twin.apply(&ConsensusKind::PoA, IdentityOp::Revoke { credential: fresh }, 150).unwrap();
+        twin.apply(&ConsensusKind::PoA, IdentityOp::Issue { credential: fresh.clone() }, 100)
+            .unwrap();
+        twin.apply(&ConsensusKind::PoA, IdentityOp::Revoke { credential: fresh }, 150)
+            .unwrap();
         assert_eq!(twin.root(), with_record.root());
     }
 
@@ -1229,6 +1311,34 @@ mod tests {
         // able to collide on crafted material the way a bare concatenation
         // can.
         assert_ne!(rec, credential_revoke_digest(&credential, &addr(1), chain));
+    }
+
+    #[test]
+    fn unsound_approvals_die_at_the_crypto_door_not_in_the_quorum() {
+        // No key material is fabricated here on purpose: the point of the
+        // rule is that the crypto door - not the registry's counting -
+        // decides what an approval IS. Wrong lengths are the shape every
+        // build, feature-gated or not, must refuse identically.
+        let mut registry = IdentityRegistry::new();
+        registry
+            .apply(
+                &ConsensusKind::PoA,
+                IdentityOp::Register { record: subject_record_with_guardians() },
+                10,
+            )
+            .unwrap();
+        let junk = GuardianApproval { public_key: vec![0u8; 8], signature: vec![] };
+        let err = authorize_recovery(&mut registry, addr(1), [9; 32], &[junk], 20, 1).unwrap_err();
+        assert!(matches!(err, IdentityError::BadApproval(_)), "{err}");
+        // No approvals at all: the quorum door answers, and it answers short.
+        assert!(matches!(
+            authorize_recovery(&mut registry, addr(1), [9; 32], &[], 20, 1),
+            Err(IdentityError::QuorumShort { need: 2, got: 0, .. })
+        ));
+    }
+
+    fn subject_record_with_guardians() -> IdentityRecord {
+        IdentityRecord::new(addr(1), one_method(), vec![addr(2), addr(3)], 2).unwrap()
     }
 
     #[test]
