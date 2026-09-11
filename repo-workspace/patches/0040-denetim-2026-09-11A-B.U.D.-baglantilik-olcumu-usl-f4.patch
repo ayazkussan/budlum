@@ -1,0 +1,122 @@
+From ee05ba237ce98948cf11d17ec2fd0b32d7de3c91 Mon Sep 17 00:00:00 2001
+From: Lubo's Ruler <ayazkussann@gmail.com>
+Date: Fri, 11 Sep 2026 06:47:30 +0000
+Subject: [PATCH] denetim-2026-09-11A: B.U.D. baglantilik olcumu (usl@f455ba4)
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Direktif §2'nin istedigi canli yeniden dogrulama. Kayitli durum "kodlanmis
+ve test edilmis ama UNWIRED" idi; canli dalda olcum baska soyluyor:
+
+  erasure coding    BAGLI   storage_deal.rs:2189, rpc/server.rs:2284
+  coding audit      BAGLI   chain_actor.rs:2799/4009/4032
+  repair trigger    BAGLI   chain_actor.rs:2684 (run_storage_maintenance)
+  shard placement   YOK     bes aday adda tanim yok
+
+Yeni bulgu: reconstruct_object (erasure.rs:780) uretimde hic cagirilmiyor,
+tek cagri yeri test. Yani tetik atesleniyor ama yeniden kurma yolu bagli
+degil. Kodlanmadi - hangi katmanin cagiracagi mimari karar.
+
+Olcum yontemi: #[cfg(test)] bloklari ve yorum satirlari ayiklandi, tanim
+disi cagri yerleri sayildi. Ayiklanmasa erasure.rs icindeki testler uretim
+sayiliyor ve her sey bagli gorunuyordu.
+
+Derlenmedi: bu havuzda cargo yok. Hukumler cagri yeri olcumu, yesil CI
+degil. Kapi eklenmedi - calistirilamayan kapi olculmemis iddiadir.
+---
+ DENETIM-2026-09-11A-BUD-BAGLANTILIK-OLCUMU.md | 82 +++++++++++++++++++
+ 1 file changed, 82 insertions(+)
+ create mode 100644 DENETIM-2026-09-11A-BUD-BAGLANTILIK-OLCUMU.md
+
+diff --git a/DENETIM-2026-09-11A-BUD-BAGLANTILIK-OLCUMU.md b/DENETIM-2026-09-11A-BUD-BAGLANTILIK-OLCUMU.md
+new file mode 100644
+index 0000000..be3a905
+--- /dev/null
++++ b/DENETIM-2026-09-11A-BUD-BAGLANTILIK-OLCUMU.md
+@@ -0,0 +1,82 @@
++# DENETIM-2026-09-11A — B.U.D. bağlantılılık ölçümü (canlı dal, PR50)
++
++**Tarih:** 2026-09-11 (A turu) · **Ölçülen ağaç:** `budlum-xyz/budlum` dal `usl`
++@ `f455ba4` (açık PR50'nin HEAD'i), taze klon, `refs/heads/usl`.
++
++Direktif §2, B.U.D.'un dört yeteneğinin "canlı repo üzerinden yeniden
++doğrulanana kadar değişmemiş kabul edilir" diyor. Kayıtlı son durum
++"kodlanmış ve test edilmiş ama UNWIRED" idi. Bu tur o durumu canlı dalda
++yeniden ölçtü; sonuç kayıtla uyuşmuyor.
++
++## Yöntem
++
++Saymak kolay, doğru saymak zor. Deponun kendi `capability_modules_are_wired`
++kapısı neyi ayıklıyorsa bu ölçüm de onu ayıkladı:
++
++- `#[cfg(test)]` blokları süslü ayraç sayılarak ayıklandı. Ayıklanmasa
++  `src/storage/erasure.rs` içindeki testler üretim çağrısı sayılıyordu ve
++  her yetenek "bağlı" görünüyordu.
++- `//` yorum satırları ayıklandı. Yorumda adı geçmek çağrılmak değildir.
++- Tanım satırı (`fn <ad>`) çağrı sayılmadı; yalnızca tanımın dışındaki
++  çağrı yerleri sayıldı.
++- Kökler: `src/`, `budzero/`. `src/tests/` ayrıca raporlandı, üretim
++  hükmüne katılmadı.
++
++Betik tek seferlik yazıldı ve çıktısı aşağıya birebir aktarıldı.
++
++## Sonuç
++
++| Yetenek | Üretim çağrı yeri (kanıt) | Hüküm |
++|---|---|---|
++| erasure coding | `column_is_correctly_encoded` ← `src/domain/storage_deal.rs:2189`; `verify_object_encoding` ← `src/rpc/server.rs:2284`; `encode_object` ← `src/storage/erasure.rs:735` | **BAĞLI** |
++| coding audit | `derive_coding_audit` ← `src/chain/chain_actor.rs:2799`, `:4009`; `verify_coding_audit` ← `src/chain/chain_actor.rs:4032` | **BAĞLI** (bakım taramasının içinde) |
++| repair trigger | `objects_below_own_repair_margin` ← `src/chain/chain_actor.rs:2684`, `fn run_storage_maintenance` (`:2639`) gövdesinde | **BAĞLI** |
++| shard placement | beş aday adda (`place_shards`, `shard_placement`, `placement_for`, `choose_shards`, `assign_shards`) tanım yok, çağrı yok | **YOK** |
++
++Kayıtla fark: kayıt dördünü birden "kodlanmış ama bağlanmamış" sayıyordu.
++Canlı dalda üçü bağlı, dördüncüsü ise bağlanacak bir şey olmadığı için yok —
++"kodlanmış ama bağlanmamış" ile "hiç yazılmamış" ayrımı, neyin eksik olduğu
++sorusunun cevabını değiştiriyor.
++
++## Bu turda çıkan yeni bulgu
++
++`reconstruct_object` (`src/storage/erasure.rs:780`) üretimde **hiçbir yerden
++çağrılmıyor**; tek çağrı yeri `src/tests/manifest_commitment_locks.rs:189`.
++
++Yani tablo şöyle okunmalı: kodlama, doğrulama ve denetim yolları üretimde
++yürüyor, **onarımın kendisini yapan yol (kayıp shard'ı yeniden kurma)
++üretime bağlı değil.** Tetik şimdi ateşleniyor (`run_storage_maintenance`
++banttaki nesneleri görüyor), ama bantta görünen nesne için yeniden kurma
++çağrısı yok. Bu, "repair trigger BAĞLI" hükmünü çürütmez — tetik gerçekten
++bağlı — ama "B.U.D. onarımı yapıyor" cümlesini taşımaz.
++
++Açık nokta olarak bırakıldı, kodlanmadı: hangi katmanın `reconstruct_object`'ı
++çağıracağı (bakım taraması mı, operatör mü, ayrı bir onarım kuyruğu mu)
++mimari bir karar ve direktifin stop-and-ask_user eşiğine giriyor.
++
++## Ölçülmeyenler
++
++- **Hiçbir şey derlenmedi.** Bu kum havuzunda `cargo`/`rustc` yok (önceki
++  turlarda da yoktu). Yukarıdaki hükümler çağrı yeri ölçümüdür; yeşil CI
++  değildir.
++- `xtask/gates` kapıları koşulmadı (Rust, derleyici gerektiriyor).
++  `repair_fires` kapısının ölçtüğü dört varlık iddiası bu turda metin olarak
++  doğrulanmadı, yalnızca onun aradığı sembolün gerçekten üretim yolunda
++  çağrıldığı ölçüldü.
++- "Bağlı" hükmü, çağrının *doğru* işi yaptığı anlamına gelmez; yalnızca
++  çağrının var olduğu anlamına gelir.
++
++## Neden bu tura bir kapı eklenmedi
++
++Bu bulgunun bir daha sürünmemesinin yolu onu kapıya bağlamaktır. Bu turda
++yapılmadı, gerekçesi kayda geçsin: kapı Rust (`xtask/gates`), bu havuzda
++derleyici yok, ve çalıştırılamayan bir kapı ölçülmemiş bir iddiadır —
++deponun kendi kuralı bunu yasaklıyor. Kapı, derleyicinin olduğu bir turda
++yazılmalı ve koşularak kanıtlanmalı. O zamana kadar bu dosya ölçümün tek
++kanıtıdır ve `usl@f455ba4` SHA'sına bağlıdır.
++
++## Erişim notu
++
++Bu bot yalnızca `ayazkussan/budlum`'a yazabiliyor; `ayazkussan/workspace`
++403. Bu yüzden dosya workspace'e patch olarak gidiyor
++(`repo-workspace/patches/0040-*`), dağıtım kullanıcının.
+-- 
+2.39.5
+
