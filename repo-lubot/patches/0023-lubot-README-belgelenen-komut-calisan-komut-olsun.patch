@@ -1,0 +1,45 @@
+From 510a5b4a8d48632cc2c4707f8486855c81b78c59 Mon Sep 17 00:00:00 2001
+From: Lubo's Ruler <ayazkussann@gmail.com>
+Date: Fri, 11 Sep 2026 06:41:37 +0000
+Subject: [PATCH 23/23] lubot README: belgelenen komut, calisan komut olsun
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+README satiri 129 su komutu ogretiyordu:
+
+    gates/check.py --system-prompt-is-true
+
+Olculen: `unknown gate: --system-prompt-is-true`, cikis kodu 2. main()
+argv[0]'i GATES sozlugunde ariyor; `--all` ve `--list` tireli, kapı adi
+tiresiz. Yani belge, var olmayan bir komutu bir kapiyi tarif ederken
+ornek gosteriyordu.
+
+Dogrulanan karsilastirma:
+    python3 gates/check.py --system-prompt-is-true  -> exit 2, unknown gate
+    python3 gates/check.py system-prompt-is-true    -> exit 0, OK
+
+Tercih edilen duzeltme araci degil belge: `--<kapi>` formunu kabul etmek
+ileride `--self-test` ile ayrim sorunu yaratir, oysa kullanim belgesi zaten
+`python3 gates/check.py <gate> [--self-test]` diyor. Belge araca uydu.
+Bu satir disinda baska `--<kapi>` kullanimi yok (repo geneli tarandi).
+---
+ README.md | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/README.md b/README.md
+index c159f18..6c6d763 100644
+--- a/README.md
++++ b/README.md
+@@ -126,7 +126,7 @@ low-ceiling run cannot be asked for a long answer.
+ 
+ `lubot prompt` prints the Budlum-specific system prompt. It goes through the
+ same schema validator every answer goes through, and
+-`gates/check.py --system-prompt-is-true` refuses a prompt that states a fact
++`gates/check.py system-prompt-is-true` refuses a prompt that states a fact
+ nothing here measured - the four ceilings, the eight RPC names, the effort
+ range and the consumption threshold are the load-bearing numbers.
+ 
+-- 
+2.39.5
+

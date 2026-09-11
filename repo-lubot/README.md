@@ -12,7 +12,7 @@ git -C <lubot-clone> checkout -b lubot-series origin/main
 git -C <lubot-clone> am -3 --whitespace=fix patches/*.patch
 ```
 
-Verified, not asserted: a clean clone of `main` @ `37d32c9` takes all 21 files
+Verified, not asserted: a clean clone of `main` @ `37d32c9` takes all 23 files
 with strict `git am -3` - no `--reject`, no fallback - and the resulting tree
 has `Cargo.toml` members equal to the 20 directories under `crates/`, and
 `docs/CRATES.md` with one row per crate the series adds (12).
@@ -95,6 +95,44 @@ fails with its own message, since a gate that cannot read its baseline is a gate
 that always passes. `--list` reports 39 gates and README plus
 `training/ratchet.json` moved to 39 with it, so the ratchet describes the tree.
 
+## Patch 0022: a missing tool is a verdict, not a run that dies
+
+`gates/check.py --all` stopped at the sixth gate with `FileNotFoundError: 'cargo'`
+escaping the handler in `main`: fourteen of the gates shell out, and the first one
+that could not find its binary took the process down with it, so the other
+thirty-four were never heard from. This series' own README reported that crash
+rather than fixing it, on the grounds that "a gate runner that fails *softly* when
+its tool is missing is a decision for the repo owner." That reasoning is recorded
+here rather than dropped, because 0022 reverses it and a reversal nobody can see
+is indistinguishable from not having thought about it.
+
+The objection was to failing *softly*. 0022 does the opposite: every external call
+now goes through `run_tool`, whose `FileNotFoundError` becomes `ToolUnavailable`
+naming the missing binary, and `ToolUnavailable` subclasses `SystemExit` so it is
+counted as a failure and sets the exit code. A gate that cannot be measured does
+not pass; it says so, and the run finishes. The runner is stricter after 0022 than
+before it, not weaker.
+
+Measured here (no cargo in this sandbox), on a clean clone with all 23 applied:
+
+| | before | after |
+|---|---|---|
+| gates that get a verdict | 5 of 39 (a traceback, then nothing) | 40 of 40 |
+| reported outcome | `FileNotFoundError`, unhandled | 26 OK / 14 NO-TOOL / 0 real FAIL |
+| stderr | a Python traceback | empty |
+| exit code | 1 | 1 |
+
+The 14 `NO-TOOL` lines all name the same absent binary. They are not passes, and
+they are not failures of the code either - they are the runner stating what this
+sandbox cannot measure instead of staying quiet about it. A CI machine with cargo
+never produces one.
+
+The gate that guards the fix, `runner-reports-missing-tool`, checks the funnel in
+behaviour as well as in text: it calls `run_tool` on a binary that does not exist
+and requires `ToolUnavailable` back. It also requires the self-test to run inside
+`main`'s guard - leaving it outside was a hole in the first version of this patch,
+found by re-running the suite and watching gate nineteen die the same way.
+
 ## How this directory is regenerated
 
 `tools/rebuild_series.py` is the tool that produced patches 0001-0018: it replays
@@ -137,3 +175,5 @@ number and the tree it describes first part company.
 | `0019` | lubot README+ratchet: 327 test, uygulanmis agactan sayildi | 1 files, +1 |
 | `0020` | envanter: serinin 12 crate'i var, tablo 10 sayiyordu | 1 files, +4 |
 | `0021` | lubot kapi: ulasilmayan pub fn ratchet'i (39 kapi, canary'li) | 4 files, +197 |
+| `0022` | lubot kapi: eksik arac bir hukumdur, kirilan kosu degil (40 kapi, canary'li) | 3 files, +129 |
+| `0023` | lubot README: belgelenen komut, calisan komut olsun | 1 files, +1 |
