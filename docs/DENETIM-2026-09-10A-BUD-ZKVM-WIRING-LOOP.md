@@ -979,9 +979,10 @@ calibrating away. Two facts explain it:
   unreferenced by any file in the tree.
 
 `typos` 1.48.0 on a worktree of `origin/main` reports exactly 6 findings, every one
-of them inside that file (`tha`, `ser` x2, `Objec`, `flate` x2) - the same six words
+of them inside that file (a dropped-letter "that", two hits of serde's module name
+`ser`, a truncated "Object", two hits of the `flate2` stem) - the same six words
 run 51 showed once the patch mirrors I authored were excluded. So this branch's
-contribution is fixed (the `sentinal` x2 in the exported commit messages, now out of
+contribution is fixed (the two misspellings of "sentinel" in the exported commit messages, out of
 scope for the gate because they are generated text re-verified by `git am`, not
 hand-edited here), and the remaining red belongs to `main`: it needs `git rm`, not a
 whitelist entry, and not from this PR.
@@ -1002,7 +1003,7 @@ back to `88970e3` with 43 paths left dirty on disk. Recovery was
 → `git reset --hard FETCH_HEAD`. The lesson is recorded where it belongs: only
 pushed state is durable, and anything in `/tmp` is scratch. The lubot series was
 re-derived from the mirror in this repo, which is exactly why the mirror has to
-be appliable rather than merely present.
+be applicable rather than merely present.
 
 It was not. The mirror documented its base as branch `olcum-disiplini` @ `12bc9ac`,
 and that branch no longer exists on the fork: `main` @ `37d32c9` is the only ref.
@@ -1811,7 +1812,7 @@ since the field itself landed - a view that omits a root the consensus hash comm
 truth, so both roots are surfaced and the staleness is named in the comment.
 
 The presentation read path landed as three `bud_identity*` RPC methods on the actor-read pattern,
-with one deliberate asymmetry: an unparseable request is a call error, a refusal from the engine
+with one deliberate asymmetry: an ill-formed request is a call error, a refusal from the engine
 is an answer (`{"valid":false,"reason":...}`). A service acts on answers; it cannot act on
 "your request was malformed" and "the wallet lied" being the same status. Liveness and validity
 are answered at the epoch the read happened on - stamped by the actor - because a "is this live"

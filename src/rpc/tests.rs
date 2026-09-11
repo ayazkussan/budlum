@@ -238,10 +238,14 @@ mod rpc_tests {
             "the engine's own WrongDocument words, verbatim: {repurposed}"
         );
 
-        let unparseable = server
-            .identity_verify_presentation(receipt.clone(), "not-an-address".to_string(), filled.clone())
+        let malformed_request = server
+            .identity_verify_presentation(
+                receipt.clone(),
+                "not-an-address".to_string(),
+                filled.clone(),
+            )
             .await;
-        assert_eq!(unparseable.unwrap_err().code(), -32602);
+        assert_eq!(malformed_request.unwrap_err().code(), -32602);
 
         // The revocation door: the SAME receipt against a registry that has
         // revoked in the meantime must turn yesterday's acceptance into

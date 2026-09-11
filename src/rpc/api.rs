@@ -1110,7 +1110,7 @@ pub trait BudlumApi {
     /// Re-verify a wallet's presentation receipt against the registry as it
     /// stands now: the receiving service's door, where a revocation turns
     /// yesterday's accepted document into today's refusal. `valid:false` is
-    /// an answer, not a call error - only an unparseable request errors.
+    /// an answer, not a call error - only an ill-formed request errors.
     #[method(name = "bud_identityVerifyPresentation")]
     async fn identity_verify_presentation(
         &self,
