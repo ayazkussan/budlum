@@ -850,6 +850,78 @@ pub fn authorize_recovery(
     registry.guardian_recovery(subject, new_key, &guardians, epoch)
 }
 
+/// WIRING: the executor's single `TransactionType::Identity` arm (proto
+/// slice) delegates here; it is exercised at full depth by the tests beside
+/// it, so the arm will add no untested semantics.
+///
+/// The whole identity transaction, executed against the account state's
+/// registry - the body the executor's single future arm delegates to, and
+/// testable today without a wire format. The sender rules are here because
+/// they are identity semantics, not plumbing: `from` must BE the subject
+/// being registered, the issuer revoking, or the DID rotating its own key;
+/// naming somebody else in the payload and hoping for a check is the shape
+/// `BudlumxyzAttestApp` refused for the same reason, in this same tree.
+///
+/// The domain this runs on is passed in, not assumed: the registry's PoA
+/// gate still decides, so an executor wired to the wrong domain fails at
+/// the door the rules live behind, not in a comment claiming the wiring.
+///
+/// # Errors
+///
+/// A `&'static str` for the three sender refusals (fixed words a test can
+/// pin), anything else delegates to the registry doors verbatim.
+pub fn execute_identity_tx(
+    registry: &mut IdentityRegistry,
+    from: &Address,
+    tx: IdentityTx,
+    domain: &ConsensusKind,
+    epoch: u64,
+    chain_id: u64,
+) -> Result<(), IdentityError> {
+    match tx {
+        IdentityTx::Register { record } => {
+            if &record.subject != from {
+                return Err(IdentityError::BadApproval(format!(
+                    "register: sender {} is not the subject {}",
+                    did_of(from),
+                    did_of(&record.subject)
+                )));
+            }
+            registry.apply(domain, IdentityOp::Register { record }, epoch)
+        }
+        IdentityTx::Issue { credential } => {
+            if &credential.issuer != from {
+                return Err(IdentityError::BadApproval(format!(
+                    "issue: sender {} is not the issuer {}",
+                    did_of(from),
+                    did_of(&credential.issuer)
+                )));
+            }
+            registry.apply(domain, IdentityOp::Issue { credential }, epoch)
+        }
+        IdentityTx::Revoke { credential } => {
+            if &credential.issuer != from {
+                return Err(IdentityError::BadApproval(format!(
+                    "revoke: sender {} is not the issuer {}",
+                    did_of(from),
+                    did_of(&credential.issuer)
+                )));
+            }
+            registry.apply(domain, IdentityOp::Revoke { credential }, epoch)
+        }
+        IdentityTx::Recover { subject, new_key, approvals } => {
+            if &subject != from {
+                return Err(IdentityError::BadApproval(format!(
+                    "recover: sender {} is not the rotating DID {}",
+                    did_of(from),
+                    did_of(&subject)
+                )));
+            }
+            authorize_recovery(registry, subject, new_key, &approvals, epoch, chain_id)
+        }
+    }
+}
+
 /// The mutations the PoA gate wraps.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum IdentityOp {
@@ -1339,6 +1411,103 @@ mod tests {
 
     fn subject_record_with_guardians() -> IdentityRecord {
         IdentityRecord::new(addr(1), one_method(), vec![addr(2), addr(3)], 2).unwrap()
+    }
+
+    #[test]
+    fn the_tx_body_binds_every_operation_to_its_sender() {
+        let mut registry = IdentityRegistry::new();
+        let other = addr(5);
+        // Register a record whose subject is addr(1) - but sent by addr(5).
+        let record = subject_record();
+        let err = execute_identity_tx(
+            &mut registry,
+            &other,
+            IdentityTx::Register { record: record.clone() },
+            &ConsensusKind::PoA,
+            100,
+            1,
+        )
+        .unwrap_err();
+        let msg = err.to_string();
+        assert!(msg.contains("register: sender") && msg.contains(&did_of(&other)), "{msg}");
+        // Same tx, right sender: through to the registry.
+        execute_identity_tx(
+            &mut registry,
+            &record.subject,
+            IdentityTx::Register { record: record.clone() },
+            &ConsensusKind::PoA,
+            100,
+            1,
+        )
+        .unwrap();
+        execute_identity_tx(
+            &mut registry,
+            &record.subject,
+            IdentityTx::Register { record },
+            &ConsensusKind::PoA,
+            100,
+            1,
+        )
+        .unwrap_err(); // already exists - the registry's answer survives the sender rule
+        // Issue by a non-issuer refuses; by the issuer passes.
+        let (credential, _) = credential();
+        let err = execute_identity_tx(
+            &mut registry,
+            &other,
+            IdentityTx::Issue { credential: credential.clone() },
+            &ConsensusKind::PoA,
+            100,
+            1,
+        )
+        .unwrap_err();
+        assert!(err.to_string().contains("issue: sender"), "{err}");
+        registry
+            .apply(&ConsensusKind::PoA, IdentityOp::Register { record: issuer_record() }, 100)
+            .unwrap();
+        execute_identity_tx(
+            &mut registry,
+            &credential.issuer,
+            IdentityTx::Issue { credential: credential.clone() },
+            &ConsensusKind::PoA,
+            100,
+            1,
+        )
+        .unwrap();
+        // A wrong domain still refuses after the sender rule passes: the
+        // gate is not decoration the tx body can route around.
+        assert!(matches!(
+            execute_identity_tx(
+                &mut registry,
+                &credential.issuer,
+                IdentityTx::Revoke { credential: credential.clone() },
+                &ConsensusKind::PoS,
+                100,
+                1,
+            ),
+            Err(IdentityError::NotPoaDomain { .. })
+        ));
+        execute_identity_tx(
+            &mut registry,
+            &credential.issuer,
+            IdentityTx::Revoke { credential },
+            &ConsensusKind::PoA,
+            150,
+            1,
+        )
+        .unwrap();
+        // Recover with junk approvals: the crypto door answers first, and
+        // the rotation never half-happens.
+        let junk = IdentityTx::Recover {
+            subject: addr(1),
+            new_key: [9; 32],
+            approvals: vec![GuardianApproval { public_key: vec![0u8; 4], signature: vec![] }],
+        };
+        assert!(matches!(
+            execute_identity_tx(&mut registry, &addr(1), junk, &ConsensusKind::PoA, 200, 1),
+            Err(IdentityError::BadApproval(_))
+        ));
+        assert!(registry.record(&addr(1)).unwrap().live_method(&[1; 32], 200).is_some(),
+            "the original key must still be live: a refused rotation changed nothing");
     }
 
     #[test]

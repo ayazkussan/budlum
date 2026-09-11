@@ -42,7 +42,7 @@ pub use identity::{
     IdentityRegistry, MethodKind, VerificationMethod, CredentialCommitment,
     DisclosureProof, FieldCommitment, credential_id, disclosure_proof, merkle_root,
     verify_disclosure, authorize_recovery, credential_issue_digest, credential_revoke_digest,
-    recovery_digest, GuardianApproval, IdentityTx, DID_METHOD_NAME,
+    recovery_digest, execute_identity_tx, GuardianApproval, IdentityTx, DID_METHOD_NAME,
 };
 pub use invalid_vote::InvalidVoteTracker;
 pub use liveness::LivenessTracker;
