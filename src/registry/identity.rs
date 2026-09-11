@@ -636,6 +636,68 @@ pub fn credential_id(credential: &CredentialCommitment) -> [u8; 32] {
     ])
 }
 
+/// The digest a credential's issuance signature is made over. Exactly like
+/// the grant layer's `grant_issue_digest`: the signed material names the
+/// object it authenticates, so a signature cannot be moved between a
+/// different subject, a different root, a different chain, or a different
+/// time. The root inside is the credential's own recomputed root - the
+/// signer commits to "these fields, this order", not to a claimed hash.
+#[must_use]
+pub fn credential_issue_digest(
+    credential: &CredentialCommitment,
+    chain_id: u64,
+) -> [u8; 32] {
+    hash_fields_bytes(&[
+        b"bud-identity-issue-v1",
+        credential.issuer.as_bytes(),
+        credential.subject.as_bytes(),
+        credential.schema.as_bytes(),
+        &credential.root(),
+        &credential.issued_at.to_le_bytes(),
+        &credential.expires_at.unwrap_or(u64::MAX).to_le_bytes(),
+        &chain_id.to_le_bytes(),
+    ])
+}
+
+/// The digest a revocation is signed over. Names the credential id (which
+/// names the root, issuer and time: see [`credential_id`]) and the revoking
+/// issuer, so a revocation cannot be replayed against another credential or
+/// attributed to another issuer by accident.
+#[must_use]
+pub fn credential_revoke_digest(
+    credential: &CredentialCommitment,
+    issuer: &Address,
+    chain_id: u64,
+) -> [u8; 32] {
+    hash_fields_bytes(&[
+        b"bud-identity-revoke-v1",
+        &credential_id(credential),
+        issuer.as_bytes(),
+        &chain_id.to_le_bytes(),
+    ])
+}
+
+/// The digest a guardian's recovery approval is signed over. Carries the
+/// DID being rotated, the new key, the epoch it takes effect at (a quorum
+/// gathered at 20 must not be replayable at 21 against different methods),
+/// and the chain. The registry counts quorums ([`IdentityRegistry::guardian_recovery`]);
+/// the transaction door verifies this digest's signatures before calling in.
+#[must_use]
+pub fn recovery_digest(
+    subject: &Address,
+    new_key: &[u8; 32],
+    epoch: u64,
+    chain_id: u64,
+) -> [u8; 32] {
+    hash_fields_bytes(&[
+        b"bud-identity-recovery-v1",
+        subject.as_bytes(),
+        new_key,
+        &epoch.to_le_bytes(),
+        &chain_id.to_le_bytes(),
+    ])
+}
+
 /// The mutations the PoA gate wraps.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum IdentityOp {
@@ -1017,6 +1079,35 @@ mod tests {
             "the old key is dead from the moment recovery lands"
         );
         assert!(record.live_method(&[9; 32], 20).is_some());
+    }
+
+    #[test]
+    fn digests_bind_everything_a_signature_must_not_be_moved_across() {
+        let (credential, _) = credential();
+        let chain = 42u64;
+        let digest = credential_issue_digest(&credential, chain);
+        // Another chain: another digest. A signature is never a portable
+        // endorsement of "this credential object" across networks.
+        assert_ne!(digest, credential_issue_digest(&credential, chain + 1));
+        // One edited field moves the root, and the root is inside: the
+        // signature does not survive the edit.
+        let mut edited = credential.clone();
+        edited.fields[0].commitment = [7; 32];
+        assert_ne!(digest, credential_issue_digest(&edited, chain));
+        // Same object, same chain: same digest (a re-signation is free, a
+        // re-purposing is not).
+        assert_eq!(digest, credential_issue_digest(&credential, chain));
+        let revoke = credential_revoke_digest(&credential, &credential.issuer, chain);
+        assert_ne!(revoke, credential_revoke_digest(&credential, &addr(8), chain));
+        assert_ne!(revoke, credential_revoke_digest(&edited, &credential.issuer, chain));
+        let rec = recovery_digest(&addr(1), &[9; 32], 20, chain);
+        assert_ne!(rec, recovery_digest(&addr(1), &[9; 32], 21, chain));
+        assert_ne!(rec, recovery_digest(&addr(2), &[9; 32], 20, chain));
+        assert_ne!(rec, credential_issue_digest(&credential, chain));
+        // Domain tags are part of the hash input; two rules must not be
+        // able to collide on crafted material the way a bare concatenation
+        // can.
+        assert_ne!(rec, credential_revoke_digest(&credential, &addr(1), chain));
     }
 
     #[test]
