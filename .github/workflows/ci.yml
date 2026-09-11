@@ -38,22 +38,6 @@ jobs:
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
           shared-key: budlum-core
-      - name: Clippy
-        run: cargo clippy --all-targets -- -D warnings
-      - name: Clippy pedantic/nursery ratchet (izleme modu)
-        # Warning visibility + ratchet against count growth (baseline 191,
-        # evidence .github/clippy-extra-baseline.txt). Driving to zero is gradual and deliberate.
-        run: |
-          set -euo pipefail
-          cargo run --release --manifest-path xtask/gates/Cargo.toml -- clippy-extra --self-test
-          cargo clippy --all-targets --message-format=json -- -W clippy::pedantic -W clippy::nursery > /tmp/clippy-extra.json 2>/dev/null || true
-          # Diagnostic only: the ratchet reports a count, and the JSON it counts
-          # lives in the runner's /tmp, so a trip leaves nothing to inspect.
-          # This prints the per-lint tally and every first-party file:line.
-          # It writes nothing and runs before the gate, so it cannot change the
-          # verdict.
-          python3 ./ops/scripts/clippy-extra-report.py /tmp/clippy-extra.json
-          cargo run --release --manifest-path xtask/gates/Cargo.toml -- clippy-extra /tmp/clippy-extra.json
       - name: "Feature matrix: pq-ml-dsa solo"
         run: |
           set -euo pipefail
@@ -141,6 +125,22 @@ jobs:
             # one point, with the job's red mark saying nothing about whether the code
             # builds. A style check is worth failing on, not worth hiding a compile error
             # behind; do not move these three steps up because they are cheap.
+      - name: Clippy
+        run: cargo clippy --all-targets -- -D warnings
+      - name: Clippy pedantic/nursery ratchet (izleme modu)
+        # Warning visibility + ratchet against count growth (baseline 191,
+        # evidence .github/clippy-extra-baseline.txt). Driving to zero is gradual and deliberate.
+        run: |
+          set -euo pipefail
+          cargo run --release --manifest-path xtask/gates/Cargo.toml -- clippy-extra --self-test
+          cargo clippy --all-targets --message-format=json -- -W clippy::pedantic -W clippy::nursery > /tmp/clippy-extra.json 2>/dev/null || true
+          # Diagnostic only: the ratchet reports a count, and the JSON it counts
+          # lives in the runner's /tmp, so a trip leaves nothing to inspect.
+          # This prints the per-lint tally and every first-party file:line.
+          # It writes nothing and runs before the gate, so it cannot change the
+          # verdict.
+          python3 ./ops/scripts/clippy-extra-report.py /tmp/clippy-extra.json
+          cargo run --release --manifest-path xtask/gates/Cargo.toml -- clippy-extra /tmp/clippy-extra.json
       - name: Format
         run: cargo fmt --all -- --check
       # Same reason as the build surface in rust.yml: `cargo fmt --check` prints a

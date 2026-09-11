@@ -312,7 +312,9 @@ be run - were never run once.
 
 **Predicted CI outcome, written before the result:** the gate runs clean.
 Replicating its filter outside Rust: 855 files scanned (vacuity floor is 50),
-**0 findings**; `system_prompts_leaks` has no occurrence anywhere in the tree.
+**0 findings**; the third name in the gate's list has no occurrence of its own
+anywhere in the tree - which is what the scan above says, and, as §27 records,
+what the scan then contradicted.
 If CI says otherwise, the gate is wrong and this section gets a follow-up
 commit rather than an edit.
 
@@ -1249,3 +1251,68 @@ report next is the README's test count against the count the run measures; when 
 annotation names both numbers, the badge moves to the measured one. Until then nothing
 in this file claims the suite's size, and `cargo` remains unavailable here, which is
 why each of these statements is about a step that ran, not about code that was built.
+
+## 27. What the unmasked job reported: four findings, one of them mine
+
+Run 60 (`44302dc`) is the first gates run where the steps after the red ones actually
+executed - 48 steps ran, 3 failed, nothing was skipped. That is the restructure paying
+for itself, and it changed the queue more than any of the fixes in §26 were written to.
+
+**The gate binary compiles, and the crate is green in the environment it lives in.**
+`Build the gate binary` success; `Dead public API canary` and `Dead public API did not
+grow` both success, so the 219-entry baseline is being compared against a real scan in
+CI for the first time; `B.U.D. core builds and its tests pass` success.
+
+**Finding 1 - the monitoring clippy step found debt in the file written to reduce debt.**
+`Clippy (gates workspace, izleme modu)` was reported as `success` by the job - it is
+`continue-on-error` - while its surface annotated `6 warning/error headline line(s)`,
+and the messages were `error:` lines: three *denied* lints in `dead_pub_api.rs`, at
+184 and 207 (`case-sensitive file extension comparison`) and at 282 (`variables can be
+used directly in the format! string`). `xtask/gates/Cargo.toml` sets clippy `deny` for
+those groups, so under `--all-targets` a lint is a compile error and the test target of
+the gate binary does not build at all. Fixed by taking the extension test onto
+`Path::extension() == Some(OsStr::new("rs"))` - a helper, `has_rs_extension`, so both
+sites read the same rule and a future third one cannot drift - and by inlining the
+format argument. No `#[allow]`, and the case-sensitivity is kept exactly as it was,
+commented, because accepting `.RS` would be a second undocumented change to what the
+audit counts.
+
+**Finding 2 - the badge gate refused to compare, and that is the right answer.**
+`FAIL [badges-are-current]: test log records failures; refusing to compare badge against
+a red run`. So the plan in §26 - read the measured count off the Tally and set the badge
+to it - cannot execute: `cargo test --lib` on this branch has failing tests, and a badge
+pointing at a number from a red run is exactly the kind of number the gate exists to
+refuse. 2896 stays. The work item is the failing suite, not the badge.
+
+**Finding 3 - a second red gate, and one of the 12 places is this document.**
+`FAIL [no-upstream-brands]: 12 place(s) name a product that was read for research`. The
+headline is all a `run:` step yields (the file list stays in the log, unreadable from
+here), so the places were re-derived: a python replica of the gate's own filter - same
+three names, same skip lists, same exemption for the attribution stems and the two audit
+mirror directories - over this branch's tree scans **858 files and finds exactly 1**
+place: a sentence in §9 of this report that asserts the corpus name "has no occurrence
+anywhere in the tree", which the sentence itself falsifies. Reworded, and the earlier
+prediction is left standing above it, because a prediction that turns out wrong is the
+record; the correction belongs next to it. The other 11 places are not in this branch:
+`pull_request` runs against the merge commit with `main`, so they are main's content, and
+they go on the queue with the rest of the pre-existing reds rather than being hushed by
+editing the exemption list.
+
+**Finding 4 - Budlum Core is masked by a different step, so Format-last was not enough.**
+Its job now reads: features, then `Test` - but `Clippy` sits ahead of both and fails
+(`-D warnings`), so `Test`, `cargo doc` and `Format` were skipped again. The always-runs
+`Format diff surface` did its part: 17 `Diff in` hunks annotated, all in root
+`src/chain/` files this session never touched. The lesson is general and now written down
+in `docs/CONTRIBUTING.md`: *the rule is not about `Format`, it is about any red analysis
+step being ahead of verdicts*. `Clippy` and its ratchet were moved after `Test` and
+`cargo doc` - the same one-step move as §25, verified the same way (the move is pure: the
+step dicts are unchanged as a multiset, every other job is byte-identical, YAML parses,
+26 jobs), and the next run will report the suite verdict with `Clippy` and `Format` still
+red where they belong.
+
+**Not verified, still:** `Repo Lint`'s annotation says `actionlint did not run: No such
+file or directory`, so none of the new `if: always() && steps.build.outcome == 'success'`
+expressions have been checked by a linter - only by the runner agreeing with them, which
+is weaker than it sounds: a typo in a step id fails open, silently skipping every gate.
+That is the one failure mode the restructure introduced, and it is why `Build the gate
+binary` keeps its own step visible as the first thing after the toolchain steps.

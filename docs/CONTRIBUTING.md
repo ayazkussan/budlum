@@ -72,9 +72,15 @@ nix develop --command cargo test
 Use the commands CI uses, not the shorter forms: `cargo fmt --all` walks every
 workspace member while a bare `cargo fmt` does not, and a failing check skips every
 step after it in that job - so one missed file silences the whole job's verdicts.
-That is why `Format` is the *last* step in the `budlum`, `budzero` and `budscan`
-jobs: a style failure must not stand between a reader and the answer to "does it
-build, do the tests pass". Keep it that way.
+
+The rule is not about `Format`, it is about *order*: a red step must never stand
+between a reader and another step's answer. Measured on 2026-09-11 - moving `Format`
+last made `budlum`'s `Test` step run and report, which is the point of the job, and
+the same job then showed the rule is not finished once: `Clippy` also fails, also
+sits ahead of `Test`, and re-masked it. So in the `budlum` job the lint steps come
+after the build/test/doc verdicts, and `Format` after them; in `budzero` and `budscan`
+`Format` is still last. Keep both orders when editing any job: verdicts first, then
+analysis, then style, whatever is red today.
 
 ```bash
 cargo fmt --all -- --check                      # CI: Format
@@ -97,6 +103,15 @@ because `cargo run --manifest-path ...` on a step named "so-and-so canary" turns
 build failure into a supposed gate finding: measured on 2026-09-10, two
 `error[E0308]` in one gate file red six jobs' canaries at once, while a fully green
 root clippy step in the same job proved nothing about it.
+
+The `gates` job does not stop at ordering: every gate step carries
+`if: always() && steps.build.outcome == 'success'` and pipes its output into a shared
+log, and a final `Tally` step greps that log and annotates one line per `FAIL [gate]`
+headline. So one red gate no longer hides the other thirty-five, and a job that is red
+with no Tally entry means the failure was a toolchain step, not a gate. The
+`if:` expressions cannot be checked locally - only the runner and `Repo Lint`'s
+actionlint judge them, and actionlint is currently not installed on the runner - so a
+step id there is a real hazard: a typo skips every gate and looks green.
 
 Three rules that fall out of that, and are enforced by the job rather than by taste:
 
