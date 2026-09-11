@@ -12,7 +12,7 @@ git -C <lubot-clone> checkout -b lubot-series origin/main
 git -C <lubot-clone> am -3 --whitespace=fix patches/*.patch
 ```
 
-Verified, not asserted: a clean clone of `main` @ `37d32c9` takes all 22 files
+Verified, not asserted: a clean clone of `main` @ `37d32c9` takes all 23 files
 with strict `git am -3` - no `--reject`, no fallback - and the resulting tree
 has `Cargo.toml` members equal to the 20 directories under `crates/`, and
 `docs/CRATES.md` with one row per crate the series adds (12).
@@ -61,9 +61,10 @@ unmeasured. The test-count line is the one claim that was rebuilt rather than
 carried: patch 0019 sets it to 327, which is `#[test]` attributes in
 `crates/**/*.rs` - 178 in the eight base crates plus 149 in the twelve this
 series adds, with 0 `#[ignore]` and no doc examples, so cargo has nothing else
-to count. Patch 0022 moved it to 325 and the move is in the patch itself: the two
-`tools/chain` ceilings tests left with the callerless flow they covered, and the
-applied tree was recounted (176 base + 149 series), not decremented by hand. The base README said 191 while the base tree measures 178, a
+to count. Patch 0022 moved it to 325 - the two `tools/chain` ceilings tests left with
+the callerless flow they covered - and patch 0023 to 328, the three new
+`cli/activation` tests arriving with the wiring. Both moves were recounts of the
+applied tree (176 base + 152 series after 0023), never decrements by hand. The base README said 191 while the base tree measures 178, a
 13-test overstatement that predates this series; 0019 replaces it with a count
 derived from the applied tree instead of inflating the old number. `38 gates`
 was checked by counting `def gate_`; `0 pedantic` and `793 corpus records` were
@@ -84,15 +85,16 @@ row. Its acceptance test is `rows == crate dirs for the crates the series adds`
 cut, the declaring file's own declaration lines subtracted), with a
 `/// Convenience:` / `WIRING:` / `exposed for` exemption within 14 lines above.
 It is a ratchet: `gates/dead-pub-api.baseline` holds the unreached entries measured
-on the applied tree - 53 when 0021 shipped, 51 after 0022 - growth fails, and a
+on the applied tree - 53 when 0021 shipped, 51 after 0022's deletion, 41 after 0023's
+wiring - growth fails, and a
 baseline line that stopped being dead fails too, so tightening is the only direction
 that moves; 0022 is that rule tripping for real: the deletions made two baseline
 lines stale, and the patch that deleted the functions had to delete their entries.
 
 Unlike the compiled parts of this series, the gate was executed rather than
 inspected, because it is std-only Python and python3 exists here: `--self-test`
-OK, `public-api-is-reached` OK at 53/53 and again at 51/51 after 0022, and both
-failure directions reproduced
+OK, `public-api-is-reached` OK at 53/53, 51/51 after 0022 and 41/41 after 0023, and
+both failure directions reproduced
 on a scratch copy - a freshly injected unreached `pub fn` failed with
 "1 public function(s) nothing in the tree calls", and deleting a live baseline
 line failed with "1 baseline entry no longer dead". A missing or unsorted baseline
