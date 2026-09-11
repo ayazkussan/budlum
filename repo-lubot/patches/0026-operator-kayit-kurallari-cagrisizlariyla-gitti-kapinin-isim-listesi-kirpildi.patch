@@ -1,0 +1,330 @@
+From 8d50940150101c32285f111edf70a0bc68beea08 Mon Sep 17 00:00:00 2001
+From: ayazkussan <ayazkussan@users.noreply.github.com>
+Date: Fri, 11 Sep 2026 08:28:14 +0000
+Subject: [PATCH] lubot: operator: kayit kurallari cagrisizlariyla gitti -
+ kapinin isim listesi kirpildi
+
+Three of operator.rs's four rules - compute bond, one model_hash across
+active operators, the checkpoint transition window - were the purest case
+the whole shrink loop has seen: a correct, tested, documented library for
+records this tree never holds. No registration file, no operator set, no
+window producer exists anywhere in the workspace; the accessors were
+asserted only by their own fixtures (stripped by the gate's test rule), and
+`old_active` was literally an alias calling `both_active`.
+
+The mask this time was not a test or a doc line - it was a gate.
+`operator-sync-rules` asserted the NAMES into existence: a shrink patch that
+deleted them would fail the suite for the crime of having no caller while
+keeping the rule, which is the reverse of what a ratchet is for. A gate
+checking "does the string appear in a file" is the third masker this report
+named in section 28, applied by us to ourselves; the fix is the same one used
+for corpus claims - assert the behaviour that has a door, and let the rest
+stay honestly absent. The gate now pins the effort-tier rule (wired: the CLI
+checks tags at three doors, the chain client re-verifies the hashed tier)
+and additionally refuses the deleted names if they return without callers -
+the direction of the ratchet is preserved: growing back is only possible in
+a patch that carries a caller, and the gate's docstring says so.
+
+The README settled the discretion question for us: line 11 of the same file
+assigns "operator registration, the compute bond ... the chain's AI
+inference layer, ... in the node" - the crate's own scope section says these
+rules are not Lubot's to run, while the tools table row advertised them as
+if they were. Deleting the implementation makes both sentences true; the
+table row now names only the effort ceiling, and its test count is the
+measured 41, not the 47 it had claimed before either change (the row was two
+tests stale when this patch started - recorded, because "recounted from the
+applied tree" also means admitting what the recount finds).
+
+Deleted: `compute_bond_ok`, `same_model_hash`, `OperatorRecord`,
+`CheckpointWindow` with its impl (`both_active`, `old_active`,
+`old_retired`), four tests, the gate's four name assertions (the effort
+half and its self-test stand untouched), and the four baseline lines in the
+same patch: 30 after this, from 34. Tree total: 328 tests by grep. The crate
+header now records which three rules went, why, and what would bring them
+back.
+
+Not compiled: no cargo (measured); floor is gates rc=0 on the applied tree
+(39/39 with the rewritten gate), read-through of every hunk, and a docs grep
+proving no surviving sentence promises a deleted name.
+---
+ README.md                    |   4 +-
+ crates/tools/src/operator.rs | 163 ++++-------------------------------
+ gates/check.py               |  22 +++--
+ gates/dead-pub-api.baseline  |   4 -
+ 4 files changed, 33 insertions(+), 160 deletions(-)
+
+diff --git a/README.md b/README.md
+index 87991be..40df413 100644
+--- a/README.md
++++ b/README.md
+@@ -24,7 +24,7 @@ nothing to check a generation against.
+ |---|---|---|
+ | permission before bytes; epoch-bounded training budgets (fail-closed) | `crates/grant` | 19 tests |
+ | three channels, digest-verified, no fourth; the Markdown reply schema; magic-byte file kind with route refusals before reading | `crates/read` | 28 tests |
+-| exact arithmetic instead of a guessed number; chain record client; operator sync rules (bond, one `model_hash`, ceiling-hashed effort tier, checkpoint window); scope refusals (generation, secret hunts); effort-bounded answer budget; deterministic command-risk shapes; the closed licence set for anything admitted to the corpus; the credential-shape scanner (closed list, exact lengths, a mention is never a leak) | `crates/tools` | 47 tests |
++| exact arithmetic instead of a guessed number; chain record client; effort tier as a hashed ceiling (bond, `model_hash` and window rules live in the node, not here); scope refusals (generation, secret hunts); effort-bounded answer budget; deterministic command-risk shapes; the closed licence set for anything admitted to the corpus; the credential-shape scanner (closed list, exact lengths, a mention is never a leak) | `crates/tools` | 41 tests |
+ | retrieval with line-accurate citations, masking on the write path; normalized BM25 with a coverage floor and one-edit tolerance; deterministic context compaction under a character budget | `crates/index` | 18 tests |
+ | the assembled reading loop, schema-validated exit; scope refusals; the finalized-output handoff (`ai-inference` tag) | `crates/answer` | 14 tests |
+ | rich-document reading: PDF text extraction, paragraph-aware chunking | `crates/doc` | 4 tests |
+@@ -33,7 +33,7 @@ nothing to check a generation against.
+ | the security review as an evidenced ledger (scan, validate, fix): every finding ends in a disposition, a fix closes only with the check that proves it plus the commit that is it, no waiver at the attestation floor without an attester, and a finding that changes on re-scan voids its stale closure | `crates/denetim` | 9 tests |
+ | the runnable binary: corpus load, `ask`, grant book, output audit, closed-loop handoff; `ceilings`; multi-question `batch`; the uninterrupted-work queue (resume, budget, per-job gate check, loud halt); measured baselines that may only rise (`ratchet`); repository `envanter`; restricted `it` (only the listed paths are committed and pushed); the four-step `olc` verification chain; `durum`; the manifest map `graf`; the credential scan `guvenlik`; the file-kind router `dosya`; the ask_user-shaped decision battery `soru` (list/get/cevapla/durum); content search `ara`, measured `indeks`, the ordered reading plan `mufredat`, effort comparison `karsilastir`; context compression `sikistir` (--path/--geri-getir: typed routing, pinned lines, reversible CCR store, measured ledger) and failure mining `ogren` (pattern grouping, two-tier promotion); the queue operator (`queue ls`, `queue iptal` - a cancelled job never runs); batch writes the same audit and closed-loop trace as `ask` | `crates/cli` | 37 tests |
+ 
+-332 tests, `clippy -D warnings` clean, `unwrap`/`expect` denied outside tests. 39 gates, each with its own self-test; the ratchet holds (332 tests, 39 gates, 0 pedantic warnings, 793 corpus records) - the count moved 328 to 334 when the settlement layer joined with its own six tests, and 334 to 332 when `olcek`'s callerless report surface was deleted together with the two tests that were its only assertions, measured on the applied tree, not retyped.
++328 tests, `clippy -D warnings` clean, `unwrap`/`expect` denied outside tests. 39 gates, each with its own self-test; the ratchet holds (328 tests, 39 gates, 0 pedantic warnings, 793 corpus records) - the count moved 328 to 334 when the settlement layer joined with its own six tests, 334 to 332 when `olcek`'s callerless report surface left with the two tests that were its only assertions, and 332 to 328 when operator's registry rules - bond, single-hash sync, the transition window - left with their four fixtures and the gate's name-list shrank to the one rule with a caller, measured on the applied tree, not retyped.
+ 
+ ## Permission is an admission decision
+ 
+diff --git a/crates/tools/src/operator.rs b/crates/tools/src/operator.rs
+index a9a695d..57d7993 100644
+--- a/crates/tools/src/operator.rs
++++ b/crates/tools/src/operator.rs
+@@ -1,54 +1,25 @@
+ #![forbid(unsafe_code)]
+-//! # operator sync - Aşama 7'nin Lubot tarafı
++//! # operator sync - Aşama 7'nin Lubot tarafı: tavan
+ //!
+-//! The report's operator-synchronisation rules, as checks Lubot can run
+-//! without being the chain:
++//! The report's operator-synchronisation rules split by who can check them.
++//! **Effort tier is a ceiling:** `0.5x`-`10.0x` tags are the operator's
++//! hardware ceiling and are hashed into the request's `effort` field, so a
++//! low-ceiling operator cannot accept a high-effort request and do the cheap
++//! work. [`effort_tag_ok`] accepts only canonical tags in the report's range
++//! and refuses anything else; the granularity between the bounds is the
++//! chain's, not invented here. [`answer_budget`] translates the ceiling into
++//! passages per answer - fixed and measured, not a hint to override.
+ //!
+-//! 1. **Compute bond.** An operator registers with a non-zero bond at or
+-//!    above the floor. The floor is a chain constant; Lubot takes it as a
+-//!    parameter and refuses a zero bond outright.
+-//! 2. **One `model_hash`.** All active operators run the same model hash. If
+-//!    they do not, `agreement_threshold` can never be satisfied.
+-//! 3. **Effort tier is a ceiling.** `0.5x`-`10.0x` tags are the operator's
+-//!    hardware ceiling and are hashed into the request's `effort` field, so
+-//!    a low-ceiling operator cannot accept a high-effort request and do the
+-//!    cheap work. [`effort_tag_ok`] accepts only canonical tags in the
+-//!    report's range and refuses anything else; the granularity between the
+-//!    bounds is the chain's, not invented here.
+-//! 4. **Checkpoint transition.** A new checkpoint publishes and both old and
+-//!    new `model_hash` stay active through a window; when the window closes
+-//!    the old record is retired. The "everyone switches instantly" assumption
+-//!    is not used.
+-
++//! The other three rules - non-zero compute bond above the floor, one
++//! `model_hash` across active operators, the checkpoint transition window -
++//! described records Lubot never holds. There is no registration file, no
++//! operator set, no window producer in this tree; README's own scope line
++//! assigns registration and bond to the chain's AI inference layer "in the
++//! node". They were deleted with their accessors rather than kept as a
++//! library for a caller that does not exist, and they return, callers in
++//! the same patch, if Lubot ever takes a side of the registry.
+ use lubot_read::sha256_hex;
+ 
+-/// The compute bond rule: non-zero, and at or above the floor.
+-#[must_use]
+-pub fn compute_bond_ok(bond: u64, floor: u64) -> bool {
+-    bond > 0 && bond >= floor
+-}
+-
+-/// One operator's registration record, as the sync rule sees it.
+-#[derive(Debug, Clone, PartialEq, Eq)]
+-pub struct OperatorRecord {
+-    pub model_hash: String,
+-    pub active: bool,
+-}
+-
+-/// True only when every active operator runs the same `model_hash`.
+-///
+-/// No active operators means no agreement is possible, so the answer is
+-/// `false` rather than a vacuous `true` (Aşama 11: a single-operator result
+-/// is not consumed either).
+-#[must_use]
+-pub fn same_model_hash(operators: &[OperatorRecord]) -> bool {
+-    let active: Vec<&OperatorRecord> = operators.iter().filter(|o| o.active).collect();
+-    let Some(first) = active.first() else {
+-        return false;
+-    };
+-    active.iter().all(|o| o.model_hash == first.model_hash)
+-}
+-
+ /// The header of an effort tag is `d.d x` in the report's range.
+ #[must_use]
+ pub fn effort_tag_ok(tag: &str) -> bool {
+@@ -75,33 +46,6 @@ pub fn effort_hash(tag: &str) -> Result<String, String> {
+     Ok(sha256_hex(tag.as_bytes()))
+ }
+ 
+-/// The checkpoint transition window (Aşama 7, madde 4).
+-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+-pub struct CheckpointWindow {
+-    pub window_start: u64,
+-    pub window_end: u64,
+-}
+-
+-impl CheckpointWindow {
+-    /// Within the window the old and the new hash are parallel-active.
+-    #[must_use]
+-    pub fn both_active(&self, now: u64) -> bool {
+-        now >= self.window_start && now < self.window_end
+-    }
+-
+-    /// After the window the old hash is retired (`active = false`).
+-    #[must_use]
+-    pub fn old_retired(&self, now: u64) -> bool {
+-        now >= self.window_end
+-    }
+-
+-    /// The active state of the old hash at `now`.
+-    #[must_use]
+-    pub fn old_active(&self, now: u64) -> bool {
+-        self.both_active(now)
+-    }
+-}
+-
+ /// The answer budget an effort ceiling admits: a `0.5x` machine gets a
+ /// short answer, a `10.0x` machine a long one. The tier is the operator's
+ /// hardware ceiling (Aşama 7), so the budget translates that ceiling into
+@@ -129,50 +73,6 @@ pub fn answer_budget(effort_tag: &str) -> Result<usize, String> {
+ mod tests {
+     use super::*;
+ 
+-    #[test]
+-    fn a_zero_bond_never_registers() {
+-        assert!(!compute_bond_ok(0, 1_000));
+-        assert!(compute_bond_ok(1_000, 1_000));
+-        assert!(compute_bond_ok(1_001, 1_000));
+-        assert!(!compute_bond_ok(999, 1_000));
+-    }
+-
+-    #[test]
+-    fn divergent_hashes_never_satisfy_sync() {
+-        let ops = vec![
+-            OperatorRecord {
+-                model_hash: "h1".to_string(),
+-                active: true,
+-            },
+-            OperatorRecord {
+-                model_hash: "h2".to_string(),
+-                active: true,
+-            },
+-        ];
+-        assert!(!same_model_hash(&ops));
+-        let aligned = vec![
+-            OperatorRecord {
+-                model_hash: "h1".to_string(),
+-                active: true,
+-            },
+-            OperatorRecord {
+-                model_hash: "h1".to_string(),
+-                active: true,
+-            },
+-        ];
+-        assert!(same_model_hash(&aligned));
+-        // One active operator trivially matches itself; the refusal to
+-        // consume a single-operator result is the threshold rule (Aşama 11),
+-        // not the sync rule.
+-        let single = vec![OperatorRecord {
+-            model_hash: "h1".to_string(),
+-            active: true,
+-        }];
+-        assert!(same_model_hash(&single));
+-        // No active operators: no agreement is possible, not a vacuous yes.
+-        assert!(!same_model_hash(&[]));
+-    }
+-
+     #[test]
+     fn effort_tags_are_bounded_and_hashed() {
+         assert!(effort_tag_ok("0.5x"));
+@@ -197,33 +97,4 @@ mod tests {
+         assert!(answer_budget("0.4x").unwrap_err().contains("outside"));
+     }
+ 
+-    #[test]
+-    fn the_transition_window_keeps_both_then_retires_old() {
+-        let window = CheckpointWindow {
+-            window_start: 100,
+-            window_end: 200,
+-        };
+-        assert!(!window.both_active(99));
+-        assert!(window.both_active(100));
+-        assert!(window.both_active(199));
+-        assert!(window.old_active(150));
+-        assert!(!window.both_active(200));
+-        assert!(window.old_retired(200));
+-        assert!(!window.old_active(200));
+-    }
+-
+-    #[test]
+-    fn retired_and_dormant_operators_do_not_count_toward_alignment() {
+-        let ops = vec![
+-            OperatorRecord {
+-                model_hash: "old".to_string(),
+-                active: false,
+-            },
+-            OperatorRecord {
+-                model_hash: "new".to_string(),
+-                active: true,
+-            },
+-        ];
+-        assert!(same_model_hash(&ops));
+-    }
+ }
+diff --git a/gates/check.py b/gates/check.py
+index babc7d2..66f4e8b 100644
+--- a/gates/check.py
++++ b/gates/check.py
+@@ -755,21 +755,27 @@ def selftest_cli_asks_and_renders_markdown() -> None:
+ # gate: operator sync rules (Aşama 7) stay in the tool crate
+ # --------------------------------------------------------------------------
+ def gate_operator_sync_rules() -> str:
+-    """The report's operator rules are checks Lubot can run: non-zero bond
+-    above the floor, one model_hash among active operators, effort tier
+-    hashed into the request within 0.5x-10.0x, and a checkpoint transition
+-    window with a real retirement moment."""
++    """The operator rule Lubot can actually run is the effort ceiling: it is
++    checked at every door the CLI has (answer budget, hashed request) and
++    verified again by the chain client. The bond, model_hash and window rules
++    left the crate with their callers - the gate asserted their names while
++    nothing in the tree could produce the records they read, which is the
++    exact mask this ratchet exists to catch; a name-only assertion would
++    preserve a library nobody links. If the registry lands, the rules return
++    in that patch and the gate re-grows its list."""
+     src = read("crates/tools/src/operator.rs")
+-    for word in ["compute_bond_ok", "same_model_hash", "effort_tag_ok",
+-                 "effort_hash", "CheckpointWindow", "both_active", "old_retired"]:
++    for word in ["effort_tag_ok", "effort_hash", "answer_budget"]:
+         if word not in src:
+-            raise SystemExit(f"operator rules lost `{word}`")
++            raise SystemExit(f"operator effort rules lost `{word}`")
++    for gone in ["compute_bond_ok", "same_model_hash", "CheckpointWindow"]:
++        if gone in src:
++            raise SystemExit(f"`{gone}` is back without a caller to check it")
+     if "cheap" in src and "0.4x" not in src:
+         raise SystemExit("the ceiling refusals have no fixture")
+     chain = read("crates/tools/src/chain.rs")
+     if "effort_hash does not match effort_tag" not in chain:
+         raise SystemExit("parse_request no longer verifies the hashed effort tier")
+-    return "bond, single hash, ceiling-hashed effort and the transition window are all checks"
++    return "ceiling-hashed effort is checked on every CLI door, and the retired rules stay retired without owners"
+ 
+ 
+ def selftest_operator_sync_rules() -> None:
+diff --git a/gates/dead-pub-api.baseline b/gates/dead-pub-api.baseline
+index bdb3e8f..1de4ac2 100644
+--- a/gates/dead-pub-api.baseline
++++ b/gates/dead-pub-api.baseline
+@@ -24,10 +24,6 @@ crates/takip/src/lib.rs:unclaimed
+ crates/tools/src/chain.rs:jsonrpc_request
+ crates/tools/src/chain.rs:to_corpus_line
+ crates/tools/src/lib.rs:numerator
+-crates/tools/src/operator.rs:compute_bond_ok
+-crates/tools/src/operator.rs:old_active
+-crates/tools/src/operator.rs:old_retired
+-crates/tools/src/operator.rs:same_model_hash
+ crates/yetenek/src/lib.rs:record_of
+ crates/yetenek/src/lib.rs:reject_names
+ crates/yetenek/src/lib.rs:with_capability
+-- 
+2.39.5
+
