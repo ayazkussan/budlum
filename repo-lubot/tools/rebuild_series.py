@@ -152,8 +152,40 @@ def rejects():
     )
 
 
+def table(patches_dir: str) -> None:
+    """Print the README's series table straight from the patch files.
+
+    This started life as a throwaway sidecar script next to the checkout, which is
+    exactly the kind of tool that does not survive a new machine: the table is the
+    only human-facing index of the series, so deriving it belongs with the tool
+    that derives the patches. Subject handling comes from `split_patch`, folds and
+    encoded words included, because a table built from a truncated header is a
+    table that quietly disagrees with the commits it lists.
+    """
+    import glob as _glob
+
+    print("| patch | commit subject | diffstat |")
+    print("|---|---|---|")
+    for path in sorted(_glob.glob(os.path.join(patches_dir, "*.patch"))):
+        text = open(path, encoding="utf-8", errors="replace").read()
+        hdr, _body, _chunks = split_patch(text)
+        files = len([l for l in text.split("\n") if l.startswith("diff --git ")])
+        plus = len(
+            [
+                l
+                for l in text.split("\n")
+                if l.startswith("+") and not l.startswith("+++")
+            ]
+        )
+        num = os.path.basename(path).split("-")[0]
+        print(f"| `{num}` | {hdr['subject']} | {files} files, +{plus} |")
+
+
 def main():
-    src = os.environ.get("SERIES_DIR", "/home/user/budlum/repo-lubot/patches")
+    src = os.environ.get("SERIES_DIR", os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "patches"))
+    if sys.argv[1:2] == ["--table"]:
+        table(src)
+        return 0
     patches = sorted(glob.glob(src + "/*.patch"))
     log = []
     for path in patches:

@@ -106,6 +106,12 @@ tree, which is why the tool reproduces 18 commits and the directory ships 20.
 Smoke-tested from a clean clone of the fork: same self-check line, `members=20
 crate_dirs=20 my_crates=12 lines=10581 tests=149`.
 
+The table below is not hand-maintained: `python3 tools/rebuild_series.py --table`
+prints it from the patch files themselves, and `SERIES_DIR` points it at another
+directory. It was verified by diffing that output against this file - byte for byte -
+because a table assembled by a throwaway script on one machine is how a documented
+number and the tree it describes first part company.
+
 ## Contents
 
 | patch | commit subject | diffstat |
