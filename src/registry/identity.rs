@@ -101,6 +101,17 @@ pub fn address_of_did(did: &str) -> Option<Address> {
     }
 }
 
+/// Lowercase hex for registry keys (see [`IdentityRegistry::credentials`]
+/// for why ids are stored hexed rather than as byte arrays).
+fn hex32(bytes: &[u8; 32]) -> String {
+    let mut out = String::with_capacity(64);
+    for byte in bytes {
+        out.push(char::from_digit(u32::from(byte >> 4), 16).unwrap_or('0'));
+        out.push(char::from_digit(u32::from(byte & 0x0f), 16).unwrap_or('0'));
+    }
+    out
+}
+
 fn hex_val(c: u8) -> Option<u8> {
     match c {
         b'0'..=b'9' => Some(c - b'0'),
@@ -420,8 +431,13 @@ pub struct IdentityRegistry {
     /// Credential id = H(root | issuer | issued_at): two credentials with
     /// the same fields at different times are different credentials, and
     /// neither can shadow the other's revocation.
-    credentials: BTreeMap<[u8; 32], CredentialCommitment>,
-    revoked: BTreeSet<[u8; 32]>,
+    /// Hex-keyed on purpose: a `[u8; 32]` map key serializes as an array,
+    /// and the snapshot is JSON - a populated registry would fail at
+    /// write time, not at compile time. The id bytes stay the public handle;
+    /// the encoding is this type's business. The same reasoning is the
+    /// `Address` newtype's manual `Serialize`.
+    credentials: BTreeMap<String, CredentialCommitment>,
+    revoked: BTreeSet<String>,
 }
 
 impl IdentityRegistry {
@@ -437,12 +453,12 @@ impl IdentityRegistry {
 
     #[must_use]
     pub fn credential(&self, id: &[u8; 32]) -> Option<&CredentialCommitment> {
-        self.credentials.get(id)
+        self.credentials.get(hex32(id).as_str())
     }
 
     #[must_use]
     pub fn is_revoked(&self, id: &[u8; 32]) -> bool {
-        self.revoked.contains(id)
+        self.revoked.contains(hex32(id).as_str())
     }
 
     /// The only door every mutation passes. A non-PoA `domain` refuses
@@ -515,11 +531,11 @@ impl IdentityRegistry {
             if !issuer_known {
                 return Err(IdentityError::UnknownSubject { did: did_of(&issuer) });
             }
-            if self.credentials.contains_key(&id) {
+            if self.credentials.contains_key(hex32(&id).as_str()) {
                 return Err(IdentityError::AlreadyIssued { did: did_of(&subject) });
             }
         }
-        self.credentials.insert(id, credential);
+        self.credentials.insert(hex32(&id), credential);
         if let Some(record) = self.records.get_mut(&subject) {
             record.credential_root = Some(root);
         }
@@ -527,7 +543,7 @@ impl IdentityRegistry {
     }
 
     fn revoke(&mut self, credential: CredentialCommitment, _now: u64) -> Result<(), IdentityError> {
-        let id = credential_id(&credential);
+        let id = hex32(&credential_id(&credential));
         if !self.credentials.contains_key(&id) {
             return Err(IdentityError::UnknownCredential);
         }
@@ -590,6 +606,59 @@ impl IdentityRegistry {
         Ok(())
     }
 
+    /// Whether the registry carries any state at all. The account root uses
+    /// this to decide whether to fold [`IdentityRegistry::root`] at all -
+    /// "no identity state yet" and "identity state that hashes to zeros"
+    /// must not become the same anchor the day a real registry appears.
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.records.is_empty() && self.credentials.is_empty() && self.revoked.is_empty()
+    }
+
+    /// The deterministic root of the whole registry: every record (subject,
+    /// methods with their revocation epochs, current credential root), every
+    /// registered credential id, every revocation. `BTreeMap`/`BTreeSet`
+    /// iteration order is part of the format, so two honest nodes with equal
+    /// state compute equal roots without coordinating anything.
+    ///
+    /// The revocation set is inside on purpose: it is the note_registry
+    /// lesson stated at the root level - a peer that drops revocations from
+    /// what it serves would otherwise keep a state root that verifies.
+    #[must_use]
+    pub fn root(&self) -> [u8; 32] {
+        let mut acc = hash_fields_bytes(&[b"bud-identity-root-v1"]);
+        for (subject, record) in &self.records {
+            let mut methods = hash_fields_bytes(&[b"bud-identity-methods"]);
+            for method in &record.methods {
+                let revoked = method.revoked_at.unwrap_or(u64::MAX).to_le_bytes();
+                methods = hash_fields_bytes(&[&methods, &method.key_id, &revoked]);
+            }
+            let credential_root = record.credential_root.unwrap_or([0u8; 32]);
+            let guardians = hash_fields_bytes(&[
+                b"bud-identity-guardians",
+                record.recovery_threshold.to_le_bytes().as_slice(),
+            ]);
+            let mut guardians = guardians;
+            for guardian in &record.guardians {
+                guardians = hash_fields_bytes(&[&guardians, guardian.as_bytes()]);
+            }
+            acc = hash_fields_bytes(&[
+                &acc,
+                subject.as_bytes(),
+                &methods,
+                &credential_root,
+                &guardians,
+            ]);
+        }
+        for id in self.credentials.keys() {
+            acc = hash_fields_bytes(&[&acc, b"cred", id.as_bytes()]);
+        }
+        for id in &self.revoked {
+            acc = hash_fields_bytes(&[&acc, b"revoked", id.as_bytes()]);
+        }
+        acc
+    }
+
     /// The honest validity question, spelled out in parts so a caller can
     /// report *which* part failed instead of a bare "invalid".
     ///
@@ -599,11 +668,12 @@ impl IdentityRegistry {
     /// not yet issued at `now`, subject unregistered, root mismatch against
     /// the credential's own fields.
     pub fn is_credential_valid(&self, id: &[u8; 32], now: u64) -> Result<(), IdentityError> {
+        let key = hex32(id);
         let credential = self
             .credentials
-            .get(id)
+            .get(key.as_str())
             .ok_or(IdentityError::UnknownCredential)?;
-        if self.revoked.contains(id) {
+        if self.revoked.contains(key.as_str()) {
             return Err(IdentityError::AlreadyRevoked);
         }
         if !credential.is_live_at(now) {
@@ -1079,6 +1149,46 @@ mod tests {
             "the old key is dead from the moment recovery lands"
         );
         assert!(record.live_method(&[9; 32], 20).is_some());
+    }
+
+    #[test]
+    fn the_registry_root_moves_with_every_axis_that_matters() {
+        let empty = IdentityRegistry::new();
+        assert!(empty.is_empty());
+        let base = empty.root();
+        assert_ne!(base, [0u8; 32], "the empty root is a domain tag, not a hole");
+
+        let mut with_record = IdentityRegistry::new();
+        with_record
+            .apply(&ConsensusKind::PoA, IdentityOp::Register { record: subject_record() }, 100)
+            .unwrap();
+        let after_register = with_record.root();
+        assert_ne!(base, after_register);
+
+        let (credential, _) = credential();
+        with_record
+            .apply(&ConsensusKind::PoA, IdentityOp::Register { record: issuer_record() }, 100)
+            .unwrap();
+        with_record
+            .apply(&ConsensusKind::PoA, IdentityOp::Issue { credential: credential.clone() }, 100)
+            .unwrap();
+        let after_issue = with_record.root();
+        assert_ne!(after_register, after_issue, "issuance must move the root");
+
+        with_record
+            .apply(&ConsensusKind::PoA, IdentityOp::Revoke { credential }, 150)
+            .unwrap();
+        assert_ne!(after_issue, with_record.root(), "revocation must move the root");
+
+        // A second node that reached the same state by applying the same ops
+        // agrees without exchanging anything but the root:
+        let mut twin = IdentityRegistry::new();
+        twin.apply(&ConsensusKind::PoA, IdentityOp::Register { record: subject_record() }, 100).unwrap();
+        twin.apply(&ConsensusKind::PoA, IdentityOp::Register { record: issuer_record() }, 100).unwrap();
+        let (fresh, _) = credential();
+        twin.apply(&ConsensusKind::PoA, IdentityOp::Issue { credential: fresh.clone() }, 100).unwrap();
+        twin.apply(&ConsensusKind::PoA, IdentityOp::Revoke { credential: fresh }, 150).unwrap();
+        assert_eq!(twin.root(), with_record.root());
     }
 
     #[test]

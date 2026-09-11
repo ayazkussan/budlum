@@ -1690,3 +1690,51 @@ that: kanit 4, yetenek 5, takip 3, kuyruk 3, grant 3+1, anlama 3, chain 2 (gate-
 muhur/read/izolasyon/index/denetim singles. budlum CI was measured saturated this turn
 (12 queued/pending runs); the identity module's compile proof is CI, and its output is
 recorded the moment it clears.
+
+## 34. Six answers, and persistence with the version as the refusal
+
+The identity questions were answered in one batch while CI sat queued; every answer moved
+a plan, and two moved measurements in this report itself: `src/domain/finality_adapter.rs`
+DOES exist with a `PoAFinalityAdapter` (§33's claim was about the doc's exact type name
+`DomainFinalityAdapter`, which no file defines - the correction is recorded in the doc's
+new appendix rather than by editing §33's prose).
+
+The persistence slice implements the Q1 answer, "bump to 5", and the bump's meaning is
+the repo's own argument for why `poa_onboarding` shipped WITHOUT one, inverted: an absent
+field may default silently when "empty" is the truth about old state, but identity state
+is *digestive* - a node that quietly dropped a revocation set would validate a snapshot of
+revived credentials. So `identity: Option<IdentityRegistry>` sits `#[serde(default)]` for
+loading, yet hashes into the snapshot digest only under `schema_version >= 5`, and
+`migration_report` refuses above-CURRENT versions by name. The consequences are pinned in
+tests rather than asserted in prose: a v4 digest is byte-identical whether the field is
+None or Some (old pinned digests stay reproducible; the new test checks exactly this), the
+three legacy-blob tests (v2, v3, v4) drop the key from their assembled blobs, assert its
+absence at the byte level, and refuse to fabricate a value from the default path, and the
+canary that locks the serialized field set grew "identity" in the same edit its own text
+demands ("extend both old-blob tests in the same edit" - three, now).
+
+`IdentityRegistry::root()` folds records (subjects, per-method keys WITH their revocation
+epochs, current credential root, guardian sets with their thresholds), credential ids and
+the revocation set, in `BTreeMap` order, under a domain tag; `is_empty()` gates whether
+the account state root folds it at all (`b"identity_v1"` in `calculate_state_root`, the
+bns pattern verbatim), so "no identity state" and "identity state hashing to zeros"
+cannot share an anchor. A twin-node test proves two registries built through different
+call sequences agree on the root with only the root exchanged.
+
+The slice also caught, before commit and by reading the serde not the diff:
+`BTreeMap<[u8; 32], _>` serializes its KEYS as JSON arrays, and the snapshot is JSON -
+a populated registry would fail at runtime write time, not at compile time, and the
+tests here could not have caught it (empty maps serialize fine). Registry credential and
+revocation storage became hex-keyed strings with the `[u8; 32]` public handle unchanged;
+the hex is order-preserving, so the root fold and every deterministic iteration are
+untouched. The same trap in the same repo is why `Address` has a manual `Serialize`; the
+lesson generalizes to this registry and is written at the field.
+
+State of the queues at this point: budlum - identity module (10 tests), persistence,
+digest trio; pending next: document-fill (the Q5 flow: template slots bound to
+disclosures, requester-bound receipt digests), folder-NFT over `NftRegistry`/`deed`,
+`identity_root` on `GlobalBlockHeader` with its proto conversions, and the full-cycle tx
+door (Q6) through mempool/RPC. lubot - 28 mirror patches, baseline 29, 331 tests, gates
+rc=0; shrink queue waits behind the identity work by the user's ordering. CI remained
+queued/pending through the whole turn (12 runs measured); "not compiled" labels stand and
+these four commits are exactly what its compiler gets to grade.

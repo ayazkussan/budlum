@@ -263,6 +263,10 @@ pub struct AccountState {
     pub timed_burn: crate::tokenomics::TimedBurnState,
     pub bns_registry: crate::bns::BnsRegistry,
     pub nft_registry: crate::socialfi::NftRegistry,
+    /// Identity registry (`did:bud`): DID records, credential commitments and
+    /// revocations. Persisted through the snapshot's schema-5 field; the
+    /// state root folds its `root()` only when non-empty, on the bns pattern.
+    pub identity: crate::registry::IdentityRegistry,
     pub marketplace: crate::pollen::MarketplaceRegistry,
     pub budlumxyz: crate::budlumxyz::BudlumxyzRegistry,
     pub storage_registry: StorageRegistry,
@@ -377,6 +381,7 @@ impl AccountState {
             governance: GovernanceState::default(),
             bns_registry: crate::bns::BnsRegistry::new(),
             nft_registry: crate::socialfi::NftRegistry::new(),
+            identity: crate::registry::IdentityRegistry::new(),
             marketplace: crate::pollen::MarketplaceRegistry::new(),
             storage_registry: StorageRegistry::new(),
             ai_registry: crate::ai::registry::AiRegistry::new(),
@@ -429,6 +434,7 @@ impl AccountState {
             message_registry: CrossDomainMessageRegistry::new(),
             bns_registry: crate::bns::BnsRegistry::new(),
             nft_registry: crate::socialfi::NftRegistry::new(),
+            identity: crate::registry::IdentityRegistry::new(),
             marketplace: crate::pollen::MarketplaceRegistry::new(),
             budlumxyz: crate::budlumxyz::BudlumxyzRegistry::new(),
             external_roots: BTreeMap::new(),
@@ -489,6 +495,7 @@ impl AccountState {
             governance: GovernanceState::default(),
             bns_registry: crate::bns::BnsRegistry::new(),
             nft_registry: crate::socialfi::NftRegistry::new(),
+            identity: crate::registry::IdentityRegistry::new(),
             marketplace: crate::pollen::MarketplaceRegistry::new(),
             budlumxyz: crate::budlumxyz::BudlumxyzRegistry::new(),
             external_roots: BTreeMap::new(),
@@ -567,6 +574,7 @@ impl AccountState {
             last_epoch_time: snapshot.last_epoch_time,
             bns_registry: snapshot.bns_registry.clone().unwrap_or_default(),
             nft_registry: snapshot.nft_registry.clone().unwrap_or_default(),
+            identity: snapshot.identity.clone().unwrap_or_default(),
             marketplace: snapshot.marketplace.clone().unwrap_or_default(),
             budlumxyz: snapshot.budlumxyz.clone().unwrap_or_default(),
             governance: snapshot.governance.clone().unwrap_or_default(),
@@ -2426,6 +2434,10 @@ impl AccountState {
         if !self.nft_registry.is_empty() {
             final_hasher.update(b"socialfi_v1");
             final_hasher.update(self.nft_registry.root());
+        }
+        if !self.identity.is_empty() {
+            final_hasher.update(b"identity_v1");
+            final_hasher.update(self.identity.root());
         }
         final_hasher.update(b"pollen_v1");
         final_hasher.update(self.marketplace.root());

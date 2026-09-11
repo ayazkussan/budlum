@@ -84,3 +84,16 @@ Ham kimlik verisi (isim, doğum tarihi, biyometrik veri vb.) zkvm ile B.U.D. 3.0
 ## Ek: Onay kapılı ifşa (kullanıcının sözlü eki, olduğu gibi)
 
 bu yeni bir mimari > eğer bir sistem cüzdanda veriler için belli bir cveri ismi sorarsa ve cüzdan sahibi onaylarsa veri o kullanıcıya gönderilsin ama hangi veriyi yani o nftyi isteyeceği o ekranda gözüksün veri açılsın ama o isteyen kişinin cüzdanına açılsın sadece, ayrıca her bir bilgi bir nftdir
+
+---
+
+## Uygulama notu — altı sorunun cevabı ve ölçüm düzeltmeleri (kod yazılırken doğrulandı)
+
+Doküman metni yukarıda değişmeden durur; burası ona düşülen notlardır, DENETIM §34 ile birlikte.
+
+1. **StateSnapshotV2:** kod `CURRENT = 4`te zaten; "4'e çıkar" kararı **5'e bump** olarak güncellendi. Gerekçe `poa_onboarding`'in bump'sız girişinden farklı: identity alanı digest'e giriyor (`>= 5` kapısı), eski ikili 5'i versiyon reddiyle temiz karşılar; sessiz düşürme revivasyon demek. v4 pin digestleri byte byte aynı kalır (kilit testi var).
+2. **DomainFinalityAdapter:** dosya yok ama mekanizma var ve isim ölçümü düzeltildi — `src/domain/finality_adapter.rs` içinde `PoAFinalityAdapter` (PoW/PoS zincir adapterlarıyla birlikte) mevcut. Çapraz-domain anchor `GlobalBlockHeader` kök desenine `identity_root` sahası eklenerek yapılacak (proto dönüşümleriyle ayrı dilim); state-root bağlaması bu dilimde hazır (`calculate_state_root → identity_v1`).
+3. **BBS+:** düşmüyor; selective disclosure ispatı mevcut **zkVM/B.U.D 3.0 prover hattından** üretilecek — yeni imza bağımlılığı yok, supply-chain dosyası değişmedi.
+4. **Onay akışı:** UX/UI yok; node tarafı kodun tamamı hazır olacak. Bind edilen yer: `src/storage/view_grant.rs` deseni (grantee-bound, digest-revoked, epoch-opened) — alan-taahhütleri "hangisi" sorusuna cevap olur, grant motoru kimlik için yeniden yazılmaz.
+5. **NFT modeli:** "her bilgi bir NFT" kullanıcı kararı; sistem **klasör-NFT** sağlar: klasör, içerdiklerini açan bir NFT olarak davranır (NFT'ler sonradan klasörden taşınabilir — dosya gezgini semantiğinin zincir karşılığı), parça granülaritesini kullanıcı belirler. Onay gelince içerikler cüzdandan alınır ve X belgesinin istenen alanlarına doldurulur — sunum/doldurma motoru kimlik modülünün bir sonraki dilimi.
+6. **Tx kapısı:** tam çevrim — Register/Issue/Revoke/Recover dördü birden, RPC ve mempool routing'le.
