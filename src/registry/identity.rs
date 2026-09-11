@@ -1506,8 +1506,13 @@ mod tests {
             execute_identity_tx(&mut registry, &addr(1), junk, &ConsensusKind::PoA, 200, 1),
             Err(IdentityError::BadApproval(_))
         ));
-        assert!(registry.record(&addr(1)).unwrap().live_method(&[1; 32], 200).is_some(),
-            "the original key must still be live: a refused rotation changed nothing");
+        let subject = registry.record(&addr(1)).unwrap();
+        assert!(
+            subject
+                .live_method(&*addr(9).as_bytes(), 200)
+                .is_some(),
+            "the original key must still be live: a refused rotation changed nothing"
+        );
     }
 
     #[test]
