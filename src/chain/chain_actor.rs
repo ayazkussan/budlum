@@ -532,6 +532,21 @@ pub enum ChainCommand {
         label: String,
         response: oneshot::Sender<Option<Address>>,
     },
+    IdentityResolve {
+        subject: Address,
+        response: oneshot::Sender<Option<(crate::registry::IdentityRecord, u64)>>,
+    },
+    IdentityCredential {
+        credential_id: [u8; 32],
+        response:
+            oneshot::Sender<Option<(crate::registry::CredentialCommitment, Result<(), String>)>>,
+    },
+    IdentityVerifyPresentation {
+        receipt: crate::registry::PresentationReceipt,
+        requester: Address,
+        document: String,
+        response: oneshot::Sender<Result<(), String>>,
+    },
     BnsSetStorage {
         name: String,
         owner: Address,
@@ -2448,6 +2463,60 @@ impl ChainHandle {
             })
             .await;
         rx.await.unwrap_or(None)
+    }
+
+    pub async fn identity_resolve(
+        &self,
+        subject: Address,
+    ) -> Option<(crate::registry::IdentityRecord, u64)> {
+        let (tx, rx) = oneshot::channel();
+        let _ = self
+            .tx
+            .send(ChainCommand::IdentityResolve {
+                subject,
+                response: tx,
+            })
+            .await;
+        rx.await.unwrap_or(None)
+    }
+
+    pub async fn identity_credential(
+        &self,
+        credential_id: [u8; 32],
+    ) -> Option<(crate::registry::CredentialCommitment, Result<(), String>)> {
+        let (tx, rx) = oneshot::channel();
+        let _ = self
+            .tx
+            .send(ChainCommand::IdentityCredential {
+                credential_id,
+                response: tx,
+            })
+            .await;
+        rx.await.unwrap_or(None)
+    }
+
+    pub async fn identity_verify_presentation(
+        &self,
+        receipt: crate::registry::PresentationReceipt,
+        requester: Address,
+        document: String,
+    ) -> Result<(), String> {
+        let (tx, rx) = oneshot::channel();
+        if self
+            .tx
+            .send(ChainCommand::IdentityVerifyPresentation {
+                receipt,
+                requester,
+                document,
+                response: tx,
+            })
+            .await
+            .is_err()
+        {
+            return Err("chain actor closed".to_string());
+        }
+        rx.await
+            .map_err(|_| "chain actor closed".to_string())?
     }
 
     pub async fn bns_set_storage(
@@ -4448,6 +4517,59 @@ impl ChainActor {
                         &label,
                         self.blockchain.state.epoch_index,
                     ));
+                }
+                ChainCommand::IdentityResolve { subject, response } => {
+                    // The epoch travels with the record so liveness is
+                    // answered at the height the read happened on, not at
+                    // whatever `now` the RPC layer later believes in.
+                    let record = self
+                        .blockchain
+                        .state
+                        .identity
+                        .record(&subject)
+                        .cloned()
+                        .map(|record| (record, self.blockchain.state.epoch_index));
+                    let _ = response.send(record);
+                }
+                ChainCommand::IdentityCredential {
+                    credential_id,
+                    response,
+                } => {
+                    let answer = self
+                        .blockchain
+                        .state
+                        .identity
+                        .credential(&credential_id)
+                        .cloned()
+                        .map(|credential| {
+                            let verdict = self
+                                .blockchain
+                                .state
+                                .identity
+                                .is_credential_valid(
+                                    &credential_id,
+                                    self.blockchain.state.epoch_index,
+                                )
+                                .map_err(|e| e.to_string());
+                            (credential, verdict)
+                        });
+                    let _ = response.send(answer);
+                }
+                ChainCommand::IdentityVerifyPresentation {
+                    receipt,
+                    requester,
+                    document,
+                    response,
+                } => {
+                    let _ = response.send(
+                        crate::registry::check_receipt(
+                            &self.blockchain.state.identity,
+                            &receipt,
+                            &requester,
+                            &document,
+                        )
+                        .map_err(|e| e.to_string()),
+                    );
                 }
                 ChainCommand::BnsSetStorage {
                     name,
