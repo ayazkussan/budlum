@@ -79,7 +79,11 @@ their four fixtures and the gate's name-list shrank to the one rule with a calle
 0027 closed a symmetric getter pair the ratchet's own bookkeeping had left half-listed,
 and 0028 hardened `usl` against a forger who can recompute the seal: the reader now
 enforces the writer's duplicate rule, numbers must be canonical or the media is refused,
-totals cannot silently wrap past u64, and a sealed media is never written over. Both moves were recounts of the
+totals cannot silently wrap past u64, and a sealed media is never written over;
+and 0029 held 331 while deleting fifty-two lines - no test attribute left, only two
+assertions their finding-level checks duplicated one line above, and the pairing rule
+caught mid-cut the `prose_only` the first deletion had orphaned, so accessor and query
+died together (floor 29 to 25) with the rule outliving both inside `close()`. Both moves were recounts of the
 applied tree (176 base + 156 series after 0025), never decrements by hand. The base README said 191 while the base tree measures 178, a
 13-test overstatement that predates this series; 0019 replaces it with a count
 derived from the applied tree instead of inflating the old number. `38 gates`
@@ -174,3 +178,4 @@ number and the tree it describes first part company.
 | `0026` | lubot: operator: kayit kurallari cagrisizlariyla gitti - kapinin isim listesi kirpildi | 4 files, +33 -160 |
 | `0027` | lubot: tools: Rational getter cifti kaldirildi - taban 29'a | 2 files, +2 -15 |
 | `0028` | lubot: usl sertlestirildi - okuyucu yazarin kurallariyla konusur, medya ezilmez | 3 files, +184 -15 |
+| `0029` | lubot: dead-pub wave 1 - kanit'in erişilmeyen erişimcileri ve yetenek'in kanıtsız setter'ı gitti | 3 files, -52 |
