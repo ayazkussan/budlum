@@ -104,9 +104,13 @@ job looking green.
 
 `xtask/gates` is a separate cargo workspace, so no root `--workspace` command
 touches it: `cargo build --release --manifest-path xtask/gates/Cargo.toml` is the
-compile, and `cargo clippy --manifest-path xtask/gates/Cargo.toml --all-targets --
--D warnings` is currently a report rather than a gate (it holds pre-existing
-pedantic debt). The `gates` job builds the binary as its first cargo step precisely
+compile, and `cargo clippy --release --manifest-path
+xtask/gates/Cargo.toml --all-targets` is a gate: it was staged as a count-only monitoring step,
+measured `0` headline lines in the run for `aaf491e`, and only then made to
+refuse. Staging a measurement before enforcing it is the pattern to copy when a
+gate would otherwise land on pre-existing debt - and note what made enforcement
+safe: the step could only be allowed to fail the job once every other step in the
+job carried a guard, so its redness stops hiding anything. The `gates` job builds the binary as its first cargo step precisely
 because `cargo run --manifest-path ...` on a step named "so-and-so canary" turns a
 build failure into a supposed gate finding: measured on 2026-09-10, two
 `error[E0308]` in one gate file red six jobs' canaries at once, while a fully green

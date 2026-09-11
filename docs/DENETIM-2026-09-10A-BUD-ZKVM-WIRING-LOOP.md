@@ -1368,3 +1368,32 @@ actionlint judge them, and actionlint is still absent from the runner - `Repo Li
 every run, and my interpreter could differ from Actions somewhere the workflows do not
 currently go), and whether the next run is the first one to print `budlum`'s `Test` verdict
 while `Feature matrix`, `Clippy` and `Format` stay red.
+
+### 28.1 Two measurements that close the loop opened by the previous sections
+
+The run for `aaf491e` finished the parts this thread was waiting on, and both of them are
+numbers rather than arguments:
+
+* `FAIL [no-upstream-brands]: 11 place(s)` - one fewer than the 12 the previous run
+  reported, and the only difference between the two trees is the sentence §27 reworded. So
+  the attribution was right, and it was proved by a subtraction rather than asserted: 11
+  places are main's, 1 was this report's, and after editing one sentence the count moved by
+  exactly one. The remaining 11 are on the queue with the other pre-existing reds.
+* `gates-workspace clippy: 0 warning/error headline line(s)` - the three denied lints found
+  in §27 were the whole of it. A monitoring step whose measurement is zero is a gate
+  waiting to be turned on, so `Clippy (gates workspace, izleme modu)` is now
+  `Clippy (gates workspace)` without `continue-on-error`: it refuses. It graduated only
+  because the job had just become per-step independent - the same command that would once
+  have swallowed 35 verdicts now swallows none, which is the reason to stage a check as a
+  count before making it red. It carries the job's cargo guard, and the two steps that
+  looked optional - the log producer for the badge gate - needed it too: simulated with a
+  red clippy step, `Test log for the badge gate` skipped, which would have reached the badge
+  gate as a missing log and come out looking like a content finding. After the guard, the
+  simulation says every cargo step runs while clippy stays red, and only `Install protoc`
+  and `Build the gate binary` remain unguarded, which is correct: they are what the guards
+  are measured against.
+
+The checker that proves the guard expressions is now the thing checking this workflow's own
+edits - `python3 ops/scripts/check-step-reachability.py` ran clean after both the clippy
+graduation and the log-step guard, and `--fail 'gates:Clippy (gates workspace)'` is how the
+claim above was produced.

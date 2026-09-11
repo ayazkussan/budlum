@@ -235,8 +235,20 @@ jobs:
       # uses in `budlum` - because making a lint surface visible and enforcing it in the
       # same commit is how a repo ends up reverting the visibility. The count is an
       # annotation, so the number survives a log host nobody can reach.
-      - name: Clippy (gates workspace, izleme modu)
-        continue-on-error: true
+      - name: Clippy (gates workspace)
+        # Graduated from izleme modu (monitoring) on 2026-09-11: the step's own
+        # surface annotation measured `0 warning/error headline line(s)` in the run
+        # for aaf491e, three denied lints in dead_pub_api.rs fixed and nothing else
+        # outstanding. It refuses now. Enforcing it is only safe because every step
+        # in this job carries `if: always() && steps.build.outcome == 'success'` -
+        # a red step here cannot hide a neighbour's verdict any more, which is the
+        # property that made the earlier count-only staging necessary. Every cargo
+        # step in this job carries the same guard; the surfaces carry `always()`.
+        # No `FAIL [..]` headline is written, so the Tally does not list this one:
+        # the step's own failure and the surface below are the report. It carries
+        # the job's standard cargo guard so that a broken build does not also
+        # produce a clippy failure nobody asked for.
+        if: always() && steps.build.outcome == 'success'
         run: |
           cargo clippy --release --manifest-path xtask/gates/Cargo.toml --all-targets 2>&1 \
             | tee /tmp/gates-clippy.log | tail -n 5
@@ -254,6 +266,10 @@ jobs:
           rm -f "$tmp"
 
       - name: Test log for the badge gate (the verdict lives in budlum)
+        # A log producer, so it must run whatever else is red: the badge gate reads
+        # this file, and if a neighbouring failure skipped it the badge gate would
+        # report "no log" - a tooling artefact dressed up as a content finding.
+        if: always() && steps.build.outcome == 'success'
         continue-on-error: true
         run: |
           set -euo pipefail
