@@ -69,12 +69,69 @@ nix develop --command cargo test
 
 ### Format and Lint
 
+Use the commands CI uses, not the shorter forms: `cargo fmt --all` walks every
+workspace member while a bare `cargo fmt` does not, and a failing check skips every
+step after it in that job - so one missed file silences the whole job's verdicts.
+That is why `Format` is the *last* step in the `budlum`, `budzero` and `budscan`
+jobs: a style failure must not stand between a reader and the answer to "does it
+build, do the tests pass". Keep it that way.
+
 ```bash
-cargo fmt
-cargo clippy
+cargo fmt --all -- --check                      # CI: Format
+cargo clippy --all-targets -- -D warnings       # CI: Clippy
+cargo test --lib --verbose                      # CI: Test (root lib tests)
 ```
 
-Please run formatting before opening a pull request.
+The pedantic/nursery surface is a ratchet, not a wall: it is measured by
+`ops/scripts/clippy-extra-report.py` against `.github/clippy-extra-baseline.txt` and
+only refuses growth.
+
+### The gates workspace, and what CI's red can actually mean
+
+`xtask/gates` is a separate cargo workspace, so no root `--workspace` command
+touches it: `cargo build --release --manifest-path xtask/gates/Cargo.toml` is the
+compile, and `cargo clippy --manifest-path xtask/gates/Cargo.toml --all-targets --
+-D warnings` is currently a report rather than a gate (it holds pre-existing
+pedantic debt). The `gates` job builds the binary as its first cargo step precisely
+because `cargo run --manifest-path ...` on a step named "so-and-so canary" turns a
+build failure into a supposed gate finding: measured on 2026-09-10, two
+`error[E0308]` in one gate file red six jobs' canaries at once, while a fully green
+root clippy step in the same job proved nothing about it.
+
+Three rules that fall out of that, and are enforced by the job rather than by taste:
+
+- A canary fails for exactly one reason. `cargo run` exits 1 on a gate finding and
+  101 when cargo itself fails; those are different sentences and must not share a
+  step name.
+- Every step whose verdict would otherwise live only on a log host has an
+  `if: failure()` surface that turns the tool's own output into annotations
+  (`Build surface`, `Format diff surface`, `Canary surface`). A surface exits 0:
+  reporting a failure is not a second failure.
+- Do not verify a workflow step with `bash -n`. Extract its body from the YAML and
+  execute it against a stub binary. That is how `^panicked` was caught missing the
+  line a real panic prints, and how a backtick inside a double-quoted `printf`
+  format (a live command substitution) was caught before it shipped.
+
+Baselines in this repository are measured records, not configuration: `.github/
+dead-pub-api-baseline.txt`, `.github/unwired-guards-baseline.txt` and
+`.github/clippy-extra-baseline.txt` are only re-derived from a tree you have
+actually built, because re-deriving them from an unverifiable one is how a gate
+starts certifying a fiction.
+
+### The mirrored lubot series
+
+`repo-lubot/` ships lubot work as an appliable patch series against
+`ayazkussan/lubot` `main`. Its generator ships with it:
+
+```bash
+SERIES_DIR=repo-lubot/patches LUBOT_REPO=<clone at the base> \
+  python3 repo-lubot/tools/rebuild_series.py    # replays, repairs, self-checks
+python3 repo-lubot/tools/rebuild_series.py --table   # regenerates README's table
+```
+
+Acceptance is `git am -3` of the files as committed, in a clean clone of the base
+commit - not a per-file `patch --dry-run` "clean", which skips hunks it believes are
+already applied and exits 0 while doing so.
 
 ---
 
