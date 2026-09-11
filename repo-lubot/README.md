@@ -69,7 +69,7 @@ to count. Patch 0022 moved it to 325 - the two `tools/chain` ceilings tests left
 the callerless flow they covered - and patch 0023 to 328, the three new
 `cli/activation` tests arriving with the wiring, and patch 0024 to 334, the six `usl`
 tests arriving with the settlement crate, and patch 0025 to 332, when olcek's
-callerless report surface left together with two tests that asserted only it. Both moves were recounts of the
+callerless report surface left together with the two tests that were its only assertions. Both moves were recounts of the
 applied tree (176 base + 156 series after 0025), never decrements by hand. The base README said 191 while the base tree measures 178, a
 13-test overstatement that predates this series; 0019 replaces it with a count
 derived from the applied tree instead of inflating the old number. `38 gates`
