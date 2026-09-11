@@ -1609,3 +1609,84 @@ type for call sites, wire when an artifact awaits the reader, delete with the sa
 stale-line removal otherwise, recount docs in-patch, gates rc=0, clean `git am -3` of all
 26, and label the standing limit: nothing here is compiled, because no cargo exists in
 this environment - measured, not assumed.
+
+## 33. The cold wallet got harder, and the identity layer met the tree it lands in
+
+Two workstreams, one turn's order: harden what shipped, then open what was designed.
+
+**USL, hardened (mirror patch 0028).** The read-through of 0024's own contract found
+four holes, and every fix is written assuming the adversary can do what the crate says
+they can: recompute the seal, because muhur's digest is public arithmetic, not a key.
+(1) The reader ran `check` but not the construction-time rules - a duplicate PAY line
+re-sealed into a media parsed through a direct push and was accepted; the duplicate rule
+moved into `check`, the read path feeds `add_payout` (the writer's own door), and the
+test forges a re-sealed media with a smuggled line and asserts refusal. (2) Numbers were
+parseable but not canonical: `SEQ 007` read fine and wrote back a different file, which
+breaks byte stability - the one promise a sealed media makes to the next audit - so
+every numeric line is now canonical-only and the read path re-renders the manifest and
+requires the file's own lines back, in order. (3) `total` accumulated in u64 and could
+wrap silently - the one number a human compares off the stick - so sums run in u128
+inside `check`, past-range batches are refused at both sealing and reading. (4) `usl
+make` overwrote an existing media without comment, the worst failure at a cold wallet:
+writing moved into `write_media` (create dir, `create_new`) and the second write to an
+occupied sequence fails with the OS saying so; a new batch means a new seq, there is no
+overwrite path to reach by mistake. Three tests joined (usl now 9, tree 328→331 by
+recount); baseline unchanged - every name was already reached or is reached by cli.
+
+**Identity, coded against the tree.** The architecture doc (`docs/KIMLIK-MIMARI.md`,
+user draft stored verbatim plus its spoken addendum) names its anchors, and two of them
+do not exist: there is no `VerifierRegistry` and no `DomainFinalityAdapter` in `src/` -
+the real, provable pattern is `PermissionlessRegistry` in `src/registry/` and the
+anchoring is `GlobalBlockHeader`'s StorageRoot precedent. The doc's schema-version claim
+is also stale: `CURRENT_STATE_SNAPSHOT_SCHEMA_VERSION` is already 4, and new subsystems
+enter as `#[serde(default)]` optional fields (registry, bns, nft all did) rather than by
+bump. The slice therefore shipped without snapshot persistence - that is the state-root
+owner's decision, asked as Q1 below, not this module's to make. What did ship
+(`src/registry/identity.rs`, 7+1 tests, `f692ef3`/`7aabe74`):
+
+- the DID door: `did:bud:<64 lowercase hex>` with a round-trip rule that *refuses*
+  uppercase rather than normalizing it - a DID two spellings apart is two DIDs;
+- `IdentityRecord`: closed `MethodKind::MlDsa87` (the node's own post-quantum primitive -
+  no new crypto, no BBS supply-chain drift yet), live-by-epoch methods, quorum-guarded
+  guardian sets that validate at construction (no self-guardian, no duplicate, no
+  unreachable or absent-without-guardians threshold);
+- `CredentialCommitment`: fields are salted commitments `H(tag|schema|name|salt|value
+  digest)` - the doc's fixed principle "raw data never on chain" is structural here, a
+  birth date hashed alone would be a dictionary - and the root is an in-order Merkle
+  fold with duplicate-last odd pairing; selective disclosure is a positional sibling
+  path (`verify_disclosure` recomputes the leaf from the preimage, wrong salt/value/
+  schema/leaf-path all return false, and a re-ordered or "SORT of parsing" file is
+  refused as media, same lesson as USL's byte stability);
+- the PoA gate inside the registry: writes refuse non-PoA domains *before touching
+  state*, so even error shapes do not let a wrong-domain caller probe contents, and a
+  `ConsensusKind::Custom("poa-pretender")` is refused because the gate matches the
+  variant, not a string;
+- lifecycle rules the audit needs: exact re-issue refused, born-dead refused, future
+  issuance refused, issuer must be registered or hold a live subject key, revocation is
+  not a toggle, and `is_credential_valid` recomputes the root from the fields and
+  refuses on disagreement - the recomputation-not-trust mechanism muhur and USL use;
+- recovery semantics: quorum counts *unique real guardians* (a stranger's approval is
+  not counted, a double-appearance counts once), rotation revokes all live methods at
+  `now` and lands the new key - signature verification of approvals is stated as the
+  transaction door's job, following `view_grant::GrantAuthorization::verify`, because a
+  registry that half-checks signatures is a registry that checks none.
+- the digest trio (`credential_issue_digest`, `credential_revoke_digest`,
+  `recovery_digest`): every axis a signature could be moved across (chain id, issuer,
+  subject, root, epoch, rule tag) changes the digest, and the rules cannot collide on
+  crafted material because each folds its domain tag first - the grant layer's
+  discipline, inherited rather than reinvented.
+
+The consent flow the addendum describes - a wallet screen naming which field opens, the
+value landing only in the requester's wallet, "each piece of information is an NFT" - was
+measured before writing code: `src/storage/view_grant.rs` already implements exactly that
+*binding shape* for confidential storage (grants bound to grantees, digest-revoked,
+epoch-opened). Identity supplies the per-field commitments that make "which one field" a
+checkable question for that layer; whether field commits also enter `NftRegistry` as
+per-field tokens is a state-design fork, asked as Q5 below, not assumed here.
+
+Lubot-side state after the same turn: mirror at 28 patches, baseline 29 (USL added zero,
+0028 added zero), tree tests 331, gates rc=0, fresh-clone am 28/28. Queue unchanged after
+that: kanit 4, yetenek 5, takip 3, kuyruk 3, grant 3+1, anlama 3, chain 2 (gate-bound),
+muhur/read/izolasyon/index/denetim singles. budlum CI was measured saturated this turn
+(12 queued/pending runs); the identity module's compile proof is CI, and its output is
+recorded the moment it clears.
