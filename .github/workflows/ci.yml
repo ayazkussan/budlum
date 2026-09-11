@@ -201,6 +201,7 @@ jobs:
       # not reachable from everywhere, and a red job whose reason lives only in a log
       # nobody can open is a red job with no finding.
       - name: Build the gate binary
+        id: build
         run: cargo build --release --manifest-path xtask/gates/Cargo.toml 2>&1 | tee /tmp/gates-build.log; exit "${PIPESTATUS[0]}"
       - name: Build surface (annotations)
         if: failure()
@@ -247,25 +248,55 @@ jobs:
           set -euo pipefail
           cargo test --lib --verbose 2>&1 | tee /tmp/libtests.log
       - name: Badge canary (independent of the log)
-        run: cargo run --release --manifest-path xtask/gates/Cargo.toml -- badges-are-current --self-test
+        if: always() && steps.build.outcome == 'success'
+        run: |
+          cargo run --release --manifest-path xtask/gates/Cargo.toml -- badges-are-current --self-test 2>&1 | tee -a /tmp/gate-out.log
+          exit "${PIPESTATUS[0]}"
       - name: Is the badge current (README = measured test count)
-        run: cargo run --release --manifest-path xtask/gates/Cargo.toml -- badges-are-current /tmp/libtests.log
+        if: always() && steps.build.outcome == 'success'
+        run: |
+          cargo run --release --manifest-path xtask/gates/Cargo.toml -- badges-are-current /tmp/libtests.log 2>&1 | tee -a /tmp/gate-out.log
+          exit "${PIPESTATUS[0]}"
       - name: Paid content canary
-        run: cargo run --release --manifest-path xtask/gates/Cargo.toml -- paid-content-cannot-be-read-for-free --self-test
+        if: always() && steps.build.outcome == 'success'
+        run: |
+          cargo run --release --manifest-path xtask/gates/Cargo.toml -- paid-content-cannot-be-read-for-free --self-test 2>&1 | tee -a /tmp/gate-out.log
+          exit "${PIPESTATUS[0]}"
       - name: Paid content cannot be read for free
-        run: cargo run --release --manifest-path xtask/gates/Cargo.toml -- paid-content-cannot-be-read-for-free
+        if: always() && steps.build.outcome == 'success'
+        run: |
+          cargo run --release --manifest-path xtask/gates/Cargo.toml -- paid-content-cannot-be-read-for-free 2>&1 | tee -a /tmp/gate-out.log
+          exit "${PIPESTATUS[0]}"
       - name: Generatable content canary
-        run: cargo run --release --manifest-path xtask/gates/Cargo.toml -- generated-content-is-verifiable --self-test
+        if: always() && steps.build.outcome == 'success'
+        run: |
+          cargo run --release --manifest-path xtask/gates/Cargo.toml -- generated-content-is-verifiable --self-test 2>&1 | tee -a /tmp/gate-out.log
+          exit "${PIPESTATUS[0]}"
       - name: Generatable content is verifiable
-        run: cargo run --release --manifest-path xtask/gates/Cargo.toml -- generated-content-is-verifiable
+        if: always() && steps.build.outcome == 'success'
+        run: |
+          cargo run --release --manifest-path xtask/gates/Cargo.toml -- generated-content-is-verifiable 2>&1 | tee -a /tmp/gate-out.log
+          exit "${PIPESTATUS[0]}"
       - name: QR is derivative only canary
-        run: cargo run --release --manifest-path xtask/gates/Cargo.toml -- qr-is-derivative-only --self-test
+        if: always() && steps.build.outcome == 'success'
+        run: |
+          cargo run --release --manifest-path xtask/gates/Cargo.toml -- qr-is-derivative-only --self-test 2>&1 | tee -a /tmp/gate-out.log
+          exit "${PIPESTATUS[0]}"
       - name: QR is derivative only
-        run: cargo run --release --manifest-path xtask/gates/Cargo.toml -- qr-is-derivative-only
+        if: always() && steps.build.outcome == 'success'
+        run: |
+          cargo run --release --manifest-path xtask/gates/Cargo.toml -- qr-is-derivative-only 2>&1 | tee -a /tmp/gate-out.log
+          exit "${PIPESTATUS[0]}"
       - name: Three is recipe only canary
-        run: cargo run --release --manifest-path xtask/gates/Cargo.toml -- three-is-recipe-only --self-test
+        if: always() && steps.build.outcome == 'success'
+        run: |
+          cargo run --release --manifest-path xtask/gates/Cargo.toml -- three-is-recipe-only --self-test 2>&1 | tee -a /tmp/gate-out.log
+          exit "${PIPESTATUS[0]}"
       - name: Three is recipe only
-        run: cargo run --release --manifest-path xtask/gates/Cargo.toml -- three-is-recipe-only
+        if: always() && steps.build.outcome == 'success'
+        run: |
+          cargo run --release --manifest-path xtask/gates/Cargo.toml -- three-is-recipe-only 2>&1 | tee -a /tmp/gate-out.log
+          exit "${PIPESTATUS[0]}"
       # For a described object the recipe is the ONLY copy. An edit that changes the
       # generator does not produce a wrong image, it produces an object that can no longer be produced at all:
       # the id stops verifying and there are no bytes on disk to fall back to. Applied to a value
@@ -274,47 +305,95 @@ jobs:
       # that had already left the scale, it discards both extreme colours
       # and drew flat black, hashing it consistently.
       - name: Zero-storage vector canary
-        run: cargo run --release --manifest-path xtask/gates/Cargo.toml -- zero-storage-bytes-are-frozen --self-test
+        if: always() && steps.build.outcome == 'success'
+        run: |
+          cargo run --release --manifest-path xtask/gates/Cargo.toml -- zero-storage-bytes-are-frozen --self-test 2>&1 | tee -a /tmp/gate-out.log
+          exit "${PIPESTATUS[0]}"
       - name: Generated bytes are bound to a frozen vector
-        run: cargo run --release --manifest-path xtask/gates/Cargo.toml -- zero-storage-bytes-are-frozen
+        if: always() && steps.build.outcome == 'success'
+        run: |
+          cargo run --release --manifest-path xtask/gates/Cargo.toml -- zero-storage-bytes-are-frozen 2>&1 | tee -a /tmp/gate-out.log
+          exit "${PIPESTATUS[0]}"
       - name: Unreachable gate canary
-        run: cargo run --release --manifest-path xtask/gates/Cargo.toml -- guards-are-reachable --self-test
+        if: always() && steps.build.outcome == 'success'
+        run: |
+          cargo run --release --manifest-path xtask/gates/Cargo.toml -- guards-are-reachable --self-test 2>&1 | tee -a /tmp/gate-out.log
+          exit "${PIPESTATUS[0]}"
       - name: Unreachable gate count did not grow
-        run: cargo run --release --manifest-path xtask/gates/Cargo.toml -- guards-are-reachable
+        if: always() && steps.build.outcome == 'success'
+        run: |
+          cargo run --release --manifest-path xtask/gates/Cargo.toml -- guards-are-reachable 2>&1 | tee -a /tmp/gate-out.log
+          exit "${PIPESTATUS[0]}"
       # `guards-are-reachable` covers the refusal-shaped subset. The rest of the
       # public surface had no ratchet at all: docs/AUDIT-DEAD-PUB-API-2026-09-10.md
       # measured what that costs and asked for this file, and a gate added here is
       # worthless if nothing runs it, which is the failure the comment above this
       # block was written about.
       - name: Dead public API canary
-        run: cargo run --release --manifest-path xtask/gates/Cargo.toml -- dead-public-api-is-ratcheted --self-test
+        if: always() && steps.build.outcome == 'success'
+        run: |
+          cargo run --release --manifest-path xtask/gates/Cargo.toml -- dead-public-api-is-ratcheted --self-test 2>&1 | tee -a /tmp/gate-out.log
+          exit "${PIPESTATUS[0]}"
       - name: Dead public API did not grow
-        run: cargo run --release --manifest-path xtask/gates/Cargo.toml -- dead-public-api-is-ratcheted
+        if: always() && steps.build.outcome == 'success'
+        run: |
+          cargo run --release --manifest-path xtask/gates/Cargo.toml -- dead-public-api-is-ratcheted 2>&1 | tee -a /tmp/gate-out.log
+          exit "${PIPESTATUS[0]}"
       - name: Self-source-reading test canary
-        run: cargo run --release --manifest-path xtask/gates/Cargo.toml -- source-reading-tests-are-narrowed --self-test
+        if: always() && steps.build.outcome == 'success'
+        run: |
+          cargo run --release --manifest-path xtask/gates/Cargo.toml -- source-reading-tests-are-narrowed --self-test 2>&1 | tee -a /tmp/gate-out.log
+          exit "${PIPESTATUS[0]}"
       - name: Self-source-reading tests are narrowed
-        run: cargo run --release --manifest-path xtask/gates/Cargo.toml -- source-reading-tests-are-narrowed
+        if: always() && steps.build.outcome == 'success'
+        run: |
+          cargo run --release --manifest-path xtask/gates/Cargo.toml -- source-reading-tests-are-narrowed 2>&1 | tee -a /tmp/gate-out.log
+          exit "${PIPESTATUS[0]}"
       - name: Conflict marker canary
-        run: cargo run --release --manifest-path xtask/gates/Cargo.toml -- no-conflict-markers --self-test
+        if: always() && steps.build.outcome == 'success'
+        run: |
+          cargo run --release --manifest-path xtask/gates/Cargo.toml -- no-conflict-markers --self-test 2>&1 | tee -a /tmp/gate-out.log
+          exit "${PIPESTATUS[0]}"
       - name: No conflict markers in the tree
-        run: cargo run --release --manifest-path xtask/gates/Cargo.toml -- no-conflict-markers
+        if: always() && steps.build.outcome == 'success'
+        run: |
+          cargo run --release --manifest-path xtask/gates/Cargo.toml -- no-conflict-markers 2>&1 | tee -a /tmp/gate-out.log
+          exit "${PIPESTATUS[0]}"
       # The gate existed for weeks as a file: declared in no module, invoked in
       # no list, named in no workflow. `no-orphan-source-files` cannot see it
       # (its SCAN_ROOTS are src/budzero/wallet-core) and `gates-are-wired` only
       # walks scripts that already belong to a list. A protection that is not
       # compiled is not a protection.
       - name: Researched-product naming canary
-        run: cargo run --release --manifest-path xtask/gates/Cargo.toml -- no-upstream-brands --self-test
+        if: always() && steps.build.outcome == 'success'
+        run: |
+          cargo run --release --manifest-path xtask/gates/Cargo.toml -- no-upstream-brands --self-test 2>&1 | tee -a /tmp/gate-out.log
+          exit "${PIPESTATUS[0]}"
       - name: No researched product is named in the tree
-        run: cargo run --release --manifest-path xtask/gates/Cargo.toml -- no-upstream-brands
+        if: always() && steps.build.outcome == 'success'
+        run: |
+          cargo run --release --manifest-path xtask/gates/Cargo.toml -- no-upstream-brands 2>&1 | tee -a /tmp/gate-out.log
+          exit "${PIPESTATUS[0]}"
       - name: Repair trigger canary
-        run: cargo run --release --manifest-path xtask/gates/Cargo.toml -- repair-fires-on-loss --self-test
+        if: always() && steps.build.outcome == 'success'
+        run: |
+          cargo run --release --manifest-path xtask/gates/Cargo.toml -- repair-fires-on-loss --self-test 2>&1 | tee -a /tmp/gate-out.log
+          exit "${PIPESTATUS[0]}"
       - name: Repair fires on loss
-        run: cargo run --release --manifest-path xtask/gates/Cargo.toml -- repair-fires-on-loss
+        if: always() && steps.build.outcome == 'success'
+        run: |
+          cargo run --release --manifest-path xtask/gates/Cargo.toml -- repair-fires-on-loss 2>&1 | tee -a /tmp/gate-out.log
+          exit "${PIPESTATUS[0]}"
       - name: AI inference layer detection canary
-        run: cargo run --release --manifest-path xtask/gates/Cargo.toml -- ai-inference-reads-but-does-not-generate --self-test
+        if: always() && steps.build.outcome == 'success'
+        run: |
+          cargo run --release --manifest-path xtask/gates/Cargo.toml -- ai-inference-reads-but-does-not-generate --self-test 2>&1 | tee -a /tmp/gate-out.log
+          exit "${PIPESTATUS[0]}"
       - name: AI inference layer reads, does not produce
-        run: cargo run --release --manifest-path xtask/gates/Cargo.toml -- ai-inference-reads-but-does-not-generate
+        if: always() && steps.build.outcome == 'success'
+        run: |
+          cargo run --release --manifest-path xtask/gates/Cargo.toml -- ai-inference-reads-but-does-not-generate 2>&1 | tee -a /tmp/gate-out.log
+          exit "${PIPESTATUS[0]}"
       # crates/ai-inference is a separate workspace: not a member of the root Cargo.toml, so
       # `cargo clippy --all-targets` never reached it. Only the gate above,
       # which reads the source text, existed. Result: the tree stopped compiling
@@ -322,6 +401,7 @@ jobs:
       # `ConnState: Default` was missing, one test was passing `&[]`). The build
       # and the tests were wired in here so it cannot break silently again.
       - name: AI inference layer builds and its tests pass
+        if: always() && steps.build.outcome == 'success'
         run: |
           cargo clippy --manifest-path crates/ai-inference/Cargo.toml --all-targets -- -D warnings
           cargo test --manifest-path crates/ai-inference/Cargo.toml
@@ -344,8 +424,10 @@ jobs:
       # telling a real change from noise gets harder. The tree was fixed once
       # (`2c95cfe2`); this step prevents it drifting back.
       - name: B.U.D. core is formatted
+        if: always() && steps.build.outcome == 'success'
         run: cargo fmt --manifest-path bud/Cargo.toml --all -- --check
       - name: B.U.D. core builds and its tests pass
+        if: always() && steps.build.outcome == 'success'
         run: |
           cargo clippy --manifest-path bud/Cargo.toml --all-targets -- -D warnings
           cargo clippy --manifest-path bud/Cargo.toml --features bud3 --all-targets -- -D warnings
@@ -358,13 +440,25 @@ jobs:
       # the number is frozen: the existing 66 files may keep their debt, a file not on
       # the list may NOT add a new index.
       - name: Indexing canary
-        run: cargo run --release --manifest-path xtask/gates/Cargo.toml -- indexing-is-not-new --self-test
+        if: always() && steps.build.outcome == 'success'
+        run: |
+          cargo run --release --manifest-path xtask/gates/Cargo.toml -- indexing-is-not-new --self-test 2>&1 | tee -a /tmp/gate-out.log
+          exit "${PIPESTATUS[0]}"
       - name: A new file adds no panicking index
-        run: cargo run --release --manifest-path xtask/gates/Cargo.toml -- indexing-is-not-new
+        if: always() && steps.build.outcome == 'success'
+        run: |
+          cargo run --release --manifest-path xtask/gates/Cargo.toml -- indexing-is-not-new 2>&1 | tee -a /tmp/gate-out.log
+          exit "${PIPESTATUS[0]}"
       - name: Derived content canary
-        run: cargo run --release --manifest-path xtask/gates/Cargo.toml -- derived-content-stays-byte-exact --self-test
+        if: always() && steps.build.outcome == 'success'
+        run: |
+          cargo run --release --manifest-path xtask/gates/Cargo.toml -- derived-content-stays-byte-exact --self-test 2>&1 | tee -a /tmp/gate-out.log
+          exit "${PIPESTATUS[0]}"
       - name: Derived content is byte-exact
-        run: cargo run --release --manifest-path xtask/gates/Cargo.toml -- derived-content-stays-byte-exact
+        if: always() && steps.build.outcome == 'success'
+        run: |
+          cargo run --release --manifest-path xtask/gates/Cargo.toml -- derived-content-stays-byte-exact 2>&1 | tee -a /tmp/gate-out.log
+          exit "${PIPESTATUS[0]}"
       # A derived object holds no bytes of its own: reading it means fetching the master and
       # recomputing. When the master goes, storage does not shrink, the derivation is gone
       # happens, and happens silently: the derivation manifest is still there, still looks
@@ -379,17 +473,35 @@ jobs:
       # passed, because the tests compared thresholds against each other and both sides
       # had shifted together. It was caught by recomputing outside Rust.
       - name: Threshold ratios single-scale canary
-        run: cargo run --release --manifest-path xtask/gates/Cargo.toml -- threshold-rates-share-one-scale --self-test
+        if: always() && steps.build.outcome == 'success'
+        run: |
+          cargo run --release --manifest-path xtask/gates/Cargo.toml -- threshold-rates-share-one-scale --self-test 2>&1 | tee -a /tmp/gate-out.log
+          exit "${PIPESTATUS[0]}"
       - name: Threshold ratios on a single scale
-        run: cargo run --release --manifest-path xtask/gates/Cargo.toml -- threshold-rates-share-one-scale
+        if: always() && steps.build.outcome == 'success'
+        run: |
+          cargo run --release --manifest-path xtask/gates/Cargo.toml -- threshold-rates-share-one-scale 2>&1 | tee -a /tmp/gate-out.log
+          exit "${PIPESTATUS[0]}"
       - name: Derivation durability canary
-        run: cargo run --release --manifest-path xtask/gates/Cargo.toml -- a-derivation-cannot-outlive-its-master --self-test
+        if: always() && steps.build.outcome == 'success'
+        run: |
+          cargo run --release --manifest-path xtask/gates/Cargo.toml -- a-derivation-cannot-outlive-its-master --self-test 2>&1 | tee -a /tmp/gate-out.log
+          exit "${PIPESTATUS[0]}"
       - name: A derivative cannot outlive its master
-        run: cargo run --release --manifest-path xtask/gates/Cargo.toml -- a-derivation-cannot-outlive-its-master
+        if: always() && steps.build.outcome == 'success'
+        run: |
+          cargo run --release --manifest-path xtask/gates/Cargo.toml -- a-derivation-cannot-outlive-its-master 2>&1 | tee -a /tmp/gate-out.log
+          exit "${PIPESTATUS[0]}"
       - name: Claim unit canary
-        run: cargo run --release --manifest-path xtask/gates/Cargo.toml -- reduction-claims-state-both-units --self-test
+        if: always() && steps.build.outcome == 'success'
+        run: |
+          cargo run --release --manifest-path xtask/gates/Cargo.toml -- reduction-claims-state-both-units --self-test 2>&1 | tee -a /tmp/gate-out.log
+          exit "${PIPESTATUS[0]}"
       - name: The claim states both units
-        run: cargo run --release --manifest-path xtask/gates/Cargo.toml -- reduction-claims-state-both-units
+        if: always() && steps.build.outcome == 'success'
+        run: |
+          cargo run --release --manifest-path xtask/gates/Cargo.toml -- reduction-claims-state-both-units 2>&1 | tee -a /tmp/gate-out.log
+          exit "${PIPESTATUS[0]}"
 
 
       # A canary prints its reason to stderr, which belongs to the log host. On
@@ -397,6 +509,33 @@ jobs:
       # annotation: "a canary must fail for exactly one reason" is worthless if the
       # reason is unreadable, and the count line last so an empty surface cannot be
       # mistaken for a clean one.
+      # One red gate used to skip every gate step after it, which is the disease this
+      # whole job was created to cure - it had simply inherited the shape. So every
+      # gate step runs on `always()` (guarded by the build, because a failed build
+      # makes 36 identical failures a wall of noise), each one appends its own output
+      # to a shared file, and this step reads that file: the full list of red gates as
+      # annotations, then the job's verdict. It exits 1 when the list is non-empty so
+      # the job cannot go green, and it says so out loud when the file is empty but the
+      # job is red anyway - a compound step (the two that build and test crates) can
+      # fail without printing `FAIL [gate]`, and silence here would be a masked
+      # failure with a nicer name.
+      - name: Tally (every red gate, annotated)
+        if: always()
+        run: |
+          set +o pipefail
+          log=/tmp/gate-out.log
+          [ -f "$log" ] || : > "$log"
+          # no -n: an annotation that starts with a line number of a scratch file is
+          # noise, and the gate's own message already names the gate and the reason.
+          grep "^FAIL \[" "$log" | tail -n 40 | sed -e 's/^/::error::/'
+          n=$(grep -c "^FAIL \[" "$log")
+          if [ "$n" -eq 0 ]; then
+            echo "gate tally: no FAIL headlines recorded; if this job is red the cause is the step that owns it"
+            exit 0
+          fi
+          printf '::error::gate tally: %s red gate(s) - every step ran, this is the whole list\n' "$n"
+          exit 1
+
       - name: Canary surface (annotations)
         if: failure()
         run: |
