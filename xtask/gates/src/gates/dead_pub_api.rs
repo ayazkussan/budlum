@@ -44,6 +44,7 @@
 use std::collections::BTreeMap;
 use std::collections::BTreeSet;
 use std::fmt::Write as _;
+use std::ffi::OsStr;
 use std::path::Path;
 
 use super::guards_reachable::strip_test_mods;
@@ -179,9 +180,21 @@ fn corpus(root: &Path) -> Vec<String> {
     out.into_iter().collect()
 }
 
+/// Is this path a `.rs` file?
+///
+/// Written on the extension rather than as `ends_with(".rs")`: the string form
+/// matches a file *named* `.rs`, and it is the shape clippy's
+/// `case_sensitive_file_extension_comparisons` exists to point at. The comparison
+/// stays case-sensitive on purpose - the tree's files are all lowercase, and a
+/// gate that quietly started accepting `.RS` would be a second, undocumented
+/// change to what the audit counts.
+fn has_rs_extension(rel: &str) -> bool {
+    Path::new(rel).extension() == Some(OsStr::new("rs"))
+}
+
 fn is_candidate_file(rel: &str) -> bool {
     rel.starts_with("src/")
-        && rel.ends_with(".rs")
+        && has_rs_extension(rel)
         && !rel.ends_with("_tests.rs")
         && !rel.contains("/tests/")
 }
@@ -204,7 +217,7 @@ fn scan(root: &Path) -> Surface {
         let Ok(text) = std::fs::read_to_string(root.join(&rel)) else {
             continue;
         };
-        let scan_text = if rel.ends_with(".rs") {
+        let scan_text = if has_rs_extension(&rel) {
             strip_test_mods(&text)
         } else {
             text.clone()
@@ -280,9 +293,8 @@ fn read_baseline(root: &Path) -> Result<BTreeSet<String>, String> {
         }
         if !entry.contains(':') {
             return Err(format!(
-                "{}: `{entry}` is not `path:name` - a baseline line the gate cannot match \
-                 is a line that silently never matches",
-                BASELINE_FILE
+                "{BASELINE_FILE}: `{entry}` is not `path:name`; a baseline line the gate \
+                 cannot match is a line that silently never matches"
             ));
         }
         baseline.insert(entry.to_string());
