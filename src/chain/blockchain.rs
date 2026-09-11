@@ -1860,6 +1860,20 @@ impl Blockchain {
             } else {
                 Some(self.state.ai_registry.state_root())
             },
+            // The identity anchor on the same discipline: the registry's
+            // root is claimed only when the registry has state, and it is
+            // the registry's own fold (`identity.rs`), not a re-derivation
+            // here. Absent and zero must not share a digest: an empty
+            // registry says "nothing to check against", and folding it as
+            // Some(zeros) would wear the same header as a registry whose
+            // state happened to hash to zero. The presence tag in the V5
+            // fold keeps those two headers apart - the same lesson the
+            // account-state root learned under `identity_v1`.
+            identity_root: if self.state.identity.is_empty() {
+                None
+            } else {
+                Some(self.state.identity.root())
+            },
         }
     }
 

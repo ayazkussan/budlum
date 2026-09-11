@@ -538,6 +538,15 @@ impl RpcServer {
             // B.U.D.: storage_root anchoring - null when no
             // Storage proofs in this block, 0x-prefixed hex when present.
             "storageRoot": h.storage_root.map(Self::bytes32_to_0x),
+            // The two roots the fold gained after this list was written.
+            // A view that hides a field the consensus hash commits is a
+            // view callers reason on with half the truth; the header is
+            // the source and this function enumerates it. `aiRoot` was
+            // missing since the field itself landed - measured, not
+            // remembered - and `identityRoot` is not allowed to inherit
+            // that drift.
+            "aiRoot": h.ai_root.map(Self::bytes32_to_0x),
+            "identityRoot": h.identity_root.map(Self::bytes32_to_0x),
         })
     }
 
