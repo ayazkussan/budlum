@@ -1445,3 +1445,39 @@ only on the remote - and the push raced it. Recovery was the standing habit: fet
 restored it), cherry-pick the one fresh commit, push. Net state: `9673840`, nothing
 unpushed, working tree clean. The commit-title-repo convention from this turn's answers
 exists precisely so those recovery moments read unambiguously from a log.
+
+## 30. The twelve questions answered, and policy's first patch
+
+The first six questions were skipped; their defaults are stated so they stay reversible:
+the red backlog keeps cheapest-first order by what the unmasked jobs report, the badge
+stays frozen at 2896 while the suite is red and the gate refuses, the reachability checker
+stays a std-only script plus its two CI steps, and Semver/Dependency Review stay
+report-only.
+
+The six that were answered are in §29; their first product is mirror patch 0022. It is
+worth dwelling on one detail, because it is the whole point of building a ratchet: the
+deletion commit had to shrink `gates/dead-pub-api.baseline` from 53 to 51 *inside itself*.
+The stale-entry rule - a baseline line that stops being dead fails - never had to fire on
+real work before; every prior proof was a synthetic canary. The first live trip came from
+the policy the user picked, delete-biased with discretion, and it did what it was
+designed to do: forbid deleting code and leaving the ledger claiming the debt is still
+there. The same reflex moved the README's test count 327 to 325 by recount, not
+decrement.
+
+What 0022 deleted, and why the phrasing matters: `tools/chain`'s ceilings flow was not
+demonstrably unused by everything - it was unused by anything the tree can show. The
+module header promises "a request string in, a response string out" for reading
+*outcomes*, and ceilings negotiation sits outside even that. When the only other mention
+of a function in the repo is the gate that counts it, the function is a wish. Deleting it
+also fixed a symmetry the allow-list had lost: `bud_aiGetCeilings` was permitted by
+`is_allowed_method` with no parser behind it, and the surface test now asserts the method
+set equals the parser set in both directions - the removal is pinned, so the next person
+who re-adds one half has to re-add the other.
+
+Remaining order, per the answer "sırayla hepsi": esik's 10 unreached entries next - they
+are mostly accessors and builders of a public ledger type, so the honest question is not
+"trim 10 methods" but "who should be reading a feature-activation ledger at all", which
+is a wiring question with the same three-way evidence rule; then the tools remainder
+(operator's 4, lib's 1, chain's surviving 2), then olcek's 6. Every patch: caller grep
+across all file types, gate scan, am on a clean clone, README claims recounted in-patch,
+"not compiled" labeled.
