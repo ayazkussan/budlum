@@ -99,6 +99,8 @@ pub mod settlement_prod;
 pub mod tokenomics;
 pub mod tokenomics_proptest;
 #[cfg(test)]
+pub mod vault_tx_door;
+#[cfg(test)]
 pub mod zkvm;
 // The F4 seal (2026-07-17): the SocialFi boost 4 percent B.U.D. operator
 // distribution, remainder determinism, and the operator-less burn fallback

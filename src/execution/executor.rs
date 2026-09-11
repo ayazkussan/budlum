@@ -754,6 +754,29 @@ impl Executor {
                 let (id, to): (u64, Address) = bincode::deserialize(&tx.data)
                     .map_err(|e| BudlumError::validation("nft_invalid_data", e.to_string()))?;
 
+                // Folder-lock rule: a membership is the token owner's claim
+                // about their own asset, and a transfer would turn it into
+                // a claim about somebody else's. Extract first, transfer
+                // after - one sentence a screen can render. A folder that
+                // still holds members cannot move either: the list does not
+                // belong to whoever holds the container's key.
+                if let Some(parent) = state.vault.referenced_by(id) {
+                    return Err(BudlumError::validation(
+                        "vault_member_locked",
+                        format!(
+                            "token {id} is listed in folder {parent}; extract it before transferring"
+                        ),
+                    ));
+                }
+                if state.vault.is_folder(id)
+                    && state.vault.open(id).is_some_and(|m| !m.is_empty())
+                {
+                    return Err(BudlumError::validation(
+                        "vault_folder_not_empty",
+                        format!("folder {id} still holds members; close it before transferring"),
+                    ));
+                }
+
                 state
                     .nft_registry
                     .transfer(id, &tx.from, to)
@@ -768,6 +791,29 @@ impl Executor {
             TransactionType::NftBurn => {
                 let id: u64 = bincode::deserialize(&tx.data)
                     .map_err(|e| BudlumError::validation("nft_invalid_data", e.to_string()))?;
+
+                // The same lock burns enforce as transfers, for the same
+                // reason seen from the other side: a burned token listed in
+                // a folder is a broken link on that folder's screen, and a
+                // folder cannot be reduced to nothing while it names other
+                // people's ids - `close_folder`'s emptiness rule, applied to
+                // the burn door.
+                if let Some(parent) = state.vault.referenced_by(id) {
+                    return Err(BudlumError::validation(
+                        "vault_member_locked",
+                        format!(
+                            "token {id} is listed in folder {parent}; extract it before burning"
+                        ),
+                    ));
+                }
+                if state.vault.is_folder(id)
+                    && state.vault.open(id).is_some_and(|m| !m.is_empty())
+                {
+                    return Err(BudlumError::validation(
+                        "vault_folder_not_empty",
+                        format!("folder {id} still holds members; close it before burning"),
+                    ));
+                }
 
                 let cid = state
                     .nft_registry
@@ -2333,6 +2379,31 @@ impl Executor {
                     tx.chain_id,
                 )
                 .map_err(|e| BudlumError::validation("identity_tx_failed", e.to_string()))?;
+                let sender = state.get_or_create(&tx.from);
+                sender.balance = sender.balance.checked_sub(tx.fee).ok_or_else(|| {
+                    BudlumError::validation("balance_underflow", "balance underflow")
+                })?;
+                sender.nonce = sender.nonce.saturating_add(1);
+            }
+            TransactionType::Vault(vault_tx) => {
+                // One arm delegating to the tested body
+                // (`socialfi::execute_vault_tx`): every ownership reading
+                // and every structural refusal lives there. The frame owes
+                // the same thing the identity door owes - folders move
+                // ids, not value:
+                if tx.amount != 0 {
+                    return Err(BudlumError::validation(
+                        "vault_amount_must_be_zero",
+                        "a vault transaction moves ids between folders; it cannot carry value",
+                    ));
+                }
+                crate::socialfi::execute_vault_tx(
+                    &mut state.vault,
+                    &state.nft_registry,
+                    &tx.from,
+                    vault_tx.clone(),
+                )
+                .map_err(|e| BudlumError::validation("vault_tx_failed", e.to_string()))?;
                 let sender = state.get_or_create(&tx.from);
                 sender.balance = sender.balance.checked_sub(tx.fee).ok_or_else(|| {
                     BudlumError::validation("balance_underflow", "balance underflow")

@@ -376,6 +376,12 @@ pub enum TransactionType {
     /// fabrication - the same refusal the domain-freeze path applies in
     /// `chain/blockchain.rs`, applied at the identity door.
     Identity(crate::registry::IdentityTx),
+    /// A folder mutation on the social-fi vault (`src/socialfi/vault.rs`).
+    ///
+    /// Ids only, like the identity door: no owner fields, no folder names -
+    /// what a folder is and what it may hold is `NftRegistry`'s and the
+    /// vault layer's own business, consulted at every operation.
+    Vault(crate::socialfi::VaultTx),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -1155,6 +1161,10 @@ impl Transaction {
             // transaction size, not by a per-approval price. Priced like the
             // registry arms beside it.
             TransactionType::Identity(_) => schedule.contract_call_gas * 2,
+            // Same family of registry mutations: the vault ops read
+            // `NftRegistry` beside their own map, which is exactly what the
+            // registry arms already price.
+            TransactionType::Vault(_) => schedule.contract_call_gas * 2,
         };
         let signature_gas = if self.signature.is_some() {
             schedule.gas_per_signature
@@ -1381,6 +1391,7 @@ fn transaction_type_tag(tx_type: &TransactionType) -> u8 {
         TransactionType::BudlumxyzAttestApp { .. } => 43,
         TransactionType::StateUpdate { .. } => 44,
         TransactionType::Identity(_) => 45,
+        TransactionType::Vault(_) => 46,
     }
 }
 fn encode_chain(chain: ExternalChain, out: &mut Vec<u8>) {
@@ -1425,6 +1436,40 @@ fn encode_message(message: &crate::cross_domain::message::CrossDomainMessage, ou
     encode_message_kind(&message.kind, out);
     put_u64(out, message.expiry_height);
 }
+/// Canonical preimage of a vault transaction. Fixed-width ids throughout -
+/// there is nothing variable-length to length-prefix here, and the
+/// operation tag is the only separation the shape needs (an id is an id in
+/// every arm, so `AddMember{1,2}` and `ExtractMember{1,2}` must not be able
+/// to sign for each other; the tag byte is what keeps them apart).
+fn encode_vault_tx(tx: &crate::socialfi::VaultTx, out: &mut Vec<u8>) {
+    match tx {
+        crate::socialfi::VaultTx::RegisterFolder { folder } => {
+            put_u8(out, 0);
+            put_u64(out, *folder);
+        }
+        crate::socialfi::VaultTx::CloseFolder { folder } => {
+            put_u8(out, 1);
+            put_u64(out, *folder);
+        }
+        crate::socialfi::VaultTx::AddMember { folder, member } => {
+            put_u8(out, 2);
+            put_u64(out, *folder);
+            put_u64(out, *member);
+        }
+        crate::socialfi::VaultTx::ExtractMember { folder, member } => {
+            put_u8(out, 3);
+            put_u64(out, *folder);
+            put_u64(out, *member);
+        }
+        crate::socialfi::VaultTx::MoveMember { from, to, member } => {
+            put_u8(out, 4);
+            put_u64(out, *from);
+            put_u64(out, *to);
+            put_u64(out, *member);
+        }
+    }
+}
+
 /// Canonical preimage of an identity transaction. Every pub field of every
 /// carried struct is written explicitly - nothing is bincode-ed here: bincode
 /// is the wire format, and the signature preimage is the consensus commitment
@@ -1853,6 +1898,7 @@ fn encode_transaction_type_payload(tx_type: &TransactionType, out: &mut Vec<u8>)
             }
         }
         TransactionType::Identity(identity_tx) => encode_identity_tx(identity_tx, out),
+        TransactionType::Vault(vault_tx) => encode_vault_tx(vault_tx, out),
     }
 }
 
@@ -1988,6 +2034,46 @@ mod v29_signing_tests {
             })),
             "issue vs revoke is only the operation tag"
         );
+
+        // The vault door's same-shape pair: AddMember and ExtractMember
+        // carry identical id tuples with opposite meanings, and a missing
+        // tag here would let a signed "put it in" be replayed as a
+        // "take it out".
+        use crate::socialfi::VaultTx;
+        let add = hash_of(TransactionType::Vault(VaultTx::AddMember {
+            folder: 1,
+            member: 2,
+        }));
+        let extract = hash_of(TransactionType::Vault(VaultTx::ExtractMember {
+            folder: 1,
+            member: 2,
+        }));
+        let close = hash_of(TransactionType::Vault(VaultTx::CloseFolder { folder: 1 }));
+        assert_ne!(add, extract, "add vs extract is only the operation tag");
+        assert_ne!(add, close, "folder-only ops must not alias membership ops");
+        // Field coverage: every id, in every position.
+        let add_moved = hash_of(TransactionType::Vault(VaultTx::AddMember {
+            folder: 1,
+            member: 3,
+        }));
+        assert_ne!(add, add_moved, "member must reach the preimage");
+        let move_ = hash_of(TransactionType::Vault(VaultTx::MoveMember {
+            from: 1,
+            to: 2,
+            member: 3,
+        }));
+        let move_other_target = hash_of(TransactionType::Vault(VaultTx::MoveMember {
+            from: 1,
+            to: 9,
+            member: 3,
+        }));
+        assert_ne!(move_, move_other_target, "move destination must reach it");
+        let move_other_source = hash_of(TransactionType::Vault(VaultTx::MoveMember {
+            from: 8,
+            to: 2,
+            member: 3,
+        }));
+        assert_ne!(move_, move_other_source, "move source must reach it");
 
         let recover = |subject: Address,
                        new_key: [u8; 32],
