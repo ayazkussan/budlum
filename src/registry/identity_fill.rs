@@ -476,9 +476,15 @@ mod tests {
             salt: [2; 32],
         };
         let err = fill_template("A {{one}} B {{two}}", &[d("one", "1")]).unwrap_err();
-        assert!(matches!(err, FillError::MissingSlot { slot } if slot == "two"), "{err}");
+        assert!(
+            matches!(&err, FillError::MissingSlot { slot } if *slot == "two"),
+            "{err}"
+        );
         let err = fill_template("A {{one}}", &[d("one", "1"), d("extra", "x")]).unwrap_err();
-        assert!(matches!(err, FillError::UnknownSlot { slot } if slot == "extra"), "{err}");
+        assert!(
+            matches!(&err, FillError::UnknownSlot { slot } if *slot == "extra"),
+            "{err}"
+        );
         let err = fill_template("A {{one}}", &[d("one", "sneaky {{two}}")]).unwrap_err();
         assert!(matches!(err, FillError::ValueCarriesBraces { .. }), "{err}");
         let filled = fill_template(

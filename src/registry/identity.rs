@@ -1069,7 +1069,7 @@ mod tests {
         )
     }
 
-    fn credential() -> (CredentialCommitment, Vec<[u8; 32]>) {
+    fn credential_fixture() -> (CredentialCommitment, Vec<[u8; 32]>) {
         let (f1, _s1) = field("legal_name", 1, 10);
         let (f2, _s2) = field("birth_date", 2, 20);
         let (f3, _s3) = field("residency", 3, 30);
@@ -1120,7 +1120,7 @@ mod tests {
 
     #[test]
     fn a_field_discloses_alone_and_only_alone() {
-        let (credential, salts) = credential();
+        let (credential, salts) = credential_fixture();
         let leaves = credential.field_leaves();
         let root = credential.root();
         for (index, salt) in salts.iter().enumerate() {
@@ -1200,7 +1200,7 @@ mod tests {
         registry
             .apply(&ConsensusKind::PoA, IdentityOp::Register { record: issuer }, 100)
             .unwrap();
-        let (credential, _) = credential();
+        let (credential, _) = credential_fixture();
         let id = credential_id(&credential);
         registry
             .apply(&ConsensusKind::PoA, IdentityOp::Issue { credential: credential.clone() }, 100)
@@ -1254,7 +1254,7 @@ mod tests {
 
     #[test]
     fn a_root_reads_back_its_own_fields_or_dies() {
-        let (mut credential, _) = credential();
+        let (mut credential, _) = credential_fixture();
         let root = credential.root();
         credential.fields[1].commitment = hash_fields_bytes(&[b"edited-after-sealing"]);
         assert_ne!(credential.root(), root, "editing a field must move the root");
@@ -1326,7 +1326,7 @@ mod tests {
         let after_register = with_record.root();
         assert_ne!(base, after_register);
 
-        let (credential, _) = credential();
+        let (credential, _) = credential_fixture();
         with_record
             .apply(&ConsensusKind::PoA, IdentityOp::Register { record: issuer_record() }, 100)
             .unwrap();
@@ -1348,7 +1348,7 @@ mod tests {
             .unwrap();
         twin.apply(&ConsensusKind::PoA, IdentityOp::Register { record: issuer_record() }, 100)
             .unwrap();
-        let (fresh, _) = credential();
+        let (fresh, _) = credential_fixture();
         twin.apply(&ConsensusKind::PoA, IdentityOp::Issue { credential: fresh.clone() }, 100)
             .unwrap();
         twin.apply(&ConsensusKind::PoA, IdentityOp::Revoke { credential: fresh }, 150)
@@ -1358,7 +1358,7 @@ mod tests {
 
     #[test]
     fn digests_bind_everything_a_signature_must_not_be_moved_across() {
-        let (credential, _) = credential();
+        let (credential, _) = credential_fixture();
         let chain = 42u64;
         let digest = credential_issue_digest(&credential, chain);
         // Another chain: another digest. A signature is never a portable
@@ -1440,9 +1440,14 @@ mod tests {
             1,
         )
         .unwrap();
+        // `record` moves into the transaction, so the sender read happens
+        // one line earlier: `Address` is Copy, and the same-call
+        // borrow + move is what the borrow checker refuses (E0505) - a
+        // test that will not compile is a test that checks nothing.
+        let subject_addr = record.subject;
         execute_identity_tx(
             &mut registry,
-            &record.subject,
+            &subject_addr,
             IdentityTx::Register { record },
             &ConsensusKind::PoA,
             100,
@@ -1450,7 +1455,7 @@ mod tests {
         )
         .unwrap_err(); // already exists - the registry's answer survives the sender rule
         // Issue by a non-issuer refuses; by the issuer passes.
-        let (credential, _) = credential();
+        let (credential, _) = credential_fixture();
         let err = execute_identity_tx(
             &mut registry,
             &other,
@@ -1486,9 +1491,12 @@ mod tests {
             ),
             Err(IdentityError::NotPoaDomain { .. })
         ));
+        // Same hoist as the record above: the id is read before the
+        // credential moves out of the binding.
+        let issuer_addr = credential.issuer;
         execute_identity_tx(
             &mut registry,
-            &credential.issuer,
+            &issuer_addr,
             IdentityTx::Revoke { credential },
             &ConsensusKind::PoA,
             150,

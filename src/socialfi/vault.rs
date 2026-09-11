@@ -549,7 +549,7 @@ mod tests {
 
     #[test]
     fn naming_someone_elses_token_is_refused_before_any_registry_read() {
-        let (mut v, mut nfts, alice, folder, a, _b) = door_owners();
+        let (mut v, mut nfts, alice, folder, _a, _b) = door_owners();
         let mallory = Address::from([9u8; 32]);
         let stolen = minted(&mut nfts, &mallory, "mallory-token");
         execute_vault_tx(&mut v, &nfts, &alice, VaultTx::RegisterFolder { folder }).unwrap();
@@ -565,14 +565,15 @@ mod tests {
         .expect_err("a folder cannot be stocked from a stranger's shelf");
         assert!(matches!(err, VaultError::NotOwner { id, holder } if id == stolen && holder == mallory));
         assert!(v.open(folder).is_some_and(|m| m.is_empty()), "refused before the write");
-        // and minting a folder over somebody else's token is the same refusal
-        // at the very first step: the door never trusts "I registered it".
+        // and the registry's own answers survive the door unchanged:
+        // re-registering a live folder refuses, minting a folder over
+        // somebody else's token dies at the ownership step first.
         assert!(matches!(
             execute_vault_tx(
                 &mut v,
                 &nfts,
                 &alice,
-                VaultTx::RegisterFolder { folder: a }
+                VaultTx::RegisterFolder { folder }
             ),
             Err(VaultError::AlreadyFolder(_))
         ));
