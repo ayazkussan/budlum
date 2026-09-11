@@ -2,7 +2,7 @@
 
 ## Durum
 
-Bu doküman mimariyi **nihai** hale getirmez. Açık sorular §33'te (DENETIM raporu) ve yanıtlandıkça buraya işlenecek.
+Uygulama sürüyor - kodda olan ve sırası gelen, EK'te ve DENETIM §33-§35'te ölçümüyle yazılı. Nihai değil; kalan iki açık uygulama kararı (executor kolunun proto dilimi, `identity_root` sahasının aktivasyon epoch'u) kod yazılırken burada güncellenecek.
 
 ## Amaç
 
