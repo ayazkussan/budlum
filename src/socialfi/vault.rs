@@ -30,6 +30,7 @@
 //! [`VaultRegistry::open`] returns ids in registration order and why the
 //! root counts members in the same order [`Self::root`] hashes.
 
+use crate::core::address::Address;
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -68,6 +69,16 @@ pub enum VaultError {
     /// whose shortcut still points at the folder being deleted.
     #[error("folder {folder} is still held by folder {parent}; extract it there first")]
     Referenced { folder: u64, parent: u64 },
+    /// An id that names no minted token. The vault layer stays
+    /// ownership-blind by design, but the transaction door is not, and a
+    /// folder listing of unregistered ids is a screen full of broken links.
+    #[error("token {0} is not minted; a folder lists registrations, not ideas")]
+    UnknownToken(u64),
+    /// The sender does not hold the named token. Folder membership is a
+    /// statement about one's own assets; making it about someone else's
+    /// would be the caller declaring an authority it does not have.
+    #[error("token {id} belongs to {}; the sender named it as if it were theirs", .holder.to_hex())]
+    NotOwner { id: u64, holder: Address },
 }
 
 /// The folder-to-membership map. Pure state, no clock, no ownership: those
@@ -268,6 +279,100 @@ impl VaultRegistry {
     }
 }
 
+/// The transaction payload: every mutation the folder layer accepts, in the
+/// exact shape the executor's single arm matches over - the identity door's
+/// structure, deliberately.
+///
+/// Ids only, never owners: `folder` and `member` fields would be trivial to
+/// fill with somebody else's holdings, so the door reads every owner from
+/// `NftRegistry` beside it - the same refusal the domain-freeze path
+/// applies to caller-declared authority. Checking at every operation (not
+/// once at registration) is what makes a transferred-out asset impossible
+/// to keep listed: ownership is the live question, and this layer has no
+/// copy of it that could go stale.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum VaultTx {
+    /// Claim a minted token as a folder. The claimer must hold the token:
+    /// a folder is an NFT first, and containers that name strangers'
+    /// registrations are the broken-links screen this family refuses.
+    RegisterFolder { folder: u64 },
+    /// Retire a folder. The same structural refusals the pure layer
+    /// enforces (`NonEmpty`, `Referenced`) survive untouched; this door
+    /// adds only "the sender holds the folder".
+    CloseFolder { folder: u64 },
+    AddMember { folder: u64, member: u64 },
+    ExtractMember { folder: u64, member: u64 },
+    MoveMember { from: u64, to: u64, member: u64 },
+}
+
+/// One check, kept out of every arm so it cannot be forgotten in one of
+/// them: a vault mutation may only name tokens the sender holds, and
+/// "holds" is what `NftRegistry` says - not what the payload claims, and
+/// not what was true when the folder was registered.
+fn require_owner(
+    nfts: &crate::socialfi::NftRegistry,
+    who: &Address,
+    id: u64,
+) -> Result<(), VaultError> {
+    let nft = nfts.get_nft(id).ok_or(VaultError::UnknownToken(id))?;
+    if &nft.owner == who {
+        Ok(())
+    } else {
+        Err(VaultError::NotOwner {
+            id,
+            holder: nft.owner,
+        })
+    }
+}
+
+/// The body the executor arm delegates to, one call per variant and
+/// nothing in between: every structural rule stays in
+/// [`VaultRegistry`]'s own methods (they are tested there), and the door
+/// contributes exactly the ownership reading those methods are blind to
+/// by design.
+///
+/// # Errors
+///
+/// [`VaultError::UnknownToken`] or [`VaultError::NotOwner`] from the door,
+/// then any refusal the underlying [`VaultRegistry`] operation returns.
+pub fn execute_vault_tx(
+    vault: &mut VaultRegistry,
+    nfts: &crate::socialfi::NftRegistry,
+    sender: &Address,
+    tx: VaultTx,
+) -> Result<(), VaultError> {
+    match tx {
+        VaultTx::RegisterFolder { folder } => {
+            require_owner(nfts, sender, folder)?;
+            vault.register_folder(folder)
+        }
+        VaultTx::CloseFolder { folder } => {
+            require_owner(nfts, sender, folder)?;
+            vault.close_folder(folder)
+        }
+        VaultTx::AddMember { folder, member } => {
+            require_owner(nfts, sender, folder)?;
+            require_owner(nfts, sender, member)?;
+            vault.add_member(folder, member)
+        }
+        VaultTx::ExtractMember { folder, member } => {
+            require_owner(nfts, sender, folder)?;
+            require_owner(nfts, sender, member)?;
+            vault.extract_member(folder, member)
+        }
+        // The variant's `from` field is the source folder, not the sender:
+        // bound as `parent` so the two never share a name and one operation
+        // reads as what it is - every one of the three ids must be the
+        // sender's to move anything between folders.
+        VaultTx::MoveMember { from: parent, to, member } => {
+            require_owner(nfts, sender, parent)?;
+            require_owner(nfts, sender, to)?;
+            require_owner(nfts, sender, member)?;
+            vault.move_member(parent, to, member)
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -361,4 +466,170 @@ mod tests {
         w.add_member(y, 11).unwrap();
         assert_eq!(w.root(), two);
     }
+
+    // - the transaction door: ids must be the sender's own, read from
+    //   NftRegistry, checked on every operation.
+
+    use crate::storage::content_id::ContentId;
+
+    fn minted(nfts: &mut crate::socialfi::NftRegistry, owner: &Address, tag: &str) -> u64 {
+        nfts.mint(*owner, ContentId::of(tag.as_bytes()), 0, None)
+            .expect("mint on a fresh registry")
+    }
+
+    fn door_owners() -> (
+        VaultRegistry,
+        crate::socialfi::NftRegistry,
+        Address,
+        u64,
+        u64,
+        u64,
+    ) {
+        let alice = Address::from([1u8; 32]);
+        let mut nfts = crate::socialfi::NftRegistry::new();
+        let folder = minted(&mut nfts, &alice, "alice-folder");
+        let a = minted(&mut nfts, &alice, "alice-a");
+        let b = minted(&mut nfts, &alice, "alice-b");
+        (VaultRegistry::new(), nfts, alice, folder, a, b)
+    }
+
+    #[test]
+    fn the_door_walks_the_whole_lifecycle_for_the_holder() {
+        let (mut v, mut nfts, alice, folder, a, _b) = door_owners();
+        let c = minted(&mut nfts, &alice, "alice-c");
+        execute_vault_tx(&mut v, &nfts, &alice, VaultTx::RegisterFolder { folder }).unwrap();
+        execute_vault_tx(
+            &mut v,
+            &nfts,
+            &alice,
+            VaultTx::AddMember { folder, member: a },
+        )
+        .unwrap();
+        execute_vault_tx(
+            &mut v,
+            &nfts,
+            &alice,
+            VaultTx::AddMember { folder, member: c },
+        )
+        .unwrap();
+        assert_eq!(v.open(folder), Some(&[a, c][..]));
+        // A same-folder move is the layer's own AlreadyMember answer; the
+        // door only owes ownership, so the refusal arrives intact and no
+        // half-applied "move" changes anything.
+        assert!(matches!(
+            execute_vault_tx(
+                &mut v,
+                &nfts,
+                &alice,
+                VaultTx::MoveMember {
+                    from: folder,
+                    to: folder,
+                    member: c
+                },
+            ),
+            Err(VaultError::AlreadyMember(m, f)) if m == c && f == folder
+        ));
+        execute_vault_tx(
+            &mut v,
+            &nfts,
+            &alice,
+            VaultTx::ExtractMember { folder, member: c },
+        )
+        .unwrap();
+        execute_vault_tx(
+            &mut v,
+            &nfts,
+            &alice,
+            VaultTx::ExtractMember { folder, member: a },
+        )
+        .unwrap();
+        execute_vault_tx(&mut v, &nfts, &alice, VaultTx::CloseFolder { folder }).unwrap();
+        assert!(!v.is_folder(folder), "closed");
+    }
+
+    #[test]
+    fn naming_someone_elses_token_is_refused_before_any_registry_read() {
+        let (mut v, mut nfts, alice, folder, a, _b) = door_owners();
+        let mallory = Address::from([9u8; 32]);
+        let stolen = minted(&mut nfts, &mallory, "mallory-token");
+        execute_vault_tx(&mut v, &nfts, &alice, VaultTx::RegisterFolder { folder }).unwrap();
+        let err = execute_vault_tx(
+            &mut v,
+            &nfts,
+            &alice,
+            VaultTx::AddMember {
+                folder,
+                member: stolen,
+            },
+        )
+        .expect_err("a folder cannot be stocked from a stranger's shelf");
+        assert!(matches!(err, VaultError::NotOwner { id, holder } if id == stolen && holder == mallory));
+        assert!(v.open(folder).is_some_and(|m| m.is_empty()), "refused before the write");
+        // and minting a folder over somebody else's token is the same refusal
+        // at the very first step: the door never trusts "I registered it".
+        assert!(matches!(
+            execute_vault_tx(
+                &mut v,
+                &nfts,
+                &alice,
+                VaultTx::RegisterFolder { folder: a }
+            ),
+            Err(VaultError::AlreadyFolder(_))
+        ));
+        assert!(matches!(
+            execute_vault_tx(
+                &mut v,
+                &nfts,
+                &alice,
+                VaultTx::RegisterFolder { folder: stolen }
+            ),
+            Err(VaultError::NotOwner { .. })
+        ));
+    }
+
+    #[test]
+    fn an_unminted_id_is_refused_as_a_broken_link_not_a_free_slot() {
+        let (mut v, nfts, alice, folder, _a, _b) = door_owners();
+        execute_vault_tx(&mut v, &nfts, &alice, VaultTx::RegisterFolder { folder }).unwrap();
+        let err = execute_vault_tx(
+            &mut v,
+            &nfts,
+            &alice,
+            VaultTx::AddMember {
+                folder,
+                member: 4242,
+            },
+        )
+        .expect_err("4242 names no token");
+        assert!(matches!(err, VaultError::UnknownToken(4242)));
+    }
+
+    #[test]
+    fn ownership_is_checked_lively_so_a_transferred_asset_cannot_stay_listed() {
+        // The invariant the transfer door (its own slice) will hold: because
+        // every mutation re-reads ownership, a folder can never list a token
+        // the folder's owner no longer holds - the door has no cached view
+        // of ownership to go stale.
+        let (mut v, mut nfts, alice, folder, a, _b) = door_owners();
+        execute_vault_tx(&mut v, &nfts, &alice, VaultTx::RegisterFolder { folder }).unwrap();
+        execute_vault_tx(
+            &mut v,
+            &nfts,
+            &alice,
+            VaultTx::AddMember { folder, member: a },
+        )
+        .unwrap();
+        let mallory = Address::from([9u8; 32]);
+        nfts.transfer(a, &alice, mallory).expect("plain transfer out");
+        // Now extraction would strand the token in mallory's name...
+        let err = execute_vault_tx(
+            &mut v,
+            &nfts,
+            &alice,
+            VaultTx::ExtractMember { folder, member: a },
+        )
+        .expect_err("alice cannot act on a token she no longer holds");
+        assert!(matches!(err, VaultError::NotOwner { id, holder } if id == a && holder == mallory));
+    }
 }
+
