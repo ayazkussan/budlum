@@ -2307,6 +2307,38 @@ impl Executor {
                 })?;
                 sender.nonce = sender.nonce.saturating_add(1);
             }
+            TransactionType::Identity(identity_tx) => {
+                // The single arm, delegating to the one body
+                // (`registry::execute_identity_tx`) that holds and has been
+                // tested at full depth for the sender-binding rules, the
+                // recovery quorum arithmetic, and every registry gate.
+                // Two things the door itself owes, and nothing more:
+                // identity writes commit state, they never move value -
+                if tx.amount != 0 {
+                    return Err(BudlumError::validation(
+                        "identity_amount_must_be_zero",
+                        "an identity transaction commits state; an unspent amount would be silently burned",
+                    ));
+                }
+                // - and the domain is read from state, where the node's own
+                // engine put it, never from the transaction: a caller
+                // declaring "this is PoA" would be manufacturing write
+                // authority for the master registry.
+                crate::registry::execute_identity_tx(
+                    &mut state.identity,
+                    &tx.from,
+                    identity_tx.clone(),
+                    &state.execution_domain,
+                    state.epoch_index,
+                    tx.chain_id,
+                )
+                .map_err(|e| BudlumError::validation("identity_tx_failed", e.to_string()))?;
+                let sender = state.get_or_create(&tx.from);
+                sender.balance = sender.balance.checked_sub(tx.fee).ok_or_else(|| {
+                    BudlumError::validation("balance_underflow", "balance underflow")
+                })?;
+                sender.nonce = sender.nonce.saturating_add(1);
+            }
         }
 
         Ok(())

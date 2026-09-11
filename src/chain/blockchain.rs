@@ -864,6 +864,12 @@ impl Blockchain {
         state.bridge_root = state.bridge_state.root();
         state.message_root = state.message_registry.root();
 
+        // The domain the identity gate runs under is the engine this node
+        // started with. Stamped here and at every site that replaces `state`
+        // wholesale, so a restart, a reorg replay, and a snapshot sync cannot
+        // disagree about a gate that decides writes inside blocks.
+        state.execution_domain = consensus.domain_kind();
+
         let mut bc = Blockchain {
             chain: chain_vec,
             consensus,
@@ -4945,6 +4951,11 @@ impl Blockchain {
             } else {
                 AccountState::new()
             };
+            // The rebuild starts from a fresh state; carry the engine's
+            // domain over before re-executing blocks, or a reorg after an
+            // identity write would replay it as a refusal and fork the node
+            // off its own chain.
+            current_state.execution_domain = self.consensus.domain_kind();
             for block in &self.chain[fork_point..] {
                 current_state = Self::apply_block_effects(
                     &current_state,
@@ -5028,8 +5039,12 @@ impl Blockchain {
             return None;
         }
         let block = &self.chain[height as usize];
-        let state =
+        let mut state =
             Self::rebuild_state(&self.chain[..=height as usize], &self.genesis_config).ok()?;
+        // Same rule as the reorg path: a rebuild must replay identity writes
+        // under the same gate the chain applied them under, or the served
+        // snapshot disagrees with the canonical state root at that height.
+        state.execution_domain = self.consensus.domain_kind();
         let finalized_height = self.finalized_height.min(height);
         let finalized_hash = self
             .chain
@@ -5176,6 +5191,10 @@ impl Blockchain {
         }
 
         let mut snapshot_state = AccountState::from_snapshot(&snapshot);
+        // Snapshot loading replaces the whole state; the domain is not part
+        // of a snapshot (a peer's engine is not this node's), so re-stamp it
+        // from the local engine before the state goes live.
+        snapshot_state.execution_domain = self.consensus.domain_kind();
         let snapshot_state_root = snapshot_state.calculate_state_root();
         if !block.state_root.is_empty() && snapshot_state_root != block.state_root {
             return Err(format!(
@@ -5215,6 +5234,7 @@ impl Blockchain {
         }
 
         let mut v2_state = AccountState::from_snapshot_v2(v2);
+        v2_state.execution_domain = self.consensus.domain_kind();
         let state_root = v2_state.calculate_state_root();
         if !block.state_root.is_empty() && state_root != block.state_root {
             return Err(format!(

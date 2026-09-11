@@ -267,6 +267,16 @@ pub struct AccountState {
     /// revocations. Persisted through the snapshot's schema-5 field; the
     /// state root folds its `root()` only when non-empty, on the bns pattern.
     pub identity: crate::registry::IdentityRegistry,
+    /// The consensus kind this state machine executes as.
+    ///
+    /// Read from the node's own engine at construction and re-read wherever
+    /// `state` is replaced wholesale (rebuild, snapshot apply) - never from a
+    /// transaction, never from a peer, and never snapshotted (each node
+    /// re-derives it from its own engine, so sync cannot smuggle a kind in).
+    /// The identity write gate consults this field, and it fails closed: a
+    /// state nobody wired is a plain PoS state, and the master registry
+    /// refuses writes there.
+    pub execution_domain: crate::domain::ConsensusKind,
     pub marketplace: crate::pollen::MarketplaceRegistry,
     pub budlumxyz: crate::budlumxyz::BudlumxyzRegistry,
     pub storage_registry: StorageRegistry,
@@ -382,6 +392,7 @@ impl AccountState {
             bns_registry: crate::bns::BnsRegistry::new(),
             nft_registry: crate::socialfi::NftRegistry::new(),
             identity: crate::registry::IdentityRegistry::new(),
+            execution_domain: crate::domain::ConsensusKind::PoS,
             marketplace: crate::pollen::MarketplaceRegistry::new(),
             storage_registry: StorageRegistry::new(),
             ai_registry: crate::ai::registry::AiRegistry::new(),
@@ -435,6 +446,7 @@ impl AccountState {
             bns_registry: crate::bns::BnsRegistry::new(),
             nft_registry: crate::socialfi::NftRegistry::new(),
             identity: crate::registry::IdentityRegistry::new(),
+            execution_domain: crate::domain::ConsensusKind::PoS,
             marketplace: crate::pollen::MarketplaceRegistry::new(),
             budlumxyz: crate::budlumxyz::BudlumxyzRegistry::new(),
             external_roots: BTreeMap::new(),
@@ -496,6 +508,7 @@ impl AccountState {
             bns_registry: crate::bns::BnsRegistry::new(),
             nft_registry: crate::socialfi::NftRegistry::new(),
             identity: crate::registry::IdentityRegistry::new(),
+            execution_domain: crate::domain::ConsensusKind::PoS,
             marketplace: crate::pollen::MarketplaceRegistry::new(),
             budlumxyz: crate::budlumxyz::BudlumxyzRegistry::new(),
             external_roots: BTreeMap::new(),
@@ -575,6 +588,7 @@ impl AccountState {
             bns_registry: snapshot.bns_registry.clone().unwrap_or_default(),
             nft_registry: snapshot.nft_registry.clone().unwrap_or_default(),
             identity: snapshot.identity.clone().unwrap_or_default(),
+            execution_domain: crate::domain::ConsensusKind::PoS,
             marketplace: snapshot.marketplace.clone().unwrap_or_default(),
             budlumxyz: snapshot.budlumxyz.clone().unwrap_or_default(),
             governance: snapshot.governance.clone().unwrap_or_default(),

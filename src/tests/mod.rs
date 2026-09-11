@@ -62,6 +62,8 @@ pub mod finality_live_path;
 #[cfg(test)]
 pub mod hardening;
 #[cfg(test)]
+pub mod identity_tx_door;
+#[cfg(test)]
 pub mod integration;
 #[cfg(test)]
 pub mod liveness_consensus;

@@ -175,6 +175,14 @@ impl From<&Transaction> for pb::ProtoTransaction {
                     },
                 )),
             ),
+            TransactionType::Identity(identity_tx) => (
+                pb::ProtoTransactionType::Identity as i32,
+                Some(pb::proto_transaction::TypePayload::Identity(
+                    pb::ProtoIdentityTx {
+                        data: bincode::serialize(identity_tx).unwrap_or_default(),
+                    },
+                )),
+            ),
             TransactionType::AiModelRegister(spec) => (
                 pb::ProtoTransactionType::AiModelRegister as i32,
                 Some(pb::proto_transaction::TypePayload::AiModelRegister(
@@ -975,6 +983,16 @@ impl TryFrom<pb::ProtoTransaction> for Transaction {
                     domain_height: payload.domain_height,
                     state_updates,
                 }
+            }
+            pb::ProtoTransactionType::Identity => {
+                let payload = match proto.type_payload {
+                    Some(pb::proto_transaction::TypePayload::Identity(p)) => p,
+                    _ => return Err("Missing or mismatched Identity payload".into()),
+                };
+                TransactionType::Identity(
+                    bincode::deserialize(&payload.data)
+                        .map_err(|e| format!("Invalid IdentityTx payload: {e}"))?,
+                )
             }
             pb::ProtoTransactionType::AiModelRegister => {
                 let payload = match proto.type_payload {
@@ -2182,6 +2200,18 @@ mod tests {
                 domain_height: 42,
                 state_updates: vec![(to, 5), (from, 6)],
             },
+            TransactionType::Identity(crate::registry::IdentityTx::Register {
+                record: crate::registry::IdentityRecord::new(
+                    from,
+                    vec![crate::registry::VerificationMethod::new(
+                        [1u8; 32],
+                        crate::registry::MethodKind::MlDsa87,
+                    )],
+                    vec![],
+                    0,
+                )
+                .expect("a one-method record with no guardians is well-formed"),
+            }),
         ];
 
         for tx_type in test_cases {
@@ -2229,6 +2259,9 @@ mod tests {
             authorization: None,
         };
 
+        assert!(Transaction::try_from(proto.clone()).is_err());
+
+        proto.tx_type = pb::ProtoTransactionType::Identity as i32;
         assert!(Transaction::try_from(proto.clone()).is_err());
 
         proto.tx_type = 999; // Unknown transaction type tag
