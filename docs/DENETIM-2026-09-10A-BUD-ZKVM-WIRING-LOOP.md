@@ -1738,3 +1738,30 @@ door (Q6) through mempool/RPC. lubot - 28 mirror patches, baseline 29, 331 tests
 rc=0; shrink queue waits behind the identity work by the user's ordering. CI remained
 queued/pending through the whole turn (12 runs measured); "not compiled" labels stand and
 these four commits are exactly what its compiler gets to grade.
+
+## 35. What the tx reconnaissance measured, and what was therefore written
+
+Full-cycle tx wiring (Q6) was scoped before being attempted, and the scope won: adding a
+`TransactionType` variant touches six production files (proto conversions are hand-mapped
+per variant in BOTH directions, rpc admission, blockchain replay audit, mempool gates),
+neither `protoc` nor `cargo` exists in this sandbox (measured), and a blind six-file edit
+would make PR #3 red for plumbing rather than reviewable as identity. What landed instead
+is the door's content as pure, tested code: `IdentityTx`/`GuardianApproval`/
+`authorize_recovery` in the registry module (derived-address rule and digest rule verbatim
+from the grant layer; unsound approvals die before counting; the no-feature build refuses
+everything, so recovery is unavailable rather than guessable), and the folder layer in
+`src/socialfi/vault.rs` (memberships never copies, ordered open, all-checks-before-any-
+change move, forest kept a forest by transitive cycle refusal, `BDLM_VAULT_V1` root in
+the registry family, `Referenced` split from `NonEmpty` when the read-through caught the
+first name describing an empty folder as non-empty). One read-through catch each side:
+the vault's own doc comment promised what the new variant now delivers, and the identity
+re-export list grew with the types rather than after them. The collision search also
+returned one finding for the record: budlum's code comments already use "USL genesis" for
+the hash-domain activation event (bns/registry.rs, core/block.rs) - unrelated to the
+lubot-side crate of that acronym; no change, noted so a future reader does not "align"
+two different things sharing letters. Remaining in the identity arc, in order: the single
+executor arm + proto variant (when a protoc-bearing environment or CI iteration can own
+it), `identity_root` on `GlobalBlockHeader` (Q2's field, same proto slice), the
+presentation RPC read path, and folder↔`NftRegistry` ownership checks at the tx door
+(the vault is ownership-blind by design; the executor consultates `NftRegistry` beside
+it - a sentence that will move from docs to code with the proto slice).
