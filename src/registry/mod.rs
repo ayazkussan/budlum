@@ -19,6 +19,7 @@
 //! `tests::permissionless`.
 
 pub mod d4_merge_tests;
+pub mod identity;
 pub mod evidence;
 pub mod invalid_vote;
 pub mod liveness;
@@ -30,6 +31,12 @@ pub mod poa_onboarding;
 pub mod quarantine_ledger;
 pub mod role;
 
+pub use identity::{
+    address_of_did, did_of, field_commitment, IdentityError, IdentityOp, IdentityRecord,
+    IdentityRegistry, MethodKind, VerificationMethod, CredentialCommitment,
+    DisclosureProof, FieldCommitment, credential_id, disclosure_proof, merkle_root,
+    verify_disclosure, DID_METHOD_NAME,
+};
 pub use invalid_vote::InvalidVoteTracker;
 pub use liveness::LivenessTracker;
 
