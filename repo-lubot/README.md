@@ -9,13 +9,17 @@ is the user's.
 ```
 git -C <lubot-clone> fetch origin main
 git -C <lubot-clone> checkout -b lubot-series origin/main
+git -C <lubot-clone> config user.name NAME          # am needs an identity, and a
+git -C <lubot-clone> config user.email EMAIL       # bare clone carries none
 git -C <lubot-clone> am -3 --whitespace=fix patches/*.patch
+git -C <lubot-clone> -c core.hooksPath=/dev/null show --stat HEAD   # eyeball the tip
+git push -u origin lubot-series && gh pr create --fill   # the 403 stops the bot, not you
 ```
 
 Verified, not asserted: a clean clone of `main` @ `37d32c9` takes all 24 files
 with strict `git am -3` - no `--reject`, no fallback - and the resulting tree
 has `Cargo.toml` members equal to the 21 directories under `crates/`, and
-`docs/CRATES.md` with one row per crate the series adds (12).
+`docs/CRATES.md` with one row per crate the series adds (13).
 
 ## Why this directory was rewritten
 
@@ -147,4 +151,6 @@ number and the tree it describes first part company.
 | `0019` | lubot README+ratchet: 327 test, uygulanmis agactan sayildi | 1 files, +1 |
 | `0020` | envanter: serinin 12 crate'i var, tablo 10 sayiyordu | 1 files, +4 |
 | `0021` | lubot kapi: ulasilmayan pub fn ratchet'i (39 kapi, canary'li) | 4 files, +197 |
+| `0022` | lubot: chain: cagrisiz tavan akisi kaldirildi - taban 327'den 325'e | 3 files, +5 |
+| `0023` | lubot: envanter aktivasyon defterini okur - esik'in on ulasilmaz girdisi baglanir | 6 files, +285 |
 | `0024` | lubot: usl - soguk cuzdan mutabakati muhur muhuruyle zarflanir | 9 files, +737 |
