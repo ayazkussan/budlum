@@ -1210,3 +1210,42 @@ Open, with the command that closes each:
   the mirror's 21st patch, the report's §24-§25, the `--table` generator and the two
   CI steps above. They push in one go when the token comes back; nothing was stashed
   or rebased to make that true, and the tree is clean while waiting.
+
+## 26. The gates job was masking gates too, and the badge gate is now the finding
+
+`a6d1c1c` proved the fix for the crate (`Build the gate binary` green: `budlum-gates`
+compiles, and the two `E0308`s were the whole story), and it exposed the next layer of
+the same disease inside the job built to cure it: `Is the badge current` went red and
+**35 gate steps after it never ran**, among them the dead-public-API gate whose
+baseline is the reason the previous paragraph exists. A step sequence is a mask no
+matter what the steps are about.
+
+The job now runs differently. `Build the gate binary` has `id: build`; each of the 36
+single-command gate steps appends its merged stdout+stderr to `/tmp/gate-out.log`
+(`2>&1 | tee -a`, then `exit "${PIPESTATUS[0]}"` so the step still carries its own
+verdict) and runs under `if: always() && steps.build.outcome == 'success'` - guarded by
+the build, because a compile failure would otherwise print 36 identical failures and
+bury the one line that matters. A final `Tally (every red gate, annotated)` reads the
+file, annotates every `FAIL [gate]` headline with its message, prints the count, and
+exits 1 so the job cannot go green while a gate is red. Three steps are deliberately
+untouched (the two that build and test crates, and the `Test log` step): they can
+redden the job by themselves, and the Tally says out loud when it found no headline
+while the job was red anyway - the case where "no annotation" must not be readable as
+"clean".
+
+Verified by executing the sequence with a stub `cargo` in which exactly one gate fails:
+45 run steps executed, every gate after the failure still ran, 37 outputs appended to
+the shared file, one headline annotated with its message, Tally exit 1. Locally
+verifiable, that is; the `if:` expressions are not - Actions evaluates them on the
+runner and the `Repo Lint` job's actionlint is the check for them. The first version of
+the Tally annotated `2:FAIL [...]` because `grep -n` prefixes a scratch file's line
+number; dropped, since the gate's message already names the gate, the file and the
+reason.
+
+A scan across every workflow for the same pattern (`Format`/`lint`/`typos`/`style`
+ahead of a `test|build|clippy|canary|gate` step) now returns nothing - the three moves
+in §25 plus this job's restructure were the whole class. What the badge gate will
+report next is the README's test count against the count the run measures; when the
+annotation names both numbers, the badge moves to the measured one. Until then nothing
+in this file claims the suite's size, and `cargo` remains unavailable here, which is
+why each of these statements is about a step that ran, not about code that was built.
