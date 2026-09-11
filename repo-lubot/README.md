@@ -16,7 +16,7 @@ git -C <lubot-clone> -c core.hooksPath=/dev/null show --stat HEAD   # eyeball th
 git push -u origin lubot-series && gh pr create --fill   # the 403 stops the bot, not you
 ```
 
-Verified, not asserted: a clean clone of `main` @ `37d32c9` takes all 27 files
+Verified, not asserted: a clean clone of `main` @ `37d32c9` takes all 28 files
 with strict `git am -3` - no `--reject`, no fallback - and the resulting tree
 has `Cargo.toml` members equal to the 21 directories under `crates/`, and
 `docs/CRATES.md` with one row per crate the series adds (13).
@@ -72,7 +72,10 @@ tests arriving with the settlement crate, and patch 0025 to 332, when olcek's
 callerless report surface left together with the two tests that were its only
 assertions, and patch 0026 to 328, when operator's registry rules left with
 their four fixtures and the gate's name-list shrank to the one rule with a caller, while
-0027 closed a symmetric getter pair the ratchet's own bookkeeping had left half-listed. Both moves were recounts of the
+0027 closed a symmetric getter pair the ratchet's own bookkeeping had left half-listed,
+and 0028 hardened `usl` against a forger who can recompute the seal: the reader now
+enforces the writer's duplicate rule, numbers must be canonical or the media is refused,
+totals cannot silently wrap past u64, and a sealed media is never written over. Both moves were recounts of the
 applied tree (176 base + 156 series after 0025), never decrements by hand. The base README said 191 while the base tree measures 178, a
 13-test overstatement that predates this series; 0019 replaces it with a count
 derived from the applied tree instead of inflating the old number. `38 gates`
@@ -164,3 +167,4 @@ number and the tree it describes first part company.
 | `0025` | lubot: olcek: cagrisiz rapor yuzeyi kaldirildi - taban 40'tan 34'e | 3 files, +2 -73 |
 | `0026` | lubot: operator: kayit kurallari cagrisizlariyla gitti - kapinin isim listesi kirpildi | 4 files, +33 -160 |
 | `0027` | lubot: tools: Rational getter cifti kaldirildi - taban 29'a | 2 files, +2 -15 |
+| `0028` | lubot: usl sertlestirildi - okuyucu yazarin kurallariyla konusur, medya ezilmez | 3 files, +184 -15 |
