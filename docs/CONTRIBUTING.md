@@ -92,6 +92,14 @@ The pedantic/nursery surface is a ratchet, not a wall: it is measured by
 `ops/scripts/clippy-extra-report.py` against `.github/clippy-extra-baseline.txt` and
 only refuses growth.
 
+A workflow edit cannot be tried locally, so it is checked two other ways. Step bodies
+are extracted and executed (see the third rule below), and the reachability of every step
+is computed by `python3 ops/scripts/check-step-reachability.py`: it reports a guard that
+references a `steps.<id>` no step declares, or declares later, and
+`--fail 'budlum:Test'` prints which steps still run when that step is red. Run it after
+touching any job's `if:` lines - a mistyped id skips every step behind it and leaves the
+job looking green.
+
 ### The gates workspace, and what CI's red can actually mean
 
 `xtask/gates` is a separate cargo workspace, so no root `--workspace` command

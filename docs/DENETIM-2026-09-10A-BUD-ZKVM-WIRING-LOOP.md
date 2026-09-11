@@ -1316,3 +1316,55 @@ expressions have been checked by a linter - only by the runner agreeing with the
 is weaker than it sounds: a typo in a step id fails open, silently skipping every gate.
 That is the one failure mode the restructure introduced, and it is why `Build the gate
 binary` keeps its own step visible as the first thing after the toolchain steps.
+
+## 28. The third masker, and why the answer stopped being ordering
+
+`aaf491e` pushed the Clippy-behind-Test move, and its run answered before the queue
+finished with it: in Budlum Core, `Feature matrix: pq-ml-dsa solo` fails, and `Test`,
+`cargo doc`, `Clippy` and `Format` were skipped behind it - the identical shape for the
+third time, with a different step in the offending position each round (`Format`, then
+`Clippy`, now a feature build).
+
+Ordering was the wrong target. A sequence has to break somewhere, and any single
+placement only guarantees that the step chosen to be last is the one that gets hidden.
+What the gates job already does - and what the other three cargo jobs do now - is remove
+the sequence: `id: rust` on the toolchain step (plus `id: protoc` in `budlum`), and
+`if: always() && steps.rust.outcome == 'success'` on every cargo step, 21 in all across
+`budlum`, `budzero`, `budscan`. A missing toolchain still short-circuits, because there is
+then no cargo to run and that failure is the finding; a red *verdict* no longer hides the
+next one. No `continue-on-error` was added anywhere: the steps that fail still redden the
+job, they just also say what they measured.
+
+Verified as far as it can be without a runner. The edit is a pure move plus one key per
+step (step names and bodies identical as ordered lists, every other job byte-identical, 26
+jobs, YAML parses), and the guards were then *evaluated*, not read: a small interpreter for
+the subset this repository uses (`always()`, `success()`, `failure()`,
+`steps.<id>.outcome == '…'`, `!`, `&&`, `||`, parentheses) was run against a simulated red
+`Feature matrix`, which reports `budlum` as 13 of 13 steps running, and against a simulated
+red `Clippy` in `budzero`, 7 of 7. In the gates job the same simulation with a red
+`Build the gate binary` skips exactly the two steps whose guard asks for that build to have
+succeeded - which is the guard doing its job.
+
+The restructure has one failure mode that the runner will not catch, and it is now a checked
+invariant instead of a hazard: `steps.atypo.outcome` is simply not `'success'`, so every
+step behind such a guard is skipped and the job looks green with nothing in it. That is
+`ops/scripts/check-step-reachability.py` - it reads step headers (id, name, if) without a
+YAML dependency, reports a reference to an id that no step declares and a reference to an id
+declared *later* in the same job, and answers `--fail JOB:STEP` with the run/SKIP table. Two
+steps in the gates job use it, a canary (`--self-test`) and a verdict (`--check`), neither
+guarded on the build so they still report when cargo is broken; measured clean across 23
+workflow files. It is not a Rust gate, so it runs the `FAIL [step-reachability]` headline
+shape the Tally already greps.
+
+Recording a second-hand result, because it is the argument for shipping checkers with their
+own self-test: the first version of that script passed its happy path on the real workflows
+and failed its own fixtures, and reading the failures back found two genuine bugs - a
+`strip("'\"")` that ate the closing quote of an expression, and a field parser that did not
+see `- name:` on a step's first line and so compared empty strings to each other. Both were
+invisible until the fixtures existed.
+
+**Not verified:** the runner's own evaluation of those expressions (only Actions and
+actionlint judge them, and actionlint is still absent from the runner - `Repo Lint` says so
+every run, and my interpreter could differ from Actions somewhere the workflows do not
+currently go), and whether the next run is the first one to print `budlum`'s `Test` verdict
+while `Feature matrix`, `Clippy` and `Format` stay red.

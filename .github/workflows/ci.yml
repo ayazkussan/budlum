@@ -28,17 +28,21 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - name: Install Rust
+      - id: rust
+        name: Install Rust
         uses: dtolnay/rust-toolchain@6c977a6ca4077a0ceb28ffbe03f59d46e9ac8772 # master 2026-07-16
         with:
           toolchain: "1.97.1"
           components: clippy, rustfmt
-      - name: Install protoc
+      - id: protoc
+        name: Install protoc
+        if: always() && steps.rust.outcome == 'success'
         run: sudo apt-get update -qq && sudo apt-get install -y -qq protobuf-compiler
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
           shared-key: budlum-core
       - name: "Feature matrix: pq-ml-dsa solo"
+        if: always() && steps.rust.outcome == 'success'
         run: |
           set -euo pipefail
           cargo check --no-default-features --features "pq-ml-dsa wallet-ml-dsa"
@@ -91,6 +95,7 @@ jobs:
           done
           grep -E 'test result:' /tmp/aa-tests.log
       - name: Feature canary - --all-features MUST BE REFUSED
+        if: always() && steps.rust.outcome == 'success'
         run: |
           set -euo pipefail
           if cargo check --all-features 2>/dev/null; then
@@ -99,6 +104,7 @@ jobs:
           fi
           echo "Canary OK: --all-features was refused with compile_error as expected (PQ backends are mutually exclusive)."
       - name: Test
+        if: always() && steps.rust.outcome == 'success'
         # Pipefail is required: tee alone returns exit 0; otherwise a test failure
         # makes the Core job falsely green (evidence: d815561 Test=success, 1 hidden fail;
         # Coverage nextest went red on the same fail - 2026-07-19).
@@ -106,6 +112,7 @@ jobs:
           set -euo pipefail
           cargo test --lib --verbose 2>&1 | tee /tmp/libtests.log
       - name: cargo doc (Item 6 - public API documentation)
+        if: always() && steps.rust.outcome == 'success'
         run: |
           set -euo pipefail
           RUSTDOCFLAGS="-D warnings" cargo doc --no-deps --features pq-ml-dsa 2>&1 | tee /tmp/doc.log
@@ -126,8 +133,10 @@ jobs:
             # builds. A style check is worth failing on, not worth hiding a compile error
             # behind; do not move these three steps up because they are cheap.
       - name: Clippy
+        if: always() && steps.rust.outcome == 'success'
         run: cargo clippy --all-targets -- -D warnings
       - name: Clippy pedantic/nursery ratchet (izleme modu)
+        if: always() && steps.rust.outcome == 'success'
         # Warning visibility + ratchet against count growth (baseline 191,
         # evidence .github/clippy-extra-baseline.txt). Driving to zero is gradual and deliberate.
         run: |
@@ -142,6 +151,7 @@ jobs:
           python3 ./ops/scripts/clippy-extra-report.py /tmp/clippy-extra.json
           cargo run --release --manifest-path xtask/gates/Cargo.toml -- clippy-extra /tmp/clippy-extra.json
       - name: Format
+        if: always() && steps.rust.outcome == 'success'
         run: cargo fmt --all -- --check
       # Same reason as the build surface in rust.yml: `cargo fmt --check` prints a
       # diff to stdout, and stdout is on the log host. Here it is an annotation,
@@ -169,6 +179,7 @@ jobs:
           printf '::error::%s "Diff in" hunks total (first 8 shown)\n' "$(grep -c . "$tmp")"
           rm -f "$tmp"
       - name: Format (kani proof harnesses)
+        if: always() && steps.rust.outcome == 'success'
         # kani/ is not a member of the root workspace, so the step above never
         # walks it: two drift hunks sat in kani/src/lib.rs while the root fmt
         # step stayed green. Measured 2026-08-28 and pinned here so the gap
@@ -364,6 +375,19 @@ jobs:
       # (its SCAN_ROOTS are src/budzero/wallet-core) and `gates-are-wired` only
       # walks scripts that already belong to a list. A protection that is not
       # compiled is not a protection.
+      # Workflow hygiene needs no cargo, so it is not guarded on the build: a red
+      # gate binary must not hide the fact that a guard expression points at a step
+      # that does not exist - that failure mode skips gates silently, build or not.
+      - name: Step reachability canary
+        if: always()
+        run: |
+          python3 ops/scripts/check-step-reachability.py --self-test 2>&1 | tee -a /tmp/gate-out.log
+          exit "${PIPESTATUS[0]}"
+      - name: No guard can hide a step
+        if: always()
+        run: |
+          python3 ops/scripts/check-step-reachability.py 2>&1 | tee -a /tmp/gate-out.log
+          exit "${PIPESTATUS[0]}"
       - name: Researched-product naming canary
         if: always() && steps.build.outcome == 'success'
         run: |
@@ -559,7 +583,8 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - name: Install Rust
+      - id: rust
+        name: Install Rust
         uses: dtolnay/rust-toolchain@6c977a6ca4077a0ceb28ffbe03f59d46e9ac8772 # master 2026-07-16
         # NOTE: master 2026-07-16 and later make the `toolchain` input MANDATORY
         # (CI evidence: job 87741629986 - "'toolchain' is a required input").
@@ -571,12 +596,16 @@ jobs:
           shared-key: budzero
           workspaces: budzero
       - name: Check
+        if: always() && steps.rust.outcome == 'success'
         run: cargo check --workspace --all-targets
       - name: Clippy
+        if: always() && steps.rust.outcome == 'success'
         run: cargo clippy --workspace --all-targets -- -D warnings
       - name: Test
+        if: always() && steps.rust.outcome == 'success'
         run: cargo test --workspace
       - name: Format
+        if: always() && steps.rust.outcome == 'success'
         run: cargo fmt --all -- --check
 
   bud-e2e-invariants:
@@ -862,7 +891,8 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - name: Install Rust
+      - id: rust
+        name: Install Rust
         uses: dtolnay/rust-toolchain@6c977a6ca4077a0ceb28ffbe03f59d46e9ac8772 # master 2026-07-16
         with:
           toolchain: "1.97.1"
@@ -872,25 +902,32 @@ jobs:
           shared-key: budscan
           workspaces: budscan
       - name: Clippy (pedantic, -D warnings)
+        if: always() && steps.rust.outcome == 'success'
         run: cargo clippy --manifest-path crates/budscan/Cargo.toml --all-targets -- -D warnings
       - name: budscan testleri
+        if: always() && steps.rust.outcome == 'success'
         run: cargo test --manifest-path crates/budscan/Cargo.toml
       - name: budscan own canaries
+        if: always() && steps.rust.outcome == 'success'
         # The binary runs its own internal canaries: a schema never becomes a name, an empty
         # proof does not say `verified`, a dangling patch does not pass the check.
         run: cargo run --manifest-path crates/budscan/Cargo.toml --bin budscan -- self-test
       - name: Gate canary (proof it is not vacuous)
+        if: always() && steps.rust.outcome == 'success'
         run: |
           set -euo pipefail
           cargo run --release --manifest-path xtask/gates/Cargo.toml -- budscan-name-rule-parity --self-test
           cargo run --release --manifest-path xtask/gates/Cargo.toml -- budscan-patchset --self-test
       - name: Name rule and ContentId parity
+        if: always() && steps.rust.outcome == 'success'
         run: cargo run --release --manifest-path xtask/gates/Cargo.toml -- budscan-name-rule-parity
       - name: Patch layer (list=disk, no foreign brand)
+        if: always() && steps.rust.outcome == 'success'
         run: cargo run --release --manifest-path xtask/gates/Cargo.toml -- budscan-patchset
 
   # ============================  / Bolum 4 (BNS gate) ============================
       - name: Format
+        if: always() && steps.rust.outcome == 'success'
         run: cargo fmt --manifest-path crates/budscan/Cargo.toml --all -- --check
   bns-gate:
     #  Section 4 module separation: BNS has its own CI gate (the B.U.D. gate pattern).
