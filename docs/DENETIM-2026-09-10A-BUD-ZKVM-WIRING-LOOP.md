@@ -1397,3 +1397,51 @@ The checker that proves the guard expressions is now the thing checking this wor
 edits - `python3 ops/scripts/check-step-reachability.py` ran clean after both the clippy
 graduation and the log-step guard, and `--fail 'gates:Clippy (gates workspace)'` is how the
 claim above was produced.
+
+## 29. The Lubot prompt draft: intake, and what twelve questions changed
+
+The user opened PR #4 (`211d366`) with a single file, `lubot-system-full.md` - 3 992 lines,
+198 KB - and said: this is the draft I wrote for Lubot, edit it professionally and put it
+in your PR. Alongside it came the answers to the second batch of six questions, which
+settle the loop's posture:
+
+* **lubot wiring is delete-biased, at my discretion** ("silmeye yatkın dedikten sonra en
+  mantıklı süreci kendin ilerle") - so the 53-entry dead-public-API baseline shrinks by
+  giving genuinely-needed functions a real caller and deleting or `pub(crate)`-ing the
+  rest, crate by crate, esik -> tools -> olcek in that order, "sıkı kodlama" with the
+  whole workspace verified before a patch ships.
+* **Only this PR carries the work** - the other PRs will be closed by the user; every
+  commit ships here, and every commit title names its repo (`budlum:`/`lubot:`) so a log
+  line cannot be attributed to the wrong tree.
+* **Push per commit** was re-confirmed as the choice; the PR stays open for the user to
+  merge. The lubot clone now lives as a bare cache at `/home/user/lubot-upstream` (263 KB,
+  outside git, survives what /tmp does not).
+
+The intake itself is now `docs/LUBOT-SYSTEM-PROMPT.md`, and its edit is structure-only by
+construction, not by promise: a fingerprint multiset (markdown-insensitive, line-based) of
+original vs published shows exactly three removed lines - the stale hand-written contents
+bullets - and additions consisting solely of the 37-entry generated contents list and two
+organizational headings (`## Part A`, `## Tool surface`), with the 24 tool headings demoted
+to H3 under the latter, the 9 stray H1s and 22 other headings that had been pasted inside
+XML prompt blocks converted to bold labels, and every `**`-hard-break/trailing-space
+artefact of the paste removed. **No prompt instruction was added, removed or reworded** -
+that is the whole contract of this pass, and the verification is the proof. Provenance is
+in the front-matter comment: the original bytes are one `git show 211d366:lubot-system-full.md`
+away for as long as PR #4's commit survives, which is why the PRs get closed by the user,
+not deleted by me.
+
+The gate angle, because a doc that enters the tree enters every gate: the file names no
+researched product (the three forbidden names: zero occurrences), carries no conflict
+markers, and contains no `#[allow]`-class content - CI will judge the rest, including
+Typos, which has already been taught to ignore nothing new here since no words were
+coined. The one thing CI cannot see coming is size: a 200 KB doc is 5% of the tree's
+text weight, and `no-upstream-brands`'s file counter (vacuity floor 50) only goes up, so
+no gate baseline moves.
+
+A second thing this turn had to survive: the sandbox re-clone again. It landed mid-commit -
+the docs commit existed locally on the *branch-point* tree while every earlier commit lived
+only on the remote - and the push raced it. Recovery was the standing habit: fetch,
+`reset --hard` to the remote tip (files first, the tree was intact because the re-clone had
+restored it), cherry-pick the one fresh commit, push. Net state: `9673840`, nothing
+unpushed, working tree clean. The commit-title-repo convention from this turn's answers
+exists precisely so those recovery moments read unambiguously from a log.
