@@ -1765,3 +1765,80 @@ it), `identity_root` on `GlobalBlockHeader` (Q2's field, same proto slice), the
 presentation RPC read path, and folder↔`NftRegistry` ownership checks at the tx door
 (the vault is ownership-blind by design; the executor consultates `NftRegistry` beside
 it - a sentence that will move from docs to code with the proto slice).
+
+## 36. The door arc: six commits, the domain question answered by the tree, and a token that died mid-arc
+
+Everything §35 left as "remaining, in order" landed this turn: the proto+executor slice, the
+settlement anchor, the presentation read path, and the vault's three-slice door. The shape held
+because the plan held: one arm, semantics behind it in tested bodies, hand-mapped wire tables.
+
+The executor slice began where reconnaissance ended - with a question the six-file plan did not
+contain: `execute_identity_tx` needs the kind of the executing domain, and the tree forbids the
+one easy answer. A `ConsensusKind` field in the transaction would let a caller declare "this is
+PoA" and manufacture write authority; the freeze path (blockchain.rs, ~1086) refuses exactly that
+shape, in writing. `AccountState` holds no domain-kind field, and node config is not a consensus
+fact. The tree already owned the answer: an engine knows what kind of chain it produces for -
+main.rs picks `PoSEngine` or `PoAEngine` per node, and the four-domain bootstrap reads kinds from
+records, never claims. So the trait grew `ConsensusEngine::domain_kind()` with a `PoS` default
+("an engine that does not declare itself does not open a gated write" - the default is mainnet
+fact AND the deny), `PoAEngine` overrides, and the value is stamped into
+`AccountState::execution_domain` at every point a state is built or replaced wholesale:
+construction, the reorg rebuild, the snapshot-served rebuild, and both snapshot applies. The field
+is deliberately outside the snapshot (a peer's engine is not this node's kind), fails closed, and
+is the only domain the identity body ever sees. The arm itself is six lines of delegation plus
+one frame rule it owns: an identity transaction carrying `amount` is refused, because the
+difference between the amount and the fee would otherwise be value silently burned by a door that
+"only commits state".
+
+The preimage work was mechanical only after reading what "mechanical" meant here: the hash
+preimage is NOT the bincode blob the wire carries (Pollen's `bytes data` taught the wire shape,
+not the signature shape) - `transaction_type_tag` + `encode_transaction_type_payload` are
+consensus, and adding a variant without a tag and a canonical encoding is a compile error by
+design. The identity encoders write every pub field of every carried struct; a new tamper test
+flips each one and requires the hash to move, and pins the pair the tags exist for: `Issue(c)`
+vs `Revoke(c)` differ ONLY by their operation byte.
+
+The settlement slice began by re-measuring its own plan and catching the plan lying: memory said
+"7 constructor sites + proto". The header travels as a serde blob inside `ProtoGlobalHeader`, so
+proto needed nothing; literal sites counted three (producer, sample header, one test). The doc
+line for the field-count habit has a new sibling: even this report's own queue notes age.
+`identity_root: Option<Hash32>` presence-tags into `BDLM_GLOBAL_BLOCK_V5` (the bump is the
+activation - pre-launch, no window, the same rule V4's presence bytes and the snapshot's schema-5
+used), the producer gates on the registry's own `is_empty()` like `ai_root` does, the domain-tag
+inventory moved V4→V5 in the same edit the two-way gate demanded, and the read-through found a
+stale hand-enumerated list on the RPC view: `global_header_to_json` had been hiding `aiRoot`
+since the field itself landed - a view that omits a root the consensus hash commits is half the
+truth, so both roots are surfaced and the staleness is named in the comment.
+
+The presentation read path landed as three `bud_identity*` RPC methods on the actor-read pattern,
+with one deliberate asymmetry: an unparseable request is a call error, a refusal from the engine
+is an answer (`{"valid":false,"reason":...}`). A service acts on answers; it cannot act on
+"your request was malformed" and "the wallet lied" being the same status. Liveness and validity
+are answered at the epoch the read happened on - stamped by the actor - because a "is this live"
+API that guesses `now` at the RPC layer is a race with block production. The tests seed a real
+`IdentityRegistry` and let the presentation engine produce the receipt the RPC verifies, including
+the revocation flip: same receipt, revoked registry, refusal - which is the entire reason the
+read path exists.
+
+The vault arc copied the identity arc's slice boundaries exactly, because they had aged well:
+payload + ownership body (ids only; every operation re-reads `NftRegistry` - registration-time
+trust was the design's named enemy), schema-6 persistence (bump-is-the-refusal, digest-gated at
+`>= 6`, the canary and all three legacy-blob tests extended in the same edit, the new v5-blob
+upgrade test riding the identity wave's template), and the tx door. The door is where the pair
+that makes the two families one rule lives: `NftTransfer` and `NftBurn` refuse to walk a listed
+token out of its folder or to move/burn a full container, because "every vault operation
+re-reads ownership" alone would protect the vault from thieves while leaving transfer as the
+legal way to strand a membership - a lock on one door that the other door opens is no lock.
+The same-shape-ids risk (AddMember and ExtractMember carry identical tuples with opposite
+meanings) is pinned by the preimage test the identity slice introduced for exactly this class.
+
+Two events of record. **Dependency Review's red is infrastructure, not this arc:** the check-run
+annotation reads "Dependency review is not supported on this repository... enable it in the
+repository settings", the arc touched zero `Cargo.toml`/`Cargo.lock` lines (measured with
+`git log` over the range), and no API a bot holds can flip the setting - a human action at
+Settings → code security, logged here so nobody re-triages it as code. And **the session's GitHub
+token expired mid-arc**: two of the six commits (the proto+executor slice and the settlement
+anchor) pushed while auth held; the remaining four sit on
+`arena/01a08a1a-budlum` locally, each pushed on the first retry after auth returns. CI verdicts
+after `9a6c2ca` are unknown AT RECORD TIME (the queue kept draining while `gh` was dead); the
+"not compiled: no cargo (measured)" labels stand on all six until the PR's compile gates disagree.

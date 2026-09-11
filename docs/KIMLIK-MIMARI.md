@@ -2,7 +2,7 @@
 
 ## Durum
 
-Uygulama sürüyor - kodda olan ve sırası gelen, EK'te ve DENETIM §33-§35'te ölçümüyle yazılı. Nihai değil; kalan iki açık uygulama kararı (executor kolunun proto dilimi, `identity_root` sahasının aktivasyon epoch'u) kod yazılırken burada güncellenecek.
+Uygulama sürüyor - kodda olan ve sırası gelen, EK'te ve DENETIM §33-§36'da ölçümüyle yazılı. İki açık uygulama kararı kapandı: proto+executor dilimi tek kolla düştü (`Identity(IdentityTx)`, elle eşlenmiş wire tablosu, Pollen deseni); `identity_root`'un aktivasyon epoch'u sorusu "bump kendi başlatması" ile çözüldü (`BDLM_GLOBAL_BLOCK_V5`, pre-launch, çift-hesap penceresi yok - snapshot şema-5 bump'ıyla aynı kural). Executor kolunun domain sorusu ağacın kendi cevabıyla kapandı: motor `domain_kind()`'ını bildirir, `AccountState::execution_domain` state'i her kurulduğunda/yer değiştirdiğinde o damga; transaction asla domain taşımaz. Vault kapısı da üç dilimle geldi (şema-6 kalıcılık + `VaultTx` kolu + transfer/burn kilitleri) - sıra, cross-domain DOĞRULAYICI tarafında (commitment + Merkle proof), o bu dokümanın ayrı satırı.
 
 ## Amaç
 
