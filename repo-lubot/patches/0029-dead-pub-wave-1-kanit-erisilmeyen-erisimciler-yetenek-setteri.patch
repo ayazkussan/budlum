@@ -1,0 +1,176 @@
+From 029cdd3ac87fad370ae38fbf41f83a8022dd64ce Mon Sep 17 00:00:00 2001
+From: ayazkussan <149924814+ayazkussan@users.noreply.github.com>
+Date: Fri, 11 Sep 2026 21:16:46 +0000
+Subject: [PATCH] =?UTF-8?q?lubot:=20dead-pub=20wave=201=20-=20kanit'in=20e?=
+ =?UTF-8?q?ri=C5=9Filmeyen=20eri=C5=9Fimcileri=20ve=20yetenek'in=20kan?=
+ =?UTF-8?q?=C4=B1ts=C4=B1z=20setter'=C4=B1=20gitti?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+The shrink queue's first wave, taken from the recorded floor: of kanit's four
+and yetenek's five baseline entries, the ones deleted are precisely those
+carrying no rule - `claim_of` (a text getter no reader exists for),
+`may_act` (a predicate restating gates the chain enforces at the doors that
+count), `described_only` and the `prose_only` behind it (a "described, not
+shown" report over a report no path writes - the close rule lives in close()
+itself, asserted under its own name), and `with_evidence` (a setter no
+production path, and no test, ever called).
+
+What the baseline KEEPS is kept with its reason named in the commit rather
+than laundered: `open_path` is the documented chain's path step - delete it
+and `run` has nothing to check against, and the crate's own header would be
+prose; `reject_names`, `with_capability`, `with_symbol`, `record_of` are the
+only setters/readers of rules enforced elsewhere in their files. Unreached
+by this repo's code, load-bearing by design - the wiring wave's work list,
+not this patch's axe.
+
+The gate earned its keep twice over: deleting described_only orphaned
+prose_only, and `public-api-is-reached` caught it on the spot ("1 public
+function(s) nothing in the tree calls") rather than letting the shrinks
+quietly create new debt - the pairing rule (fix the caller, or take the
+callee) is why the baseline could not just be edited down to pass. Floor:
+29 -> 25, measured 25 unreached; the two test lines that went with the
+deleted query were assertions duplicated by the finding-level status check
+above them.
+
+Verification as far as this sandbox can run it: all 24 cargo-free gates
+green (full python pass over 39; 14 need a toolchain this box has not -
+`cargo` absent, measured), the pre-existing `chain-surface-fixed` red
+(bud_aiGetCeilings client missing) reproduced identical at the base commit
+before am - queued chain debt, not this patch. Not compiled: no cargo
+(measured); a fresh clone with the full series applied must run
+`cargo test --workspace` and fmt before merge.
+---
+ crates/kanit/src/lib.rs     | 41 -------------------------------------
+ crates/yetenek/src/lib.rs   |  7 -------
+ gates/dead-pub-api.baseline |  4 ----
+ 3 files changed, 52 deletions(-)
+
+diff --git a/crates/kanit/src/lib.rs b/crates/kanit/src/lib.rs
+index dd0b97a..6999277 100644
+--- a/crates/kanit/src/lib.rs
++++ b/crates/kanit/src/lib.rs
+@@ -170,12 +170,6 @@ impl Scope {
+         !self.closed && self.authorized.iter().any(|t| target.starts_with(t.as_str()))
+     }
+ 
+-    /// True when the session may act.
+-    #[must_use]
+-    pub fn may_act(&self) -> bool {
+-        !self.closed && self.plan.is_some() && !self.authorized.is_empty()
+-    }
+-
+     /// Closes the scope: no further observation is admissible.
+     pub fn close(&mut self) {
+         self.closed = true;
+@@ -461,12 +455,6 @@ impl Chain {
+         id
+     }
+ 
+-    /// A finding's text.
+-    #[must_use]
+-    pub fn claim_of(&self, id: u32) -> Option<&str> {
+-        self.findings.get(&id).map(|f| f.claim.as_str())
+-    }
+-
+     /// Links evidence to a finding, refusing support gathered outside the scope.
+     ///
+     /// # Errors
+@@ -613,39 +601,12 @@ impl Chain {
+         Some(Status::Described)
+     }
+ 
+-    /// True when the finding's only support is prose. Reported separately,
+-    /// because "described, not shown" is the finding's own finding.
+-    #[must_use]
+-    pub fn prose_only(&self, finding: u32) -> bool {
+-        let Some(record) = self.findings.get(&finding) else {
+-            return false;
+-        };
+-        !record.supports.is_empty()
+-            && !record
+-                .supports
+-                .iter()
+-                .filter_map(|id| self.evidence.get(id))
+-                .any(|item| item.kind().closes())
+-    }
+-
+     /// Findings closed without prose-only support, for a report.
+     #[must_use]
+     pub fn closed(&self) -> Vec<u32> {
+         self.closed.iter().copied().collect()
+     }
+ 
+-    /// Findings that are described but not shown.
+-    #[must_use]
+-    pub fn described_only(&self) -> Vec<u32> {
+-        let mut out = Vec::new();
+-        for id in self.findings.keys() {
+-            if self.prose_only(*id) && !self.closed.contains(id) {
+-                out.push(*id);
+-            }
+-        }
+-        out
+-    }
+-
+     /// Re-checks every closure against the rules, so a closure cannot survive
+     /// the removal of what justified it.
+     ///
+@@ -727,7 +688,6 @@ mod tests {
+             .unwrap();
+         let finding = chain.claim("repair never fires");
+         chain.support(finding, note).unwrap();
+-        assert!(chain.prose_only(finding));
+         assert_eq!(chain.status(finding), Some(Status::Described));
+         chain
+             .open_path(finding, "run the repair test", Expectation::AnyRun)
+@@ -737,7 +697,6 @@ mod tests {
+             chain.close(finding),
+             Err(ChainError::NarrativeOnly { finding })
+         );
+-        assert_eq!(chain.described_only(), vec![finding]);
+     }
+ 
+     #[test]
+diff --git a/crates/yetenek/src/lib.rs b/crates/yetenek/src/lib.rs
+index 8d5dde4..0e0c8a5 100644
+--- a/crates/yetenek/src/lib.rs
++++ b/crates/yetenek/src/lib.rs
+@@ -162,13 +162,6 @@ impl Context {
+         self
+     }
+ 
+-    /// Records that evidence of this kind already exists.
+-    #[must_use]
+-    pub fn with_evidence(mut self, kind: EvidenceKind) -> Self {
+-        self.evidence.insert(kind);
+-        self
+-    }
+-
+     /// True when every symbol of the subject is known; cards that inspect
+     /// symbols refuse rather than run against an empty list and report success.
+     #[must_use]
+diff --git a/gates/dead-pub-api.baseline b/gates/dead-pub-api.baseline
+index c695638..2dcfd32 100644
+--- a/gates/dead-pub-api.baseline
++++ b/gates/dead-pub-api.baseline
+@@ -9,9 +9,6 @@ crates/grant/src/training.rs:grant_by_id
+ crates/grant/src/training.rs:to_hex
+ crates/index/src/lib.rs:compact
+ crates/izolasyon/src/lib.rs:with_entries
+-crates/kanit/src/lib.rs:claim_of
+-crates/kanit/src/lib.rs:described_only
+-crates/kanit/src/lib.rs:may_act
+ crates/kanit/src/lib.rs:open_path
+ crates/kuyruk/src/lib.rs:evictions
+ crates/kuyruk/src/lib.rs:peek_due
+@@ -26,5 +23,4 @@ crates/tools/src/chain.rs:to_corpus_line
+ crates/yetenek/src/lib.rs:record_of
+ crates/yetenek/src/lib.rs:reject_names
+ crates/yetenek/src/lib.rs:with_capability
+-crates/yetenek/src/lib.rs:with_evidence
+ crates/yetenek/src/lib.rs:with_symbol
+-- 
+2.39.5
+
