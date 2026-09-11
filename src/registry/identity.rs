@@ -74,6 +74,9 @@ pub fn did_of(address: &Address) -> String {
     out
 }
 
+///
+/// WIRING: not yet called in production; the RPC resolver that reads DIDs
+/// off the wire is the consumer this is written for.
 /// Parses a `did:bud:<64 hex>` string back to an address. Anything else -
 /// wrong method, odd length, non-hex - is `None`, silently, because the
 /// parse has no opinion to report; callers that must distinguish refusals
@@ -168,6 +171,8 @@ pub struct IdentityRecord {
 }
 
 impl IdentityRecord {
+    ///
+    /// WIRING: production entry arrives with the identity transaction door.
     /// Builds and validates a record in one step: a record that fails
     /// [`IdentityRecord::validate`] is not constructible from public types
     /// without going through the registry, which runs this first.
@@ -228,6 +233,8 @@ impl IdentityRecord {
         Ok(())
     }
 
+    ///
+    /// WIRING: production entry arrives with the signature-checking doors.
     /// A method live at `now`; the lookup is by key handle, the same
     /// `[u8; 32]` a signature envelope carries.
     #[must_use]
@@ -319,7 +326,11 @@ impl CredentialCommitment {
         merkle_root(&self.field_leaves())
     }
 
-    fn field_leaves(&self) -> Vec<[u8; 32]> {
+    /// The leaves in document order - the exact sequence the disclosure
+    /// tree is folded from, public so a wallet and a node build paths from
+    /// the same list without conversing.
+    #[must_use]
+    pub fn field_leaves(&self) -> Vec<[u8; 32]> {
         self.fields.iter().map(|f| f.commitment).collect()
     }
 
@@ -668,12 +679,10 @@ impl IdentityRegistry {
     /// not yet issued at `now`, subject unregistered, root mismatch against
     /// the credential's own fields.
     pub fn is_credential_valid(&self, id: &[u8; 32], now: u64) -> Result<(), IdentityError> {
-        let key = hex32(id);
         let credential = self
-            .credentials
-            .get(key.as_str())
+            .credential(id)
             .ok_or(IdentityError::UnknownCredential)?;
-        if self.revoked.contains(key.as_str()) {
+        if self.is_revoked(id) {
             return Err(IdentityError::AlreadyRevoked);
         }
         if !credential.is_live_at(now) {
@@ -684,8 +693,7 @@ impl IdentityRegistry {
             });
         }
         let record = self
-            .records
-            .get(&credential.subject)
+            .record(&credential.subject)
             .ok_or_else(|| IdentityError::UnknownSubject { did: did_of(&credential.subject) })?;
         if record.credential_root != Some(credential.root()) {
             return Err(IdentityError::RootMismatch { did: did_of(&credential.subject) });
@@ -768,6 +776,9 @@ pub fn recovery_digest(
     ])
 }
 
+///
+/// WIRING: the identity transaction door (full-cycle slice) is the
+/// caller; the rules are unit-tested here exactly as it will use them.
 /// The mutations the PoA gate wraps.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum IdentityOp {
