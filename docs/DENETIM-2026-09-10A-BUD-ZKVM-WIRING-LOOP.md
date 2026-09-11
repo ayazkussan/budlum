@@ -1481,3 +1481,77 @@ is a wiring question with the same three-way evidence rule; then the tools remai
 (operator's 4, lib's 1, chain's surviving 2), then olcek's 6. Every patch: caller grep
 across all file types, gate scan, am on a clean clone, README claims recounted in-patch,
 "not compiled" labeled.
+
+## 31. The esik seam, the settlement layer, and a door that had to close
+
+Two more mirror patches shipped, and they are the two halves of the same policy answer:
+wire what has a real caller, delete what has none, and let nothing sit in between.
+
+Patch 0023 wired `esik`. The question §29 left open - ten unreached entries whose honest
+shape was "public API of a ledger nobody reads" - resolved toward the seam this repo
+already had: the inventory command. `cmd_envanter` now loads `training/activation.jsonl`
+through a new `cli/src/activation.rs`, builds the registry strictly through `esik`'s own
+gates (`declare`, `admit`, `ratify`, each refusal reported with its line number), and
+prints the one schedule line valid at a caller-supplied `--at EPOCH`; no clock enters the
+inventory, which is why the epoch is an argument and not a measurement. An absent ledger
+is a legal empty schedule; a corrupt one is an error. All ten entries got genuine call
+sites, the gate's own scan then proved all ten baseline lines stale, and the same patch
+deleted them: 51 to 41. One recorded miss during construction: a test asserted the
+absence of a word in a line that always carries it; caught in the read-through, not by
+a compiler, which does not exist here, and rewritten to assert the count text instead.
+
+Patch 0024 is the user's own named system: the Universal Settlement Layer, `crates/usl`,
+the format a cold wallet reads off the stick. Its shape was forced by what the repo can
+actually guarantee, and saying so is the crate's header, not a footnote: there is no
+crypto here and none will be invented - a std-only crate must not grow signing code it
+cannot be audited for, so signing stays delegated to the cold device and USL guarantees
+only the byte contract around it. That contract is what `muhur` already holds - a chain
+that recomputes digests from the bytes rather than trusting the stored seal, which is
+"the entire mechanism" in its own words. A media is therefore one sealed file: the
+canonical payout lines (address, `M.mm`, memo), fee, window, and a `SEALED` tail; the
+reader replays every line through the same validating constructors, re-seals, and
+refuses on the first byte that disagrees. `lubot usl make|check` is the first consumer -
+the CLI parses the flags, pairs per-payout `--to`/`--amount` counts, writes the padded
+media name, and the `check` path echoes each payout line, which is exactly where the
+accessor trio gets its call sites. The crate shipped with zero new baseline entries.
+
+`from_media` replays through `Indexed`, and that is what forced the design's one side
+effect: `muhur` has no public way to seal an `Indexed` - its only sealing path was
+`chain_mut`, a `pub fn` handing out `&mut Chain` so a caller could append after sealing
+and move the tip under the index's feet. The correct shrink was not deleting the entry
+but replacing the door: `Indexed::finalize` now seals through the index, `chain_mut` is
+deleted, the tree's only user - muhur's own test - was rewritten through the proper
+door, and the baseline moved 41 to 40 as deleted surface, not widened exemption. This is
+what "delete-biased, but never delete a contract" looks like when both rules apply to
+one patch: an escape hatch with a test behind it is a missing method, not an unused one.
+
+Design decisions that will be asked about later, recorded where they were made: amounts
+are the layer's own canonical unit (`MINOR_PER_MAJOR = 100` as USL's constant), and no
+caller's currency is modeled - each side maps at its own boundary, because a hot side
+meaning satoshis and a cold side reading lira is the bug this spelling exists to refuse;
+fields cannot contain tab, quote, backslash, control characters, or double spaces, since
+the media grammar is space-tokenized and a field that can embed its own separators can
+rewrite its line; duplicate payout lines are refused as assembly mistakes, because
+paying twice is a different memo; and the window rule fires at `with_maturity`, not only
+at `check`, so an author can hold a half-built envelope but cannot seal one that ends
+where it begins - `check` repeats it so reader and writer enforce the identical rule.
+
+Verification floor, unchanged in kind: no cargo exists (measured), so every patch's floor
+is the full 39-gate run passing on the applied tree, a clean `git am -3` of all 24
+patches from bare `37d32c9` (24/24, gates re-run rc=0 there, baseline 40/40, tests
+counted 334 by grep on the applied tree, never by decrement), and a line-by-line read
+pass before commit. The series README's claims were recounted in-patch: 24 files, 21
+crate directories equal to members, 176 base + 158 series tests, the gate-executed
+ledger 53→51→41→40.
+
+One workstream closed by measurement, not by choice: pushing the series to
+`ayazkussan/lubot` itself was tried from the worktree with the configured credentials -
+fetch works, and the dry-run push returns 403 for `arena-ai-coding-agent[bot]`. The bot
+cannot write to that repository; the answer-6 fallback from §29 is therefore active: the
+mirror under `repo-lubot/` is the delivery vehicle, the system-prompt doc stays
+budlum-only, and the human one-command push recipe is owed as a small note in the mirror
+README. The queue after USL, from the same recount: olcek 6, operator 4, kanit 4,
+yetenek 5, takip 3, kuyruk 3, training 3, anlama 3, the documented `tools/chain` 2
+(header-bound debt), and the singles down to zero, each patch following the 0022/0023
+shape: caller grep, wire or delete, stale lines deleted in the same commit, counts
+recounted, gates rc=0, fresh am, "not compiled" labeled.
