@@ -38,39 +38,6 @@ jobs:
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
           shared-key: budlum-core
-      - name: Format
-        run: cargo fmt --all -- --check
-      # Same reason as the build surface in rust.yml: `cargo fmt --check` prints a
-      # diff to stdout, and stdout is on the log host. Here it is an annotation,
-      # so the fix is mechanical even from a sandbox that cannot read logs.
-      - name: Format diff surface (annotations)
-        if: failure()
-        run: |
-          set +o pipefail
-          # A check run keeps ten annotations and drops the earlier ones, so the
-          # first version of this step (120 raw lines) reported the tail of the
-          # diff and lost its head. What survives instead: up to eight `Diff in`
-          # file headers, then a count line last, so the reader can see which
-          # files and how many, and cannot mistake a truncated sample for the
-          # whole debt. The fix is unchanged: `cargo fmt --all`. The escapes are stripped
-          # first: under `CARGO_TERM_COLOR: always` the diff is colored, and an anchored
-          # pattern would report an empty debt while hunks waited.
-          tmp=$(mktemp)
-          cargo fmt --all -- --check 2>&1 | sed -e 's/\x1b\[[0-9;]*m//g' | grep -E "^Diff in " > "$tmp" || true
-          head -n 8 "$tmp" | sed -e "s/^/::error::/"
-          # The backticks around Diff in were a live command substitution inside a
-          # double-quoted printf format: the step ran `Diff in`, and the message it
-          # printed was whatever that left behind, which is nothing. Quoting is now
-          # single, and the fragment is plain text - actionlint's SC2006 fired on
-          # exactly this, and security-audit.yml already documents the trap.
-          printf '::error::%s "Diff in" hunks total (first 8 shown)\n' "$(grep -c . "$tmp")"
-          rm -f "$tmp"
-      - name: Format (kani proof harnesses)
-        # kani/ is not a member of the root workspace, so the step above never
-        # walks it: two drift hunks sat in kani/src/lib.rs while the root fmt
-        # step stayed green. Measured 2026-08-28 and pinned here so the gap
-        # cannot reopen.
-        run: cargo fmt --manifest-path kani/Cargo.toml --all -- --check
       - name: Clippy
         run: cargo clippy --all-targets -- -D warnings
       - name: Clippy pedantic/nursery ratchet (izleme modu)
@@ -168,6 +135,45 @@ jobs:
   # own diff, which is exactly what it is for. So the gates are a job of their own; a red
   # `cargo fmt --check` can no longer reach them, and `budlum` keeps the verdict on
   # format, clippy, tests and docs, where a formatting failure should stop the job.
+            # Style last, verdicts first, and this order is load-bearing: in the old
+            # arrangement Format was the fifth step of this job, so a rustfmt failure
+            # skipped Clippy, the feature canary, Test and cargo doc - 47 skipped steps at
+            # one point, with the job's red mark saying nothing about whether the code
+            # builds. A style check is worth failing on, not worth hiding a compile error
+            # behind; do not move these three steps up because they are cheap.
+      - name: Format
+        run: cargo fmt --all -- --check
+      # Same reason as the build surface in rust.yml: `cargo fmt --check` prints a
+      # diff to stdout, and stdout is on the log host. Here it is an annotation,
+      # so the fix is mechanical even from a sandbox that cannot read logs.
+      - name: Format diff surface (annotations)
+        if: failure()
+        run: |
+          set +o pipefail
+          # A check run keeps ten annotations and drops the earlier ones, so the
+          # first version of this step (120 raw lines) reported the tail of the
+          # diff and lost its head. What survives instead: up to eight `Diff in`
+          # file headers, then a count line last, so the reader can see which
+          # files and how many, and cannot mistake a truncated sample for the
+          # whole debt. The fix is unchanged: `cargo fmt --all`. The escapes are stripped
+          # first: under `CARGO_TERM_COLOR: always` the diff is colored, and an anchored
+          # pattern would report an empty debt while hunks waited.
+          tmp=$(mktemp)
+          cargo fmt --all -- --check 2>&1 | sed -e 's/\x1b\[[0-9;]*m//g' | grep -E "^Diff in " > "$tmp" || true
+          head -n 8 "$tmp" | sed -e "s/^/::error::/"
+          # The backticks around Diff in were a live command substitution inside a
+          # double-quoted printf format: the step ran `Diff in`, and the message it
+          # printed was whatever that left behind, which is nothing. Quoting is now
+          # single, and the fragment is plain text - actionlint's SC2006 fired on
+          # exactly this, and security-audit.yml already documents the trap.
+          printf '::error::%s "Diff in" hunks total (first 8 shown)\n' "$(grep -c . "$tmp")"
+          rm -f "$tmp"
+      - name: Format (kani proof harnesses)
+        # kani/ is not a member of the root workspace, so the step above never
+        # walks it: two drift hunks sat in kani/src/lib.rs while the root fmt
+        # step stayed green. Measured 2026-08-28 and pinned here so the gap
+        # cannot reopen.
+        run: cargo fmt --manifest-path kani/Cargo.toml --all -- --check
   gates:
     name: Gates (a suite that cannot run is not a protection)
     runs-on: ubuntu-latest
@@ -210,6 +216,31 @@ jobs:
       # the gate, and `continue-on-error` because the verdict on the suite belongs to
       # `budlum`: a job whose only failing step is a copy of another job's verdict teaches
       # nothing and hides the steps after it, which is the disease being cured.
+      # The gates crate is its own cargo workspace, so no root `--workspace` clippy
+      # ever saw it, and the pedantic debt it carries is invisible: measured 2026-09-10
+      # only after a build failure in it red six jobs' canaries at once. This step is
+      # monitoring, not enforcement - the same `izleme modu` shape the pedantic ratchet
+      # uses in `budlum` - because making a lint surface visible and enforcing it in the
+      # same commit is how a repo ends up reverting the visibility. The count is an
+      # annotation, so the number survives a log host nobody can reach.
+      - name: Clippy (gates workspace, izleme modu)
+        continue-on-error: true
+        run: |
+          cargo clippy --release --manifest-path xtask/gates/Cargo.toml --all-targets 2>&1 \
+            | tee /tmp/gates-clippy.log | tail -n 5
+      - name: Clippy surface (annotations)
+        if: always()
+        run: |
+          set +o pipefail
+          tmp=$(mktemp)
+          sed -e 's/\x1b\[[0-9;]*m//g' /tmp/gates-clippy.log > "$tmp" 2>/dev/null || true
+          # -A1 pairs each headline with its `--> file:line:col`, because a lint
+          # surface without a location is a to-do list, not a fix. The count stays a
+          # count of headlines: `head` truncates the pairs, the number does not lie.
+          grep -E "^(warning|error)(\[|:)" "$tmp" -A1 | grep -v "^--$" | head -n 16 | sed -e 's/^/::notice::/'
+          printf '::notice::gates-workspace clippy: %s warning/error headline line(s), first 8 shown with their locations\n' "$(grep -cE '^(warning|error)(\[|:)' "$tmp")"
+          rm -f "$tmp"
+
       - name: Test log for the badge gate (the verdict lives in budlum)
         continue-on-error: true
         run: |
@@ -400,14 +431,14 @@ jobs:
         with:
           shared-key: budzero
           workspaces: budzero
-      - name: Format
-        run: cargo fmt --all -- --check
       - name: Check
         run: cargo check --workspace --all-targets
       - name: Clippy
         run: cargo clippy --workspace --all-targets -- -D warnings
       - name: Test
         run: cargo test --workspace
+      - name: Format
+        run: cargo fmt --all -- --check
 
   bud-e2e-invariants:
     # 9 module-independence invariants as a named REQUIRED
@@ -701,8 +732,6 @@ jobs:
         with:
           shared-key: budscan
           workspaces: budscan
-      - name: Format
-        run: cargo fmt --manifest-path crates/budscan/Cargo.toml --all -- --check
       - name: Clippy (pedantic, -D warnings)
         run: cargo clippy --manifest-path crates/budscan/Cargo.toml --all-targets -- -D warnings
       - name: budscan testleri
@@ -722,6 +751,8 @@ jobs:
         run: cargo run --release --manifest-path xtask/gates/Cargo.toml -- budscan-patchset
 
   # ============================  / Bolum 4 (BNS gate) ============================
+      - name: Format
+        run: cargo fmt --manifest-path crates/budscan/Cargo.toml --all -- --check
   bns-gate:
     #  Section 4 module separation: BNS has its own CI gate (the B.U.D. gate pattern).
     # Name canary: if a test is deleted or renamed the gate FAILs.
