@@ -1555,3 +1555,57 @@ yetenek 5, takip 3, kuyruk 3, training 3, anlama 3, the documented `tools/chain`
 (header-bound debt), and the singles down to zero, each patch following the 0022/0023
 shape: caller grep, wire or delete, stale lines deleted in the same commit, counts
 recounted, gates rc=0, fresh am, "not compiled" labeled.
+
+## 32. Two deletions, and a gate caught masking its own names
+
+Patches 0025 and 0026 ran the shrink policy against the two crates §31 left queued, and
+0026 produced the loop's most uncomfortable finding: a gate of this series' own making
+was keeping dead code alive.
+
+0025 deleted `olcek`'s reporting tail - `is_granted`, `ordinary_used`, `closing_used`,
+`headroom`, `pressure_admissions`, `was_truncated` - after the esik comparison: esik's
+methods existed for a ledger file the repo ships (`training/activation.jsonl`), so the
+honest move was to write the reader; olcek's methods existed for a budget ledger nothing
+in the tree produces and no artifact awaits, so the honest move is the deletion. The
+patch also caught a deletion residue a compiler would have flagged: `Ledger::pressure`
+became a written-but-never-read field the moment its getter left, which clippy `-D
+warnings` would refuse; it went in the same patch with its two increments, since the
+pressure moment survives where callers already see it, as the `Admitted::GrantedUnderPressure`
+outcome. Two tests died with the accessors that were their only subject; one test that
+asserted a deleted line beside real claims lost only the stale line, and the test whose
+name promised the deleted counter was renamed to what it still proves - renaming over
+quiet weakening, both recorded in the commit. 40 to 34.
+
+0026 went after `operator.rs`'s registry rules and found them guarded by the suite itself.
+`operator-sync-rules` asserted seven names into operator.rs's source text; three of them
+(`compute_bond_ok`, `same_model_hash`, `CheckpointWindow`/`both_active`/`old_retired`)
+described records the tree never holds - no registration file, no operator set, no window
+producer - and were referenced only by their own fixtures, which the ratchet's test-strip
+rule already declares not-a-caller. The gate, added by this series in the 001x era to keep
+the Aşama 7 report honest, had become the exact mask §28 described: asserting a name's
+presence where the honest question is a caller's. Deleting behind it would have failed the
+suite "for the crime of having no caller while keeping the rule."
+
+The fix keeps the gate and retargets it: the effort-tier half stays asserted because it
+has doors (`answer_budget` checked at three CLI entries, the hashed tier re-verified by
+`chain.rs::parse_request`, its self-test fixtures untouched), while the registry half gets
+inverted - the gate now refuses the deleted names if they return without a caller, so the
+ratchet's one-way direction is preserved by the gate itself, and its docstring says the
+list re-grows only in a patch that carries the records. The README's own scope line (11:
+registration and bond "live in the node"; Lubot is "a client, not the layer") had already
+decided the discretion question; the table row advertising those rules as a tools feature
+contradicted it, and both became true by deletion. Recounting the row surfaced a second
+finding: it claimed 47 tests when the crate measured 41 before the patch and 41 minus four
+deleted fixtures after - a stale doc claim from before this series, caught by the same
+rule that catches stale code: counts are recounted from the applied tree, never maintained
+by hand, including when the recount embarrasses the claimant. 34 to 30.
+
+Distribution after 0026, measured with `awk -F: '{print $1}' | sort | uniq -c` as §31's
+lesson demands: yetenek 5, kanit 4, takip 3, kuyruk 3, grant/training 3, anlama 3,
+tools/chain 2 (gate-bound, header-documented), and one each in tools/lib (a getter whose
+pair lives), read/perception, muhur (the `is_finalized` branch no reader can reach),
+izolasyon, index, grant/lib, denetim. Each next patch repeats the shape: grep every file
+type for call sites, wire when an artifact awaits the reader, delete with the same-patch
+stale-line removal otherwise, recount docs in-patch, gates rc=0, clean `git am -3` of all
+26, and label the standing limit: nothing here is compiled, because no cargo exists in
+this environment - measured, not assumed.
