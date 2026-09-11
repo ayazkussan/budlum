@@ -1,0 +1,239 @@
+From f58eec89317282c70c2a07289f4bc6701f7a6955 Mon Sep 17 00:00:00 2001
+From: ayazkussan <ayazkussan@users.noreply.github.com>
+Date: Fri, 11 Sep 2026 08:22:59 +0000
+Subject: [PATCH] lubot: olcek: cagrisiz rapor yuzeyi kaldirildi - taban 40'tan
+ 34'e
+
+olcek is a complete island: no crate in the workspace depends on it and the
+CLI has no ledger to feed it, so its reporting tail was the second half of
+the esik question with the opposite answer. esik had an artifact in the tree
+(`training/activation.jsonl`) and every method was a line the ledger file
+demanded read; olcek has no artifact - nothing in this repo produces a budget
+or a ledger yet - so these accessors described a measurement nobody takes.
+Per the settled policy (delete-biased with discretion, zero baseline target,
+no speculative exemption), the surface goes; it returns with its first real
+caller in the same patch, the way the esik wiring did.
+
+Deleted: `Admitted::is_granted` (the grant-set predicate no caller branches
+on; the three `Admitted` variants stay public and matchable), `ordinary_used`
+and `closing_used` (per-pool splits of `used`, asserted by nobody but each
+other's tests), `headroom` (its test asserted `used` beside it and was deleted
+with it, so the surviving `used` covers the arithmetic), `pressure_admissions`
+and `was_truncated` (the pressure moment is reported where the caller already
+sees it, as the `GrantedUnderPressure` outcome itself; the truncation
+question belongs to a report that does not exist yet), and `Ledger::pressure`
+- the counter no longer read by any surviving method, kept only for its own
+deleted getter, a written-but-never-read field `clippy -D warnings` would
+have refused.
+
+Two test-line removals and one test rename are semantic housekeeping, not
+cover-up: the pressure-band test was named "counts that it had one" after the
+deleted counter; its assertion of `GrantedUnderPressure` plus `refusals`
+carries the same claim now, so it is renamed "swallows nothing" rather than
+weakened silently. The eviction/closing tests keep asserting what they always
+proved through the surviving API (`reserve_left`, `drops`, `verify`).
+
+gates/dead-pub-api.baseline: the six lines deleted in the same patch the
+deletions make stale, 40 to 34; README: 334 to 332 recounted from the
+applied tree (grep `#[test]`, not decremented by hand).
+
+Not compiled: no cargo in this environment (measured). Floor: all 39 gates
+pass on the applied tree (rc=0), including public-api-is-reached at 34/34,
+and a line-by-line read of every changed hunk; no doc or crate header
+promises a deleted thing (the crate header's "counted as pressure" reads the
+outcome, which still exists).
+---
+ README.md                   |  2 +-
+ crates/olcek/src/lib.rs     | 67 +------------------------------------
+ gates/dead-pub-api.baseline |  6 ----
+ 3 files changed, 2 insertions(+), 73 deletions(-)
+
+diff --git a/README.md b/README.md
+index 48ee0ce..752a172 100644
+--- a/README.md
++++ b/README.md
+@@ -33,7 +33,7 @@ nothing to check a generation against.
+ | the security review as an evidenced ledger (scan, validate, fix): every finding ends in a disposition, a fix closes only with the check that proves it plus the commit that is it, no waiver at the attestation floor without an attester, and a finding that changes on re-scan voids its stale closure | `crates/denetim` | 9 tests |
+ | the runnable binary: corpus load, `ask`, grant book, output audit, closed-loop handoff; `ceilings`; multi-question `batch`; the uninterrupted-work queue (resume, budget, per-job gate check, loud halt); measured baselines that may only rise (`ratchet`); repository `envanter`; restricted `it` (only the listed paths are committed and pushed); the four-step `olc` verification chain; `durum`; the manifest map `graf`; the credential scan `guvenlik`; the file-kind router `dosya`; the ask_user-shaped decision battery `soru` (list/get/cevapla/durum); content search `ara`, measured `indeks`, the ordered reading plan `mufredat`, effort comparison `karsilastir`; context compression `sikistir` (--path/--geri-getir: typed routing, pinned lines, reversible CCR store, measured ledger) and failure mining `ogren` (pattern grouping, two-tier promotion); the queue operator (`queue ls`, `queue iptal` - a cancelled job never runs); batch writes the same audit and closed-loop trace as `ask` | `crates/cli` | 37 tests |
+ 
+-334 tests, `clippy -D warnings` clean, `unwrap`/`expect` denied outside tests. 39 gates, each with its own self-test; the ratchet holds (334 tests, 39 gates, 0 pedantic warnings, 793 corpus records) - the count moved 328 to 334 when the settlement layer joined with its own six tests, and muhur lost its only mutating public door in the same step, measured on the applied tree, not retyped.
++332 tests, `clippy -D warnings` clean, `unwrap`/`expect` denied outside tests. 39 gates, each with its own self-test; the ratchet holds (332 tests, 39 gates, 0 pedantic warnings, 793 corpus records) - the count moved 328 to 334 when the settlement layer joined with its own six tests, and 334 to 332 when `olcek`'s callerless report surface was deleted together with the three tests that only it had left, measured on the applied tree, not retyped.
+ 
+ ## Permission is an admission decision
+ 
+diff --git a/crates/olcek/src/lib.rs b/crates/olcek/src/lib.rs
+index 7aeef3b..5eb1734 100644
+--- a/crates/olcek/src/lib.rs
++++ b/crates/olcek/src/lib.rs
+@@ -77,17 +77,6 @@ pub enum Admitted {
+     },
+ }
+ 
+-impl Admitted {
+-    /// True for every outcome that put the item in the ledger.
+-    #[must_use]
+-    pub fn is_granted(&self) -> bool {
+-        matches!(
+-            self,
+-            Self::Granted | Self::GrantedUnderPressure | Self::GrantedFromReserve { .. }
+-        )
+-    }
+-}
+-
+ /// Why a ledger is misconfigured, or why it refused.
+ #[derive(Debug, Clone, PartialEq, Eq)]
+ pub enum BudgetError {
+@@ -305,7 +294,6 @@ pub struct Ledger {
+     budget: Budget,
+     ordinary: usize,
+     closing: usize,
+-    pressure: usize,
+     refusals: usize,
+     drops: BTreeMap<String, usize>,
+     items: Vec<Item>,
+@@ -319,7 +307,6 @@ impl Ledger {
+             budget,
+             ordinary: 0,
+             closing: 0,
+-            pressure: 0,
+             refusals: 0,
+             drops: BTreeMap::new(),
+             items: Vec::new(),
+@@ -338,24 +325,6 @@ impl Ledger {
+         self.ordinary.saturating_add(self.closing)
+     }
+ 
+-    /// Cost held by ordinary work.
+-    #[must_use]
+-    pub fn ordinary_used(&self) -> usize {
+-        self.ordinary
+-    }
+-
+-    /// Cost held by closing work.
+-    #[must_use]
+-    pub fn closing_used(&self) -> usize {
+-        self.closing
+-    }
+-
+-    /// Headroom left under the hard ceiling.
+-    #[must_use]
+-    pub fn headroom(&self) -> usize {
+-        self.budget.hard_ceiling().saturating_sub(self.used())
+-    }
+-
+     /// Reserve left for closing work.
+     #[must_use]
+     pub fn reserve_left(&self) -> usize {
+@@ -380,12 +349,6 @@ impl Ledger {
+         }
+     }
+ 
+-    /// Admissions that had to press past the watermark.
+-    #[must_use]
+-    pub fn pressure_admissions(&self) -> usize {
+-        self.pressure
+-    }
+-
+     /// Refusals counted.
+     #[must_use]
+     pub fn refusals(&self) -> usize {
+@@ -443,7 +406,6 @@ impl Ledger {
+                     left: self.reserve_left(),
+                 }
+             } else if self.used() > self.budget.soft_watermark() {
+-                self.pressure += 1;
+                 Admitted::GrantedUnderPressure
+             } else {
+                 Admitted::Granted
+@@ -470,7 +432,6 @@ impl Ledger {
+             });
+         }
+         let outcome = if projected_ordinary > self.budget.soft_watermark() {
+-            self.pressure += 1;
+             Admitted::GrantedUnderPressure
+         } else {
+             Admitted::Granted
+@@ -520,12 +481,6 @@ impl Ledger {
+         &self.drops
+     }
+ 
+-    /// True when the run lost work: evicted, refused, or both.
+-    #[must_use]
+-    pub fn was_truncated(&self) -> bool {
+-        !self.drops.is_empty() || self.refusals > 0
+-    }
+-
+     /// Recomputes the totals from the held items and refuses to accept a
+     /// ledger whose arithmetic does not close.
+     ///
+@@ -597,11 +552,10 @@ mod tests {
+         let mut l = Ledger::new(budget());
+         assert_eq!(l.admit(read("a", 30, Priority::Planned)).unwrap(), Admitted::Granted);
+         assert_eq!(l.band(), Band::Under);
+-        assert_eq!(l.pressure_admissions(), 0);
+     }
+ 
+     #[test]
+-    fn the_pressure_band_needs_a_claim_and_counts_that_it_had_one() {
++    fn the_pressure_band_needs_a_claim_and_swallows_nothing() {
+         let mut l = Ledger::new(budget());
+         l.admit(read("a", 50, Priority::Planned)).unwrap();
+         let optional = l.admit(read("b", 20, Priority::Optional));
+@@ -612,7 +566,6 @@ mod tests {
+         let planned = l.admit(read("c", 15, Priority::Planned)).unwrap();
+         assert_eq!(planned, Admitted::GrantedUnderPressure);
+         assert_eq!(l.band(), Band::Pressure);
+-        assert_eq!(l.pressure_admissions(), 1);
+         assert_eq!(l.refusals(), 1, "the refusal above was counted, not swallowed");
+     }
+ 
+@@ -646,7 +599,6 @@ mod tests {
+                 left: 5
+             }
+         );
+-        assert_eq!(l.closing_used(), 15);
+         assert_eq!(l.reserve_left(), 5);
+     }
+ 
+@@ -695,21 +647,4 @@ mod tests {
+         assert!(matches!(l.verify(), Err(BudgetError::UnrecordedDrop { .. })));
+     }
+ 
+-    #[test]
+-    fn truncation_shows_in_the_report_when_the_run_lost_work() {
+-        let mut l = Ledger::new(budget());
+-        l.admit(read("only", 80, Priority::Required)).unwrap();
+-        assert!(!l.was_truncated(), "a full ordinary pool is not a truncated run");
+-        assert!(l.admit(read("more", 1, Priority::Required)).is_err());
+-        assert!(l.was_truncated());
+-    }
+-
+-    #[test]
+-    fn headroom_counts_both_pools() {
+-        let mut l = Ledger::new(budget());
+-        l.admit(read("a", 30, Priority::Planned)).unwrap();
+-        l.admit(Item::new("gate", 10, Priority::Required, Kind::Closing)).unwrap();
+-        assert_eq!(l.used(), 40);
+-        assert_eq!(l.headroom(), 60);
+-    }
+ }
+diff --git a/gates/dead-pub-api.baseline b/gates/dead-pub-api.baseline
+index ab1ccca..bdb3e8f 100644
+--- a/gates/dead-pub-api.baseline
++++ b/gates/dead-pub-api.baseline
+@@ -17,12 +17,6 @@ crates/kuyruk/src/lib.rs:evictions
+ crates/kuyruk/src/lib.rs:peek_due
+ crates/kuyruk/src/lib.rs:submit
+ crates/muhur/src/lib.rs:is_finalized
+-crates/olcek/src/lib.rs:closing_used
+-crates/olcek/src/lib.rs:headroom
+-crates/olcek/src/lib.rs:is_granted
+-crates/olcek/src/lib.rs:ordinary_used
+-crates/olcek/src/lib.rs:pressure_admissions
+-crates/olcek/src/lib.rs:was_truncated
+ crates/read/src/perception.rs:is_known
+ crates/takip/src/lib.rs:declare_unwired
+ crates/takip/src/lib.rs:declare_wired
+-- 
+2.39.5
+

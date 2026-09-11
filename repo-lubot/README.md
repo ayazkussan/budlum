@@ -16,7 +16,7 @@ git -C <lubot-clone> -c core.hooksPath=/dev/null show --stat HEAD   # eyeball th
 git push -u origin lubot-series && gh pr create --fill   # the 403 stops the bot, not you
 ```
 
-Verified, not asserted: a clean clone of `main` @ `37d32c9` takes all 24 files
+Verified, not asserted: a clean clone of `main` @ `37d32c9` takes all 25 files
 with strict `git am -3` - no `--reject`, no fallback - and the resulting tree
 has `Cargo.toml` members equal to the 21 directories under `crates/`, and
 `docs/CRATES.md` with one row per crate the series adds (13).
@@ -68,8 +68,9 @@ series adds, with 0 `#[ignore]` and no doc examples, so cargo has nothing else
 to count. Patch 0022 moved it to 325 - the two `tools/chain` ceilings tests left with
 the callerless flow they covered - and patch 0023 to 328, the three new
 `cli/activation` tests arriving with the wiring, and patch 0024 to 334, the six `usl`
-tests arriving with the settlement crate. Both moves were recounts of the
-applied tree (176 base + 158 series after 0024), never decrements by hand. The base README said 191 while the base tree measures 178, a
+tests arriving with the settlement crate, and patch 0025 to 332, when olcek's
+callerless report surface left together with two tests that asserted only it. Both moves were recounts of the
+applied tree (176 base + 156 series after 0025), never decrements by hand. The base README said 191 while the base tree measures 178, a
 13-test overstatement that predates this series; 0019 replaces it with a count
 derived from the applied tree instead of inflating the old number. `38 gates`
 was checked by counting `def gate_`; `0 pedantic` and `793 corpus records` were
@@ -92,15 +93,16 @@ cut, the declaring file's own declaration lines subtracted), with a
 It is a ratchet: `gates/dead-pub-api.baseline` holds the unreached entries measured
 on the applied tree - 53 when 0021 shipped, 51 after 0022's deletion, 41 after 0023's
 wiring, 40 after 0024 shipped its new crate with zero entries while retiring
-muhur's one mutating door - growth fails, and a
+muhur's one mutating door, 34 after 0025 deleted olcek's tail for having no
+artifact to read - growth fails, and a
 baseline line that stopped being dead fails too, so tightening is the only direction
 that moves; 0022 is that rule tripping for real: the deletions made two baseline
 lines stale, and the patch that deleted the functions had to delete their entries.
 
 Unlike the compiled parts of this series, the gate was executed rather than
 inspected, because it is std-only Python and python3 exists here: `--self-test`
-OK, `public-api-is-reached` OK at 53/53, 51/51 after 0022, 41/41 after 0023 and 40/40
-after 0024, and
+OK, `public-api-is-reached` OK at 53/53, 51/51 after 0022, 41/41 after 0023, 40/40 after 0024 and
+34/34 after 0025, and
 both failure directions reproduced
 on a scratch copy - a freshly injected unreached `pub fn` failed with
 "1 public function(s) nothing in the tree calls", and deleting a live baseline
@@ -154,3 +156,4 @@ number and the tree it describes first part company.
 | `0022` | lubot: chain: cagrisiz tavan akisi kaldirildi - taban 327'den 325'e | 3 files, +5 |
 | `0023` | lubot: envanter aktivasyon defterini okur - esik'in on ulasilmaz girdisi baglanir | 6 files, +285 |
 | `0024` | lubot: usl - soguk cuzdan mutabakati muhur muhuruyle zarflanir | 9 files, +737 |
+| `0025` | lubot: olcek: cagrisiz rapor yuzeyi kaldirildi - taban 40'tan 34'e | 3 files, +2 -73 |
