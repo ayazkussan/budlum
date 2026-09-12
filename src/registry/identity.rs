@@ -633,48 +633,30 @@ impl IdentityRegistry {
         self.records.is_empty() && self.credentials.is_empty() && self.revoked.is_empty()
     }
 
-    /// The deterministic root of the whole registry: every record (subject,
-    /// methods with their revocation epochs, current credential root), every
-    /// registered credential id, every revocation. `BTreeMap`/`BTreeSet`
-    /// iteration order is part of the format, so two honest nodes with equal
-    /// state compute equal roots without coordinating anything.
+    /// The deterministic root of the whole registry - since 2026-09-12 a
+    /// pair of Merkle trees, not an accumulator:
+    /// `identity_anchor(records_root, revocations_root)`.
     ///
-    /// The revocation set is inside on purpose: it is the note_registry
-    /// lesson stated at the root level - a peer that drops revocations from
-    /// what it serves would otherwise keep a state root that verifies.
+    /// The old form folded every record into one running hash. That made the
+    /// root cheap to compute and impossible to prove: a verifier holding a
+    /// consensus-finalised anchor could not be shown that ONE subject is in
+    /// the registry without being handed the ENTIRE registry (every prior
+    /// record feeds the digest position). KIMLIK-MIMARI's not-7 measured
+    /// this and picked the two-tree repair; the record formula survived
+    /// verbatim as the leaf, and the revocation set keeps its own tree, so
+    /// "credential X is live" is two paths: an inclusion in the subject
+    /// tree and an exclusion in the revocation tree.
+    ///
+    /// `BTreeMap`/`BTreeSet` iteration order is part of the format: leaves
+    /// are ordered by subject / by id hex, so two honest nodes with equal
+    /// state fold equal roots without coordinating, and a witness rebuilt
+    /// at a later height against a moved anchor fails RootMismatch - which
+    /// is the point of anchoring at all.
     #[must_use]
     pub fn root(&self) -> [u8; 32] {
-        let mut acc = hash_fields_bytes(&[b"bud-identity-root-v1"]);
-        for (subject, record) in &self.records {
-            let mut methods = hash_fields_bytes(&[b"bud-identity-methods"]);
-            for method in &record.methods {
-                let revoked = method.revoked_at.unwrap_or(u64::MAX).to_le_bytes();
-                methods = hash_fields_bytes(&[&methods, &method.key_id, &revoked]);
-            }
-            let credential_root = record.credential_root.unwrap_or([0u8; 32]);
-            let guardians = hash_fields_bytes(&[
-                b"bud-identity-guardians",
-                record.recovery_threshold.to_le_bytes().as_slice(),
-            ]);
-            let mut guardians = guardians;
-            for guardian in &record.guardians {
-                guardians = hash_fields_bytes(&[&guardians, guardian.as_bytes()]);
-            }
-            acc = hash_fields_bytes(&[
-                &acc,
-                subject.as_bytes(),
-                &methods,
-                &credential_root,
-                &guardians,
-            ]);
-        }
-        for id in self.credentials.keys() {
-            acc = hash_fields_bytes(&[&acc, b"cred", id.as_bytes()]);
-        }
-        for id in &self.revoked {
-            acc = hash_fields_bytes(&[&acc, b"revoked", id.as_bytes()]);
-        }
-        acc
+        let records_root = merkle_root(&self.record_leaves());
+        let revocations_root = merkle_root(&self.revocation_leaves());
+        identity_anchor(&records_root, &revocations_root)
     }
 
     /// The honest validity question, spelled out in parts so a caller can
@@ -1559,5 +1541,516 @@ mod tests {
         };
         assert_eq!(empty.root(), [0u8; 32]);
         assert!(matches!(empty.validate(), Err(IdentityError::NoFields)));
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Cross-domain witnesses: prove ONE subject's standing at ONE anchor.
+//
+// The consumer is the settlement-side verifier of KIMLIK-MIMARI's identity
+// claim: it holds `identity_root` from a finalised global block header and
+// nothing else. A root that only re-verifies given the whole registry gives
+// that verifier nothing it did not already have to trust. These types make
+// the "trust the root, see one record" sentence mechanically true:
+// `verify_identity_witness` never sees the registry - it recomputes the
+// leaf from the witness's own record data and walks a positional path, then
+// checks the pair of walked roots against the anchor.
+// ---------------------------------------------------------------------------
+
+/// One verification method as a witness sees it. `revoked_at` is part of the
+/// leaf, not an appendix: a method's revocation must change the subject's
+/// commitment, or "revoked key" would be a claim about a digest that never
+/// moved.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct MethodWitness {
+    pub key_id: [u8; 32],
+    pub revoked_at: Option<u64>,
+}
+
+/// The record's committed contents. Field-for-field this is the same data
+/// the leaf fold consumes; the identity of the subject itself rides in the
+/// `subject` bytes, so a witness cannot be re-addressed to another DID.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RecordWitness {
+    pub subject: [u8; 32],
+    pub methods: Vec<MethodWitness>,
+    /// `None` normalises to zero here, exactly as the accumulator did: a
+    /// subject without credentials has one canonical leaf, not two
+    /// spellings.
+    pub credential_root: [u8; 32],
+    pub guardians: Vec<[u8; 32]>,
+    pub recovery_threshold: u64,
+}
+
+impl RecordWitness {
+    #[must_use]
+    pub fn from_record(subject: &Address, record: &IdentityRecord) -> Self {
+        Self {
+            subject: *subject.as_bytes(),
+            methods: record
+                .methods
+                .iter()
+                .map(|m| MethodWitness { key_id: m.key_id, revoked_at: m.revoked_at })
+                .collect(),
+            credential_root: record.credential_root.unwrap_or([0u8; 32]),
+            guardians: record.guardians.iter().map(|g| *g.as_bytes()).collect(),
+            // Normalised to u64: the fold must not depend on the pointer
+            // width of whichever node computed it last.
+            recovery_threshold: record.recovery_threshold as u64,
+        }
+    }
+
+    /// The leaf of the subject tree. The tag is new; the fold under it is
+    /// the accumulator's per-record formula verbatim (`bud-identity-methods`
+    /// and `bud-identity-guardians` included), because the decision that
+    /// re-rooted the registry promised the formula would be preserved as
+    /// the leaf - what changed is that it stops chaining into its
+    /// neighbours.
+    #[must_use]
+    pub fn leaf_digest(&self) -> [u8; 32] {
+        let mut methods = hash_fields_bytes(&[b"bud-identity-methods"]);
+        for m in &self.methods {
+            let revoked = m.revoked_at.unwrap_or(u64::MAX).to_le_bytes();
+            methods = hash_fields_bytes(&[&methods, &m.key_id, &revoked]);
+        }
+        let mut guardians = hash_fields_bytes(&[
+            b"bud-identity-guardians",
+            self.recovery_threshold.to_le_bytes().as_slice(),
+        ]);
+        for g in &self.guardians {
+            guardians = hash_fields_bytes(&[&guardians, g]);
+        }
+        hash_fields_bytes(&[
+            b"bud-identity-leaf-v1",
+            &self.subject,
+            &methods,
+            &self.credential_root,
+            &guardians,
+        ])
+    }
+}
+
+/// The committed fact that one credential id is in the revocation set.
+#[must_use]
+pub fn revocation_leaf(credential_id: &str) -> [u8; 32] {
+    hash_fields_bytes(&[b"bud-identity-revoked-v1", credential_id.as_bytes()])
+}
+
+/// The registry root over the pair of tree roots. An empty tree folds to
+/// the all-zero digest - `merkle_root`'s documented convention - so the
+/// empty registry has ONE root and no special case anywhere downstream.
+#[must_use]
+pub fn identity_anchor(records_root: &[u8; 32], revocations_root: &[u8; 32]) -> [u8; 32] {
+    hash_fields_bytes(&[b"bud-identity-anchor-v1", records_root, revocations_root])
+}
+
+/// Walks a recomputed leaf to the root the path claims. Shape-identical to
+/// `verify_disclosure`'s walk (same positional discipline, same
+/// `bud-vc-v1-node` pairing, same odd-tail duplication) - the family has
+/// one tree and every witness in it reads the same way.
+fn walk_to_root(leaf: [u8; 32], proof: &DisclosureProof) -> Option<[u8; 32]> {
+    let mut level = proof.leaf_count;
+    let mut index = proof.leaf_index;
+    if level == 0 || index >= level || proof.siblings.len() != sibling_count(level) {
+        return None;
+    }
+    let mut current = leaf;
+    for sibling in &proof.siblings {
+        current = if index % 2 == 0 {
+            field_pair_hash(&current, sibling)
+        } else {
+            field_pair_hash(sibling, &current)
+        };
+        level = level.div_ceil(2);
+        index /= 2;
+    }
+    Some(current)
+}
+
+/// Why a witness was refused. `Revoked` is not a verification failure: the
+/// tree proved the revocation and the caller's answer is "no" for a
+/// different reason than the digest would have given.
+/// WIRING: consumed by the cross-domain verifier slice that reads a
+/// finalised `identity_root` off the header; its tests are the interim
+/// consumers.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WitnessError {
+    /// The walked pair of roots does not hash to the anchor: stale height,
+    /// tampered path, or a witness from a different registry.
+    RootMismatch,
+    /// The credential id's inclusion in the revocation tree verified.
+    Revoked,
+    /// The witness is not a well-formed claim at all (path length,
+    /// adjacency, ordering), before any hashing is trusted.
+    Malformed,
+}
+
+/// A subject's exclusion from the revocation tree, as two adjacent paths.
+///
+/// In a sorted set, "q is absent" is the statement "the neighbour below q
+/// and the neighbour above q are adjacent in the tree" - which needs the
+/// neighbours' OWN inclusion proofs, because adjacency is a fact about
+/// positions a digest cannot whisper. Carrying only `lower` means q is
+/// above the maximum id; carrying both means the gap between them is q and
+/// nothing else. This is why the note_registry exclusion witness is two
+/// paths and not one.
+/// WIRING: consumed by the cross-domain verifier slice (with
+/// `verify_identity_witness`); its tests are the interim consumers.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum RevocationWitness {
+    /// The id is in the set; the proof above is its inclusion.
+    Revoked { proof: DisclosureProof },
+    /// The id is not in the set.
+    Clear {
+        leaf_count: usize,
+        lower: Option<(String, DisclosureProof)>,
+        upper: Option<(String, DisclosureProof)>,
+    },
+}
+
+/// Everything a verifier needs for one (subject, credential) pair at one
+/// anchor - and nothing more. No plaintext, no neighbouring records.
+/// WIRING: produced here, consumed by the cross-domain verifier slice;
+/// the tests here are the interim consumers.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct IdentityWitness {
+    pub record: RecordWitness,
+    pub record_path: DisclosureProof,
+    pub credential_id: String,
+    pub revocation: RevocationWitness,
+}
+
+impl IdentityRegistry {
+    fn record_leaves(&self) -> Vec<[u8; 32]> {
+        self.records
+            .iter()
+            .map(|(subject, record)| RecordWitness::from_record(subject, record).leaf_digest())
+            .collect()
+    }
+
+    fn revocation_leaves(&self) -> Vec<[u8; 32]> {
+        self.revoked.iter().map(|id| revocation_leaf(id)).collect()
+    }
+
+    /// WIRING: consumed by the cross-domain verifier slice (it is the
+    /// producer side of `verify_identity_witness`); tests are interim.
+    /// Builds the witness for one (subject, credential id) pair. `None`
+    /// when the registry has no such subject - there is no honest witness
+    /// for a record that does not exist, and saying so with `None` beats
+    /// inventing an error variant for "not there".
+    #[must_use]
+    pub fn witness_for(&self, subject: &Address, credential_id: &str) -> Option<IdentityWitness> {
+        let record = self.records.get(subject)?;
+        let index = self.records.keys().position(|s| s == subject)?;
+        let record_path = disclosure_proof(&self.record_leaves(), index)?;
+        let revocation = if self.revoked.contains(credential_id) {
+            let pos = self.revoked.iter().position(|id| id == credential_id)?;
+            RevocationWitness::Revoked {
+                proof: disclosure_proof(&self.revocation_leaves(), pos)?,
+            }
+        } else {
+            let leaves = self.revocation_leaves();
+            let ids: Vec<&String> = self.revoked.iter().collect();
+            let lower = ids
+                .iter()
+                .rposition(|id| id.as_str() < credential_id)
+                .and_then(|i| Some((ids[i].clone(), disclosure_proof(&leaves, i)?)));
+            let upper = ids
+                .iter()
+                .position(|id| id.as_str() > credential_id)
+                .and_then(|i| Some((ids[i].clone(), disclosure_proof(&leaves, i)?)));
+            RevocationWitness::Clear { leaf_count: ids.len(), lower, upper }
+        };
+        Some(IdentityWitness {
+            record: RecordWitness::from_record(subject, record),
+            record_path,
+            credential_id: credential_id.to_string(),
+            revocation,
+        })
+    }
+}
+
+/// WIRING: consumed by the cross-domain verifier slice; the tests here
+/// are the interim consumers.
+/// Checks a witness against an anchor without consulting any registry.
+///
+/// The order of checks is the order of trust: shape first (a malformed path
+/// is refused before a single hash is believed), then the revocation verdict
+/// (a revoked credential is REFUSED even though its proof verified - that is
+/// what the proof was for), and only then the anchor equation, which is what
+/// binds the whole answer to a finalised block.
+///
+/// # Errors
+///
+/// `WitnessError::Malformed` for a witness that is not a well-formed claim,
+/// `WitnessError::Revoked` for a verified revocation, `WitnessError::
+/// RootMismatch` when the walked roots do not hash to `anchor`.
+pub fn verify_identity_witness(
+    anchor: &[u8; 32],
+    witness: &IdentityWitness,
+) -> Result<(), WitnessError> {
+    let root1 = walk_to_root(witness.record.leaf_digest(), &witness.record_path)
+        .ok_or(WitnessError::Malformed)?;
+    let root2 = match &witness.revocation {
+        RevocationWitness::Revoked { proof } => {
+            // The revocation proof must itself verify before the refusal is
+            // issued: "revoked" as a verdict has to be as trustworthy as
+            // "clear", and a caller must not be able to burn a credential
+            // with a garbage path.
+            let _ = walk_to_root(revocation_leaf(&witness.credential_id), proof)
+                .ok_or(WitnessError::Malformed)?;
+            return Err(WitnessError::Revoked);
+        }
+        RevocationWitness::Clear { leaf_count, lower, upper } => match (lower, upper) {
+            (None, None) if *leaf_count == 0 => [0u8; 32],
+            (None, None) => return Err(WitnessError::Malformed),
+            (Some((lid, lp)), None) => {
+                if !(lid < witness.credential_id.as_str()) {
+                    return Err(WitnessError::Malformed);
+                }
+                walk_to_root(revocation_leaf(lid), lp).ok_or(WitnessError::Malformed)?
+            }
+            (None, Some((uid, up))) => {
+                if !(witness.credential_id.as_str() < uid.as_str()) {
+                    return Err(WitnessError::Malformed);
+                }
+                walk_to_root(revocation_leaf(uid), up).ok_or(WitnessError::Malformed)?
+            }
+            (Some((lid, lp)), Some((uid, up))) => {
+                let l = walk_to_root(revocation_leaf(lid), lp)
+                    .ok_or(WitnessError::Malformed)?;
+                let u = walk_to_root(revocation_leaf(uid), up)
+                    .ok_or(WitnessError::Malformed)?;
+                // Adjacency first: two paths to the same root from
+                // non-adjacent positions say nothing about the gap.
+                if up.leaf_index != lp.leaf_index + 1 {
+                    return Err(WitnessError::Malformed);
+                }
+                if l != u {
+                    return Err(WitnessError::Malformed);
+                }
+                l
+            }
+        },
+    };
+    if &identity_anchor(&root1, &root2) != anchor {
+        return Err(WitnessError::RootMismatch);
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod registry_witness_tests {
+    use super::*;
+    use crate::core::address::Address;
+
+    fn addr(byte: u8) -> Address {
+        Address([byte; 32])
+    }
+
+    fn method(byte: u8) -> VerificationMethod {
+        VerificationMethod::new([byte; 32], MethodKind::MlDsa87)
+    }
+
+    fn registered(subject: u8) -> IdentityRecord {
+        IdentityRecord::new(addr(subject), vec![method(subject)], vec![], 0).expect("valid record")
+    }
+
+    fn credential_for(subject: u8, value: u8) -> CredentialCommitment {
+        let salt = [value; 32];
+        CredentialCommitment {
+            issuer: addr(9),
+            subject: addr(subject),
+            schema: "kycc-lite-v1".to_string(),
+            fields: vec![FieldCommitment {
+                name: "legal_name".to_string(),
+                commitment: field_commitment(
+                    "kycc-lite-v1",
+                    "legal_name",
+                    &salt,
+                    &hash_fields_bytes(&[b"v", &[value]]),
+                ),
+            }],
+            issued_at: 100,
+            expires_at: Some(1_000),
+        }
+    }
+
+    fn registry_with(subjects: &[u8]) -> IdentityRegistry {
+        let poa = crate::domain::ConsensusKind::PoA;
+        let mut registry = IdentityRegistry::new();
+        for s in subjects {
+            registry
+                .apply(&poa, IdentityOp::Register { record: registered(*s) }, 100)
+                .expect("registration");
+        }
+        registry
+    }
+
+    fn issued(registry: &mut IdentityRegistry, subject: u8, value: u8) -> String {
+        let poa = crate::domain::ConsensusKind::PoA;
+        let credential = credential_for(subject, value);
+        let id = credential_id(&credential);
+        registry
+            .apply(&poa, IdentityOp::Issue { credential }, 100)
+            .expect("issue");
+        // The map key is the hex encoding the registry itself chose.
+        registry
+            .credentials
+            .iter()
+            .find(|(_, c)| credential_id(c) == id)
+            .map(|(k, _)| k.clone())
+            .expect("issued credential is keyed")
+    }
+
+    fn revoked(registry: &mut IdentityRegistry, id: &str, subject: u8, value: u8) {
+        let poa = crate::domain::ConsensusKind::PoA;
+        let credential = credential_for(subject, value);
+        registry
+            .apply(&poa, IdentityOp::Revoke { credential }, 200)
+            .expect("revoke");
+        assert!(registry.revoked.contains(&id.to_string()), "the id landed in the set");
+    }
+
+    #[test]
+    fn the_empty_registry_root_is_the_anchor_of_two_empty_trees() {
+        let registry = IdentityRegistry::new();
+        let zero = [0u8; 32];
+        assert_eq!(registry.root(), identity_anchor(&zero, &zero));
+        // and is NOT the retired accumulator seed - if someone "fixes"
+        // root() back to the single fold, this pins which value is law.
+        assert_ne!(registry.root(), hash_fields_bytes(&[b"bud-identity-root-v1"]));
+    }
+
+    #[test]
+    fn a_witness_verifies_against_the_live_anchor() {
+        let mut registry = registry_with(&[1, 2, 3]);
+        let id = issued(&mut registry, 2, 7);
+        let witness = registry.witness_for(&addr(2), &id).expect("subject 2 exists");
+        let anchor = registry.root();
+        assert_eq!(verify_identity_witness(&anchor, &witness), Ok(()));
+    }
+
+    #[test]
+    fn a_stale_anchor_refuses_an_otherwise_perfect_witness() {
+        let mut registry = registry_with(&[1, 2]);
+        let id = issued(&mut registry, 2, 7);
+        let witness = registry.witness_for(&addr(2), &id).expect("witness");
+        let before = registry.root();
+        // A third subject moves the tree; the old witness must now fail
+        // against the old anchor - that is the anchoring doing its job.
+        registry
+            .apply(&crate::domain::ConsensusKind::PoA, IdentityOp::Register { record: registered(3) }, 150)
+            .expect("third registration");
+        assert_eq!(verify_identity_witness(&before, &witness), Err(WitnessError::RootMismatch));
+        assert_eq!(verify_identity_witness(&registry.root(), &witness), Ok(()));
+    }
+
+    #[test]
+    fn revocation_flips_the_verdict_through_the_same_anchor_pair() {
+        let mut registry = registry_with(&[1, 2]);
+        let id = issued(&mut registry, 2, 7);
+        let anchor_before = registry.root();
+        assert_eq!(
+            verify_identity_witness(
+                &anchor_before,
+                &registry.witness_for(&addr(2), &id).expect("witness")
+            ),
+            Ok(())
+        );
+        revoked(&mut registry, &id, 2, 7);
+        let anchor_after = registry.root();
+        assert_ne!(anchor_before, anchor_after, "the revocation tree moved the anchor");
+        assert_eq!(
+            verify_identity_witness(
+                &anchor_after,
+                &registry.witness_for(&addr(2), &id).expect("witness")
+            ),
+            Err(WitnessError::Revoked)
+        );
+        // A DIFFERENT credential of the same subject is untouched: the
+        // revocation is per id, not per subject.
+        let other = issued(&mut registry, 2, 8);
+        assert_eq!(
+            verify_identity_witness(
+                &registry.root(),
+                &registry.witness_for(&addr(2), &other).expect("witness")
+            ),
+            Ok(())
+        );
+    }
+
+    #[test]
+    fn exclusion_uses_the_two_neighbours_and_refuses_a_fabricated_gap() {
+        let mut registry = registry_with(&[1]);
+        let a = issued(&mut registry, 1, 1);
+        let b = issued(&mut registry, 1, 2);
+        let c = issued(&mut registry, 1, 3);
+        revoked(&mut registry, &a, 1, 1);
+        revoked(&mut registry, &b, 1, 2);
+        // c sits above the maximum revoked id: one-sided exclusion, and it
+        // must verify...
+        let witness_c = registry.witness_for(&addr(1), &c).expect("witness");
+        assert_eq!(verify_identity_witness(&registry.root(), &witness_c), Ok(()));
+        // ...but a claim of "the revocation tree is empty" over a two-leaf
+        // tree is not a claim at all: with count=2, at least one side must
+        // carry a neighbour, and the verifier refuses the shape before it
+        // believes any digest. (Pointing a fabricated neighbour at the true
+        // root is infeasible without a hash collision - which is why the
+        // shape check, not a forged-path check, is the reachable attack.)
+        let fake = IdentityWitness {
+            credential_id: "0".repeat(64),
+            revocation: RevocationWitness::Clear {
+                leaf_count: 2,
+                lower: None,
+                upper: None,
+            },
+            ..witness_c.clone()
+        };
+        assert_eq!(
+            verify_identity_witness(&registry.root(), &fake),
+            Err(WitnessError::Malformed),
+            "a claimed empty exclusion over a two-leaf tree is not a claim"
+        );
+    }
+
+    #[test]
+    fn insertion_order_is_not_part_of_the_root() {
+        let one = registry_with(&[1, 2, 3]);
+        let other = registry_with(&[3, 1, 2]);
+        assert_eq!(one.root(), other.root(), "leaves are ordered by subject, not by history");
+        // A witness built on one registry verifies against the other's
+        // anchor: the trees are the same tree.
+        let witness = one.witness_for(&addr(2), "nonexistent-id").expect("record witness");
+        let mut witness = witness;
+        witness.credential_id = "ff".repeat(32);
+        if let RevocationWitness::Clear { leaf_count, lower, upper } = &mut witness.revocation {
+            assert_eq!((*leaf_count, lower.is_some(), upper.is_some()), (0, false, false));
+        }
+        assert_eq!(verify_identity_witness(&other.root(), &witness), Ok(()));
+    }
+
+    #[test]
+    fn the_leaf_formula_is_pinned_to_the_witness_path() {
+        // root() must be recomputable from the public parts alone - if
+        // either fold drifts while the other is updated, this fails.
+        let registry = registry_with(&[4]);
+        let leaf = RecordWitness::from_record(&addr(4), &registered(4)).leaf_digest();
+        let root1 = merkle_root(&[leaf]);
+        let zero = [0u8; 32];
+        assert_eq!(registry.root(), identity_anchor(&root1, &zero));
+    }
+
+    #[test]
+    fn tampering_with_the_witness_data_breaks_the_digest_not_the_walk() {
+        let mut registry = registry_with(&[1, 2]);
+        let id = issued(&mut registry, 2, 7);
+        let anchor = registry.root();
+        let mut witness = registry.witness_for(&addr(2), &id).expect("witness");
+        // A bumped guardian list changes the leaf; the path walks a
+        // different digest to a different root, so the anchor equation
+        // fails - the refusal is RootMismatch, never a panic and never Ok.
+        witness.record.guardians.push([9u8; 32]);
+        assert_eq!(verify_identity_witness(&anchor, &witness), Err(WitnessError::RootMismatch));
     }
 }
