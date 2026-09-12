@@ -145,6 +145,183 @@ mod rpc_tests {
     }
 
     #[tokio::test]
+    async fn bud_identity_verify_at_anchor_refuses_ill_formed_questions() {
+        // Shape is the transport's business: a malformed DID, a short
+        // anchor and a credential that does not deserialize are all
+        // -32602 - never a 200-shaped verdict with a guess inside it.
+        let (registry, subject, _requester, _receipt, _filled, _id, credential) =
+            presentation_fixture();
+        let (server, _chain) = setup().await;
+        let did = crate::registry::did_of(&subject);
+        let id = crate::registry::credential_key(&crate::registry::credential_id(&credential));
+        let witness = registry
+            .witness_for(&subject, &id)
+            .expect("fixture witness");
+        let credential_json = serde_json::to_value(&credential).expect("credential json");
+        let witness_json = serde_json::to_value(&witness).expect("witness json");
+        let anchor_hex = format!(
+            "0x{}",
+            registry
+                .root()
+                .iter()
+                .map(|b| format!("{b:02x}"))
+                .collect::<String>()
+        );
+
+        let malformed_did = server
+            .identity_verify_at_anchor(
+                "did:bud:zz".to_string(),
+                anchor_hex.clone(),
+                credential_json.clone(),
+                witness_json.clone(),
+            )
+            .await
+            .unwrap_err();
+        assert_eq!(malformed_did.code(), -32602);
+        let short_anchor = server
+            .identity_verify_at_anchor(
+                did.clone(),
+                "0xdeadbeef".to_string(),
+                credential_json.clone(),
+                witness_json.clone(),
+            )
+            .await
+            .unwrap_err();
+        assert_eq!(short_anchor.code(), -32602);
+        let junk_credential = server
+            .identity_verify_at_anchor(
+                did.clone(),
+                anchor_hex.clone(),
+                serde_json::json!({"not": "a credential"}),
+                witness_json.clone(),
+            )
+            .await
+            .unwrap_err();
+        assert_eq!(junk_credential.code(), -32602);
+        // The same call, well-formed, answers instead of erroring - the
+        // refusal classes below only mean something if this shape exists.
+        let answer = server
+            .identity_verify_at_anchor(did, anchor_hex, credential_json, witness_json)
+            .await
+            .expect("a verdict is an answer");
+        assert_eq!(answer["accepted"], true);
+    }
+
+    #[tokio::test]
+    async fn bud_identity_verify_at_anchor_answers_no_in_json_not_in_errors() {
+        use crate::core::address::Address;
+        use crate::registry::{credential_key, did_of, IdentityOp, WitnessError};
+        let (mut registry, subject, _requester, _receipt, _filled, _id, credential) =
+            presentation_fixture();
+        let (server, _chain) = setup().await;
+        let id = credential_key(&crate::registry::credential_id(&credential));
+        let witness = registry
+            .witness_for(&subject, &id)
+            .expect("fixture witness");
+        let anchor_hex = format!(
+            "0x{}",
+            registry
+                .root()
+                .iter()
+                .map(|b| format!("{b:02x}"))
+                .collect::<String>()
+        );
+        let credential_json = serde_json::to_value(&credential).expect("credential json");
+        let witness_json = serde_json::to_value(&witness).expect("witness json");
+        let did = did_of(&subject);
+
+        // 1. A bystander's DID with honest subject-2 material: refused on
+        //    binding, not erroring - the claim's subject is a checked leg,
+        //    not decoration. (Before the binding check this rode through
+        //    as accepted:true; the test is that hole's gravestone.)
+        let bystander = did_of(&Address::from([0xa1u8; 32]));
+        let refused = server
+            .identity_verify_at_anchor(
+                bystander,
+                anchor_hex.clone(),
+                credential_json.clone(),
+                witness_json.clone(),
+            )
+            .await
+            .expect("a mismatch is an answer");
+        assert_eq!(refused["accepted"], false);
+        assert_eq!(refused["reason"], "subject-mismatch");
+
+        // 2. The anchor moves; the honest witness is now stale at the new
+        //    root - a different reason than a foreign one.
+        let poa = crate::domain::ConsensusKind::PoA;
+        registry
+            .apply(
+                &poa,
+                IdentityOp::Register {
+                    record: crate::registry::IdentityRecord::new(
+                        Address::from([4u8; 32]),
+                        vec![crate::registry::VerificationMethod::new(
+                            [4u8; 32],
+                            crate::registry::MethodKind::MlDsa87,
+                        )],
+                        vec![],
+                        0,
+                    )
+                    .expect("fourth record"),
+                },
+                9,
+            )
+            .expect("third-party registration");
+        let stale = server
+            .identity_verify_at_anchor(
+                did.clone(),
+                anchor_hex.clone(),
+                credential_json.clone(),
+                witness_json.clone(),
+            )
+            .await
+            .expect("staleness is an answer");
+        assert_eq!(stale["accepted"], false);
+        assert_eq!(stale["reason"], "root-mismatch-at-anchor");
+        // The witness at the moved anchor would still verify honestly at
+        // its own anchor - the reason strings distinguish the refusals,
+        // not the transport.
+        assert_eq!(
+            crate::registry::verify_identity_witness(&registry.root(), &witness),
+            Err(WitnessError::RootMismatch)
+        );
+
+        // 3. A revocation is a registry NO, delivered as a verdict.
+        registry
+            .apply(
+                &poa,
+                IdentityOp::Revoke {
+                    credential: credential.clone(),
+                },
+                12,
+            )
+            .expect("revocation");
+        let revoked_witness = registry
+            .witness_for(&subject, &id)
+            .expect("revoked witness");
+        let anchor_now = format!(
+            "0x{}",
+            registry
+                .root()
+                .iter()
+                .map(|b| format!("{b:02x}"))
+                .collect::<String>()
+        );
+        let revoked = server
+            .identity_verify_at_anchor(
+                did,
+                anchor_now,
+                credential_json,
+                serde_json::to_value(&revoked_witness).expect("revoked witness json"),
+            )
+            .await
+            .expect("a revocation is an answer");
+        assert_eq!(revoked["accepted"], false);
+        assert_eq!(revoked["reason"], "credential-revoked-at-anchor");
+    }
+
+    #[tokio::test]
     async fn bud_identity_resolve_refuses_malformed_and_answers_null_for_absent() {
         let (server, _chain) = setup().await;
         let malformed = server.identity_resolve("did:bud:zz".to_string()).await;

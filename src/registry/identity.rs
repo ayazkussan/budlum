@@ -762,6 +762,18 @@ pub fn credential_id(credential: &CredentialCommitment) -> [u8; 32] {
     ])
 }
 
+/// The registry's own map key for a credential id: `witness_for` takes this
+/// string and nothing else in the public API derives it, so an off-node
+/// verifier would otherwise have to re-implement the encoding to build a
+/// witness at all.
+///
+/// WIRING: the key half of the witness pair (`witness_for` is the witness
+/// half); tests are interim consumers until the cross-domain slice reads it.
+#[must_use]
+pub fn credential_key(id: &[u8; 32]) -> String {
+    hex32(id)
+}
+
 /// The digest a credential's issuance signature is made over. Exactly like
 /// the grant layer's `grant_issue_digest`: the signed material names the
 /// object it authenticates, so a signature cannot be moved between a
@@ -2161,8 +2173,10 @@ pub enum ClaimError {
     /// the witness committed to: the proof describes a different
     /// credential than the bytes being carried alongside it.
     RootBinding,
-    /// The presented credential belongs to another subject than the
-    /// witness's record.
+    /// The presented credential belongs to another subject than the one
+    /// being claimed, or than the witness's record: a claim is bound to
+    /// its subject on both legs, so no bystander can adopt a neighbor's
+    /// honest proof as their own.
     SubjectBinding,
 }
 
@@ -2193,6 +2207,9 @@ pub fn verify_identity_claim(
     witness: &IdentityWitness,
 ) -> Result<(), ClaimError> {
     verify_identity_witness(anchor, witness).map_err(ClaimError::Witness)?;
+    if credential.subject.as_bytes() != subject.as_bytes() {
+        return Err(ClaimError::SubjectBinding);
+    }
     if credential.subject.as_bytes() != &witness.record.subject {
         return Err(ClaimError::SubjectBinding);
     }
@@ -2327,8 +2344,9 @@ mod registry_witness_tests {
         let id = issued(&mut registry, 2, 7);
         let witness = registry.witness_for(&addr(2), &id).expect("witness");
         let before = registry.root();
-        // A third subject moves the tree; the old witness must now fail
-        // against the old anchor - that is the anchoring doing its job.
+        // A third subject moves the tree. The witness stays honest at the
+        // anchor it was captured at, and is refused the moment the anchor
+        // moves - an anchor that accepted both would anchor nothing.
         registry
             .apply(
                 &crate::domain::ConsensusKind::PoA,
@@ -2338,11 +2356,11 @@ mod registry_witness_tests {
                 150,
             )
             .expect("third registration");
+        assert_eq!(verify_identity_witness(&before, &witness), Ok(()));
         assert_eq!(
-            verify_identity_witness(&before, &witness),
+            verify_identity_witness(&registry.root(), &witness),
             Err(WitnessError::RootMismatch)
         );
-        assert_eq!(verify_identity_witness(&registry.root(), &witness), Ok(()));
     }
 
     #[test]

@@ -33,7 +33,7 @@ pub mod quarantine_ledger;
 pub mod role;
 
 pub use identity::{
-    address_of_did, authorize_recovery, credential_id, credential_issue_digest,
+    address_of_did, authorize_recovery, credential_id, credential_issue_digest, credential_key,
     credential_revoke_digest, did_of, disclosure_proof, execute_identity_tx, field_commitment,
     identity_anchor, merkle_root, recovery_digest, revocation_leaf, verify_disclosure,
     verify_identity_claim, verify_identity_witness, ClaimError, CredentialCommitment,
