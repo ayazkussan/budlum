@@ -1805,18 +1805,44 @@ pub fn verify_identity_witness(
             (None, None) if *leaf_count == 0 => [0u8; 32],
             (None, None) => return Err(WitnessError::Malformed),
             (Some((lid, lp)), None) => {
-                if !(lid < witness.credential_id.as_str()) {
+                // Mirror of the upper-only arm: q is claimed ABOVE the
+                // maximum, so the lower neighbour must be the tree's LAST
+                // leaf (index leaf_count-1).
+                if lp.leaf_index + 1 != *leaf_count {
+                    return Err(WitnessError::Malformed);
+                }
+                if !(lid.as_str() < witness.credential_id.as_str()) {
                     return Err(WitnessError::Malformed);
                 }
                 walk_to_root(revocation_leaf(lid), lp).ok_or(WitnessError::Malformed)?
             }
             (None, Some((uid, up))) => {
+                // "no lower neighbour" is a claim about position: the upper
+                // must be the tree's FIRST leaf (index 0), or the gap sits
+                // above some unmentioned smaller id - possibly q itself,
+                // revoked, sitting before a non-first upper.
+                if up.leaf_index != 0 {
+                    return Err(WitnessError::Malformed);
+                }
                 if !(witness.credential_id.as_str() < uid.as_str()) {
                     return Err(WitnessError::Malformed);
                 }
                 walk_to_root(revocation_leaf(uid), up).ok_or(WitnessError::Malformed)?
             }
             (Some((lid, lp)), Some((uid, up))) => {
+                // The claimed q must sit BETWEEN the two neighbours. The
+                // adjacency check below proves the neighbours are next to
+                // each other; this check proves the pair straddles q. Either
+                // half alone proves nothing: an unrelated adjacent pair,
+                // walked honestly to the true root, would otherwise read as
+                // "q is in the gap" for EVERY revoked q. The comparison is
+                // byte-order on the hex string, which is the set's own
+                // ordering (BTreeSet<String>).
+                if !(lid.as_str() < witness.credential_id.as_str()
+                    && witness.credential_id.as_str() < uid.as_str())
+                {
+                    return Err(WitnessError::Malformed);
+                }
                 let l = walk_to_root(revocation_leaf(lid), lp)
                     .ok_or(WitnessError::Malformed)?;
                 let u = walk_to_root(revocation_leaf(uid), up)
@@ -2012,6 +2038,40 @@ mod registry_witness_tests {
             Err(WitnessError::Malformed),
             "a claimed empty exclusion over a two-leaf tree is not a claim"
         );
+        // The upper-only arm must be anchored at index 0: c is above the
+        // max, so its honest witness is lower-only (last leaf). Re-spelling
+        // the same proof as "upper b sits at index 1 above q" is refused -
+        // position, not just ordering, is the claim.
+        let clear = match &witness_c.revocation {
+            RevocationWitness::Clear { lower, .. } => lower.clone().expect("lower neighbour"),
+            _ => panic!("c sits above both revocations"),
+        };
+        let shifted = IdentityWitness {
+            credential_id: "ff".repeat(32),
+            revocation: RevocationWitness::Clear {
+                leaf_count: 2,
+                lower: None,
+                upper: Some(clear.clone()),
+            },
+            ..witness_c.clone()
+        };
+        assert_eq!(
+            verify_identity_witness(&registry.root(), &shifted),
+            Err(WitnessError::Malformed),
+            "an upper-only claim whose upper is not the first leaf is a fabricated gap"
+        );
+        // Honest lower-only: the true witness for c keeps its own lower
+        // (max leaf) and only changes q to something above it.
+        let honest_above = IdentityWitness {
+            credential_id: "ff".repeat(32),
+            revocation: RevocationWitness::Clear {
+                leaf_count: 2,
+                lower: Some(clear),
+                upper: None,
+            },
+            ..witness_c
+        };
+        assert_eq!(verify_identity_witness(&registry.root(), &honest_above), Ok(()));
     }
 
     #[test]
