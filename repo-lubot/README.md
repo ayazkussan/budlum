@@ -16,14 +16,15 @@ git -C <lubot-clone> -c core.hooksPath=/dev/null show --stat HEAD   # eyeball th
 git push -u origin lubot-series && gh pr create --fill   # the 403 stops the bot, not you
 ```
 
-Verified, not asserted: a clean clone of `main` @ `37d32c9` takes all 29 files
+Verified, not asserted: a clean clone of `main` @ `37d32c9` takes all 31 files
 with strict `git am -3` - no `--reject`, no fallback - and the resulting tree
 has `Cargo.toml` members equal to the 21 directories under `crates/`, and
 `docs/CRATES.md` with one row per crate the series adds (13). The 0029 am ran
 on a fresh clone beside the work tree it mirrors: same tree, and the cargo-free
 gates green there too (24 OK of 39; 14 need the absent toolchain; the
 pre-existing `chain-surface-fixed` red reproduced identical at base and tip,
-which is what makes it queue debt rather than patch damage).
+which is what makes it queue debt rather than patch damage - and 0031 is that
+debt repaid: the gate goes green (8/8) on the applied series.
 
 ## Why this directory was rewritten
 
@@ -112,7 +113,9 @@ artifact to read, 30 after 0026 deleted operator's registry rules for having
 no records to check and rewrote the gate that had been asserting their names, 29
 after 0027 removed `Rational`'s getter pair, 25 after 0029 deleted kanit's three
 pure accessors (`claim_of`, `may_act`, `described_only`) and the `with_evidence`
-setter yetenek shipped without a caller - growth fails, and a
+setter yetenek shipped without a caller, 21 after 0030 deleted the wrappers that restated live API
+(`grant_by_id` behind `grants()`+`is_valid`, `is_fix` behind the enum itself, `is_known` behind
+`parse()`, `found_in_data` behind `attachments()`+`mentions`) - growth fails, and a
 baseline line that stopped being dead fails too, so tightening is the only direction
 that moves; 0022 is that rule tripping for real: the deletions made two baseline
 lines stale, and the patch that deleted the functions had to delete their entries.
@@ -120,7 +123,7 @@ lines stale, and the patch that deleted the functions had to delete their entrie
 Unlike the compiled parts of this series, the gate was executed rather than
 inspected, because it is std-only Python and python3 exists here: `--self-test`
 OK, `public-api-is-reached` OK at 53/53, 51/51 after 0022, 41/41 after 0023, 40/40 after 0024, 34/34 after 0025, 30/30 after 0026,
-29/29 after 0027 and 25/25 after 0029, and
+29/29 after 0027, 25/25 after 0029 and 21/21 after 0030, and
 both failure directions reproduced
 on a scratch copy - a freshly injected unreached `pub fn` failed with
 "1 public function(s) nothing in the tree calls", and deleting a live baseline
@@ -179,3 +182,5 @@ number and the tree it describes first part company.
 | `0027` | lubot: tools: Rational getter cifti kaldirildi - taban 29'a | 2 files, +2 -15 |
 | `0028` | lubot: usl sertlestirildi - okuyucu yazarin kurallariyla konusur, medya ezilmez | 3 files, +184 -15 |
 | `0029` | lubot: dead-pub wave 1 - kanit'in erişilmeyen erişimcileri ve yetenek'in kanıtsız setter'ı gitti | 3 files, -52 |
+| `0030` | lubot: dead-pub wave 2 - dört erişimci gitti, rule-carrier'lar gerekçesiyle kaldı | 5 files, +2 -34 |
+| `0031` | lubot: chain: bud_aiGetCeilings okuyucusu geldi - kapi kirmizisi kapandi, sekim sozlesmesi burada | 2 files, +94 -2 |
