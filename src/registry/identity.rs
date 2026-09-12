@@ -1057,22 +1057,28 @@ mod tests {
         Address([byte; 32])
     }
 
-    fn field(name: &str, salt: u8, value: u8) -> (FieldCommitment, [u8; 32]) {
+    /// The schema is a PARAMETER because it is a commitment domain, not a
+    /// label: `field_commitment` hashes the schema in, so a leaf built under
+    /// one schema can never be re-derived under another. This helper used to
+    /// hardcode "schema-v1" while the credential it fed declared
+    /// "kycc-lite-v1" - every honest verification then failed, and the broken
+    /// thing was the fixture, not the tree.
+    fn field(schema: &str, name: &str, salt: u8, value: u8) -> (FieldCommitment, [u8; 32]) {
         let salt = [salt; 32];
         let value_digest = hash_fields_bytes(&[b"v", &[value]]);
         (
             FieldCommitment {
                 name: name.to_string(),
-                commitment: field_commitment("schema-v1", name, &salt, &value_digest),
+                commitment: field_commitment(schema, name, &salt, &value_digest),
             },
             salt,
         )
     }
 
     fn credential_fixture() -> (CredentialCommitment, Vec<[u8; 32]>) {
-        let (f1, _s1) = field("legal_name", 1, 10);
-        let (f2, _s2) = field("birth_date", 2, 20);
-        let (f3, _s3) = field("residency", 3, 30);
+        let (f1, _s1) = field("kycc-lite-v1", "legal_name", 1, 10);
+        let (f2, _s2) = field("kycc-lite-v1", "birth_date", 2, 20);
+        let (f3, _s3) = field("kycc-lite-v1", "residency", 3, 30);
         (
             CredentialCommitment {
                 issuer: addr(9),
