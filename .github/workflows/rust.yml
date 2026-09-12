@@ -9,13 +9,23 @@ on:
 env:
   CARGO_TERM_COLOR: always
 
+# zizmor found this job running on the default token (2026-09-12:
+# `excessive-permissions` + `artipacked` + `unpinned-uses` on the checkout
+# line below). The workflow only builds and tests, so read-only contents is
+# all it needs, and every other workflow in .github/ already says so.
+permissions:
+  contents: read
+
 jobs:
   build:
 
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v4
+    # Same pin as ci.yml's checkouts: hash-pinned, credentials not persisted.
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      with:
+        persist-credentials: false
     # `budlum-core` has a build script that runs protoc (build.rs). This job had
     # no protoc: every other workflow that compiles installs it (`Install
     # protoc` in ci.yml, determinism.yml, miri.yml, rust-quality.yml, ...), and
