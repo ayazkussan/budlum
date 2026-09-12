@@ -3061,7 +3061,11 @@ impl BudlumApiServer for RpcServer {
             &request_id.to_le_bytes(),
         ]);
         let payer_sig = hex::decode(payer_signature).map_err(|e| {
-            ErrorObjectOwned::owned(-32602, format!("Invalid payer_signature hex: {e}"), None::<()>)
+            ErrorObjectOwned::owned(
+                -32602,
+                format!("Invalid payer_signature hex: {e}"),
+                None::<()>,
+            )
         })?;
         let op_sig = hex::decode(operator_signature).map_err(|e| {
             ErrorObjectOwned::owned(
@@ -3072,8 +3076,8 @@ impl BudlumApiServer for RpcServer {
         })?;
         crate::crypto::primitives::verify_signature(&deal_msg, &payer_sig, payer_addr.as_bytes())
             .map_err(|e| {
-                ErrorObjectOwned::owned(-32602, format!("Invalid payer signature: {e}"), None::<()>)
-            })?;
+            ErrorObjectOwned::owned(-32602, format!("Invalid payer signature: {e}"), None::<()>)
+        })?;
         crate::crypto::primitives::verify_signature(&deal_msg, &op_sig, op_addr.as_bytes())
             .map_err(|e| {
                 ErrorObjectOwned::owned(
@@ -3529,8 +3533,9 @@ impl BudlumApiServer for RpcServer {
         credential_id: String,
     ) -> Result<serde_json::Value, ErrorObjectOwned> {
         let clean = credential_id.strip_prefix("0x").unwrap_or(&credential_id);
-        let bytes = hex::decode(clean)
-            .map_err(|e| ErrorObjectOwned::owned(-32602, format!("Invalid credential id: {e}"), None::<()>))?;
+        let bytes = hex::decode(clean).map_err(|e| {
+            ErrorObjectOwned::owned(-32602, format!("Invalid credential id: {e}"), None::<()>)
+        })?;
         if bytes.len() != 32 {
             return Err(ErrorObjectOwned::owned(
                 -32602,
@@ -3584,13 +3589,20 @@ impl BudlumApiServer for RpcServer {
                 Err(e) => return Err(invalid(format!("anchor must be 32 bytes of hex: {e}"))),
             }
         } else {
-            return Err(invalid("anchor must be 64 hex characters (0x-prefixed accepted)".to_string()));
+            return Err(invalid(
+                "anchor must be 64 hex characters (0x-prefixed accepted)".to_string(),
+            ));
         };
         let credential: crate::registry::CredentialCommitment = serde_json::from_value(credential)
             .map_err(|e| invalid(format!("credential does not deserialize: {e}")))?;
         let witness: crate::registry::IdentityWitness = serde_json::from_value(witness)
             .map_err(|e| invalid(format!("witness does not deserialize: {e}")))?;
-        let refusal = match crate::registry::verify_identity_claim(&anchor32, &subject, &credential, &witness) {
+        let refusal = match crate::registry::verify_identity_claim(
+            &anchor32,
+            &subject,
+            &credential,
+            &witness,
+        ) {
             Ok(()) => None,
             Err(crate::registry::ClaimError::Witness(e)) => Some(match e {
                 crate::registry::WitnessError::RootMismatch => "root-mismatch-at-anchor",
@@ -3614,7 +3626,11 @@ impl BudlumApiServer for RpcServer {
     ) -> Result<serde_json::Value, ErrorObjectOwned> {
         let clean = requester.strip_prefix("0x").unwrap_or(&requester);
         let requester = Address::from_hex(clean).map_err(|e| {
-            ErrorObjectOwned::owned(-32602, format!("Invalid requester address: {e}"), None::<()>)
+            ErrorObjectOwned::owned(
+                -32602,
+                format!("Invalid requester address: {e}"),
+                None::<()>,
+            )
         })?;
         match self
             .chain
