@@ -5768,17 +5768,17 @@ impl Blockchain {
         merkle_proof: Option<Vec<u8>>,
         storage_root: Option<crate::domain::Hash32>,
     ) -> Result<u64, String> {
+        // Check order: the ticket's own history speaks before the operator's
+        // general cooldown. The barred slashed operator is ALWAYS in cooldown
+        // for the ticket that slashed them (finalize writes both), so with
+        // the cooldown first the permanent, ticket-scoped bar below was
+        // unreachable - a test that set up exactly that operator/ticket pair
+        // got the six-hour message instead of the lifetime one and failed
+        // against the code, correctly. The bar does not expire; the cooldown
+        // does. The specific permanent refusal must be the answer a caller
+        // hears, or the pruning of expired cooldowns silently reopens a slot
+        // the slash meant to close forever.
         let now_unix = self.current_unix_secs();
-        if let Some(until) = self
-            .state
-            .storage_registry
-            .operator_cooldown_until(&replacement_operator, now_unix)
-        {
-            return Err(format!(
-                "operator {replacement_operator} missed a challenge and cannot take storage work until unix {until} ({} seconds left)",
-                until.saturating_sub(now_unix)
-            ));
-        }
 
         let ticket = self
             .state
@@ -5798,6 +5798,17 @@ impl Blockchain {
         if replacement_operator == ticket.slashed_operator {
             return Err(format!(
                 "operator {replacement_operator} is the slashed operator of ticket {ticket_id}"
+            ));
+        }
+
+        if let Some(until) = self
+            .state
+            .storage_registry
+            .operator_cooldown_until(&replacement_operator, now_unix)
+        {
+            return Err(format!(
+                "operator {replacement_operator} missed a challenge and cannot take storage work until unix {until} ({} seconds left)",
+                until.saturating_sub(now_unix)
             ));
         }
 

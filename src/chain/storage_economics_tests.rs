@@ -440,6 +440,15 @@ mod tests {
             };
             bincode::serialize(&envelope).unwrap()
         };
+        // open_never_placed_ticket refuses a manifest the registry has never
+        // seen (the `manifests.get(..)?` line is that refusal). The sweep this
+        // helper imitates never calls the registry directly in production: the
+        // DEAL PLACEMENT transaction registers the manifest first, so the
+        // ticket only ever opens over a registered one. The test bypasses the
+        // transaction, so it must perform that registration itself - before
+        // this line it asserted a ticket opening that the code correctly
+        // refused, and the failure was filed against the code.
+        blockchain.state.storage_registry.register_manifest(&manifest);
         let ticket_id = blockchain
             .state
             .storage_registry
