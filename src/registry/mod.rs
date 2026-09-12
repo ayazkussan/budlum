@@ -39,6 +39,8 @@ pub use identity_fill::{
 };
 pub use identity::{
     address_of_did, did_of, field_commitment, IdentityError, IdentityOp, IdentityRecord,
+    identity_anchor, revocation_leaf, verify_identity_claim, verify_identity_witness,
+    ClaimError, IdentityWitness, MethodWitness, RecordWitness, RevocationWitness, WitnessError,
     IdentityRegistry, MethodKind, VerificationMethod, CredentialCommitment,
     DisclosureProof, FieldCommitment, credential_id, disclosure_proof, merkle_root,
     verify_disclosure, authorize_recovery, credential_issue_digest, credential_revoke_digest,

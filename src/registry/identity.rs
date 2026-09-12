@@ -1865,6 +1865,61 @@ pub fn verify_identity_witness(
     Ok(())
 }
 
+/// Why a cross-domain identity claim was refused even though the responder
+/// answered politely. The three answers are deliberately distinct: a caller
+/// that lumps them cannot tell "the registry says revoked" from "you handed
+/// me bytes that never entered any tree" - the first is a verdict, the
+/// second is the responder lying.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ClaimError {
+    /// The witness itself: `RootMismatch` (stale or foreign anchor),
+    /// `Revoked` (a verified revocation) or `Malformed` (not a claim).
+    Witness(WitnessError),
+    /// The presented credential does not hash to the `credential_root`
+    /// the witness committed to: the proof describes a different
+    /// credential than the bytes being carried alongside it.
+    RootBinding,
+    /// The presented credential belongs to another subject than the
+    /// witness's record.
+    SubjectBinding,
+}
+
+/// The cross-domain acceptance decision: one credential, one subject, one
+/// FINALISED registry anchor - and no trust in whoever served the witness.
+///
+/// The sentence KIMLIK-MIMARI promised - "commitment + Merkle proof al,
+/// finalize edilmiş PoA kökü karşısında doğrula" - is exactly this
+/// function's three moves: the witness proves membership of the subject's
+/// record AND non-membership of the credential id in the revocation tree at
+/// `anchor`; the credential's own field-Merkle root must equal the
+/// `credential_root` the witness committed to (otherwise the honest proof
+/// is about a different credential and these bytes ride outside it); and
+/// the credential's subject must be the witness's subject. Calendar
+/// validity (issued/expired windows, the six gates of `is_credential_valid`)
+/// stays the node-side question the anchor cannot answer: the root proves
+/// what the registry recorded, not what time it is.
+///
+/// # Errors
+///
+/// `ClaimError::Witness` for any witness refusal (including a verified
+/// revocation), then the two binding refusals, in that order.
+#[must_use]
+pub fn verify_identity_claim(
+    anchor: &[u8; 32],
+    subject: &Address,
+    credential: &CredentialCommitment,
+    witness: &IdentityWitness,
+) -> Result<(), ClaimError> {
+    verify_identity_witness(anchor, witness).map_err(ClaimError::Witness)?;
+    if credential.subject.as_bytes() != &witness.record.subject {
+        return Err(ClaimError::SubjectBinding);
+    }
+    if credential.root() != witness.record.credential_root {
+        return Err(ClaimError::RootBinding);
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod registry_witness_tests {
     use super::*;
@@ -2113,4 +2168,48 @@ mod registry_witness_tests {
         witness.record.guardians.push([9u8; 32]);
         assert_eq!(verify_identity_witness(&anchor, &witness), Err(WitnessError::RootMismatch));
     }
+    #[test]
+    fn a_claim_binds_credential_bytes_to_the_anchor_through_the_witness() {
+        let poa = crate::domain::ConsensusKind::PoA;
+        let mut registry = registry_with(&[2]);
+        let credential = credential_for(2, 7);
+        registry.apply(&poa, IdentityOp::Issue { credential: credential.clone() }, 100).expect("issue");
+        let id = registry
+            .credentials
+            .iter()
+            .find(|(_, c)| credential_id(c) == credential_id(&credential))
+            .map(|(k, _)| k.clone())
+            .expect("keyed");
+        let witness = registry.witness_for(&addr(2), &id).expect("witness");
+        let anchor = registry.root();
+        assert_eq!(verify_identity_claim(&anchor, &addr(2), &credential, &witness), Ok(()));
+        // The same witness, a DIFFERENT credential of the same subject:
+        // the bytes must not be able to ride the neighboring proof.
+        let other = credential_for(2, 8);
+        assert_eq!(
+            verify_identity_claim(&anchor, &addr(2), &other, &witness),
+            Err(ClaimError::RootBinding)
+        );
+        // The right bytes, the wrong subject claimed: refused on binding.
+        assert_eq!(
+            verify_identity_claim(&anchor, &addr(3), &credential, &witness),
+            Err(ClaimError::SubjectBinding)
+        );
+        // A revocation turns the same call into a verdict, not an error of
+        // shape: Witness(Revoked) is the registry SAYING NO through honest
+        // proofs.
+        registry.apply(&poa, IdentityOp::Revoke { credential: credential.clone() }, 200).expect("revoke");
+        let revoked_witness = registry.witness_for(&addr(2), &id).expect("witness");
+        assert_eq!(
+            verify_identity_claim(&registry.root(), &addr(2), &credential, &revoked_witness),
+            Err(ClaimError::Witness(WitnessError::Revoked))
+        );
+        // ...and the pre-revocation witness against the POST-revocation
+        // anchor no longer even speaks: RootMismatch, the stale answer dies.
+        assert_eq!(
+            verify_identity_claim(&registry.root(), &addr(2), &credential, &witness),
+            Err(ClaimError::Witness(WitnessError::RootMismatch))
+        );
+    }
 }
+

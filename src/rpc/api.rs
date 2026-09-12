@@ -1118,4 +1118,21 @@ pub trait BudlumApi {
         requester: String,
         document: String,
     ) -> Result<serde_json::Value, ErrorObjectOwned>;
+
+    /// Decide a cross-domain identity claim against a FINALISED registry
+    /// anchor without trusting whoever served the witness: the witness
+    /// proves the subject's record membership and the credential id's
+    /// absence from the revocation tree at `anchor`; the credential bytes
+    /// must bind to the committed `credential_root` and to the claimed
+    /// subject. `accepted:false` with a `reason` is an answer (revoked,
+    /// stale anchor, bad binding); only an ill-formed request errors - the
+    /// `bud_identityVerifyPresentation` discipline, one layer down.
+    #[method(name = "bud_identityVerifyAtAnchor")]
+    async fn identity_verify_at_anchor(
+        &self,
+        did: String,
+        anchor: String,
+        credential: serde_json::Value,
+        witness: serde_json::Value,
+    ) -> Result<serde_json::Value, ErrorObjectOwned>;
 }

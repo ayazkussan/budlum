@@ -3563,6 +3563,49 @@ impl BudlumApiServer for RpcServer {
         }))
     }
 
+    async fn identity_verify_at_anchor(
+        &self,
+        did: String,
+        anchor: String,
+        credential: serde_json::Value,
+        witness: serde_json::Value,
+    ) -> Result<serde_json::Value, ErrorObjectOwned> {
+        // Shape refusals are -32602s; every VERIFIED answer, including "no,
+        // revoked", is a 200-shaped json object - the two must not be
+        // conflated or clients start treating a verdict as a transport
+        // error and retrying it into an outage.
+        let invalid = |why: String| ErrorObjectOwned::owned(-32602, why, None::<()>);
+        let subject = crate::registry::address_of_did(&did)
+            .ok_or_else(|| invalid("did must be `did:bud:<64 lowercase hex>`".to_string()))?;
+        let clean = anchor.strip_prefix("0x").unwrap_or(&anchor);
+        let anchor32 = if clean.len() == 64 && clean.bytes().all(|b| b.is_ascii_hexdigit()) {
+            match Address::from_hex(clean) {
+                Ok(a) => *a.as_bytes(),
+                Err(e) => return Err(invalid(format!("anchor must be 32 bytes of hex: {e}"))),
+            }
+        } else {
+            return Err(invalid("anchor must be 64 hex characters (0x-prefixed accepted)".to_string()));
+        };
+        let credential: crate::registry::CredentialCommitment = serde_json::from_value(credential)
+            .map_err(|e| invalid(format!("credential does not deserialize: {e}")))?;
+        let witness: crate::registry::IdentityWitness = serde_json::from_value(witness)
+            .map_err(|e| invalid(format!("witness does not deserialize: {e}")))?;
+        let refusal = match crate::registry::verify_identity_claim(&anchor32, &subject, &credential, &witness) {
+            Ok(()) => None,
+            Err(crate::registry::ClaimError::Witness(e)) => Some(match e {
+                crate::registry::WitnessError::RootMismatch => "root-mismatch-at-anchor",
+                crate::registry::WitnessError::Revoked => "credential-revoked-at-anchor",
+                crate::registry::WitnessError::Malformed => "malformed-witness",
+            }),
+            Err(crate::registry::ClaimError::RootBinding) => Some("credential-bytes-outside-proof"),
+            Err(crate::registry::ClaimError::SubjectBinding) => Some("subject-mismatch"),
+        };
+        Ok(serde_json::json!({
+            "accepted": refusal.is_none(),
+            "reason": refusal.map(ToString::to_string),
+        }))
+    }
+
     async fn identity_verify_presentation(
         &self,
         receipt: crate::registry::PresentationReceipt,
