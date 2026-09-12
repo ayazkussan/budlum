@@ -2435,20 +2435,30 @@ mod registry_witness_tests {
             Err(WitnessError::Malformed),
             "a claimed empty exclusion over a two-leaf tree is not a claim"
         );
-        // The upper-only arm must be anchored at index 0: c is above the
-        // max, so its honest witness is lower-only (last leaf). Re-spelling
-        // the same proof as "upper b sits at index 1 above q" is refused -
-        // position, not just ordering, is the claim.
-        let clear = match &witness_c.revocation {
-            RevocationWitness::Clear { lower, .. } => lower.clone().expect("lower neighbour"),
-            _ => panic!("c sits above both revocations"),
+        // The upper-only arm must be anchored at index 0: the honest
+        // witness of a claim above the maximum carries the max leaf as its
+        // lower neighbour. Re-spelling the same material as "the last leaf
+        // sits UPPER at index 1" is refused - position, not just ordering,
+        // is the claim. Which of a, b, c hashes above the others is the
+        // registry's business and nobody else's, so min and max are read
+        // back from the revocation set instead of assumed: an earlier
+        // revision of this test hardcoded "c sits above both" and was
+        // lying on day one about ids it could not control.
+        let (lo, hi) = {
+            let mut it = registry.revoked.iter();
+            (
+                it.next().expect("first revoked").clone(),
+                it.next().expect("second revoked").clone(),
+            )
         };
+        let leaves = [revocation_leaf(&lo), revocation_leaf(&hi)];
+        let proof_at = |i| disclosure_proof(&leaves, i).expect("two-leaf neighbour proof");
         let shifted = IdentityWitness {
             credential_id: "ff".repeat(32),
             revocation: RevocationWitness::Clear {
                 leaf_count: 2,
                 lower: None,
-                upper: Some(clear.clone()),
+                upper: Some((hi.clone(), proof_at(1))),
             },
             ..witness_c.clone()
         };
@@ -2457,13 +2467,14 @@ mod registry_witness_tests {
             Err(WitnessError::Malformed),
             "an upper-only claim whose upper is not the first leaf is a fabricated gap"
         );
-        // Honest lower-only: the true witness for c keeps its own lower
-        // (max leaf) and only changes q to something above it.
+        // Honest lower-only: q above the maximum with the true last leaf
+        // as its lower neighbour - every input read from the registry, so
+        // the leg survives any future reordering of the hashed ids.
         let honest_above = IdentityWitness {
             credential_id: "ff".repeat(32),
             revocation: RevocationWitness::Clear {
                 leaf_count: 2,
-                lower: Some(clear),
+                lower: Some((hi, proof_at(1))),
                 upper: None,
             },
             ..witness_c

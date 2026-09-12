@@ -268,10 +268,22 @@ mod rpc_tests {
                 9,
             )
             .expect("third-party registration");
+        // The caller presents the CURRENT root; the witness speaks for the
+        // one it was captured at. A stale witness asked about at a moved
+        // anchor is the staleness the reason string names - the server does
+        // not move roots by itself, the anchor is part of the question.
+        let anchor_moved = format!(
+            "0x{}",
+            registry
+                .root()
+                .iter()
+                .map(|b| format!("{b:02x}"))
+                .collect::<String>()
+        );
         let stale = server
             .identity_verify_at_anchor(
                 did.clone(),
-                anchor_hex.clone(),
+                anchor_moved,
                 credential_json.clone(),
                 witness_json.clone(),
             )
