@@ -1856,3 +1856,33 @@ original boundaries with their original messages and pushed as `888094d..3e3cd6d
 new hashes, and this paragraph is the record that they are not the same objects. A workspace that
 persists files but not git state is a workspace whose commits must be small, self-describing and
 pushed early - the arc's per-commit-push habit is what made the loss zero-content.
+
+## 37. Closing the arc: a claim that cannot lie about its root, two fixture reds, and the formatter that arrived through npm
+
+The `not-7` claim was the last refusal standing: a witness that verified could still be paired
+with a claim whose `root` was never checked against the anchor's state root, so "verified at
+anchor" was a phrase the code did not enforce. The fix binds the credential bytes into the
+anchor's identity root inside the claim (`bud_identityVerifyAtAnchor`, ill-formed shape refused
+with -32602, verified refusals answered `accepted:false` with the five reason strings), and it
+deliberately does not reach for wall-clock semantics: revocation time is a calendar property of
+the settlement layer, while the claim's promise is positional - these bytes, at this root, under
+this subject. The consumer slice compiled on CI at `052216b` (the run reached its test phase,
+which is the strongest local toolchain cannot give), and the two reds it arrived with were both
+test-side: `identity.rs` fixtures had never registered the issuer address that `issue`'s
+credential-farm guard demands, and a `snapshot.rs` assertion still quoted migration-note text
+from before the notes were rewritten around `d24df3e`. Neither guard was wrong; both fakes were.
+The lesson generalises: when a CI annotation list is truncated at eight, the shared helper is
+where the ninth failure is hiding - and an assertion that quotes a fixed string about a versioned
+document should interpolate the version constant instead of rotting one bump later.
+
+The formatter arrived through a door left open by exhaustion. `cargo fmt` was unreachable from the
+sandbox (static.rust-lang.org blocked, rustup dead, `@rustbin` stopped at 1.88), the user had
+chosen "reformat by hand" only because the CI log channel had died four times, and hand-shaped
+formatting is exactly the unverifiable claim the repository's culture rejects. `@scalar/rust-fmt`
+- rustfmt compiled to wasm - produced a proof no hand could claim: 415 of the tree's 432 `.rs`
+files came out byte-identical, which is only possible if the wasm build's style is the CI's
+pinned 1.97.1 style; the 17 files it did change are exactly the files the `Diff in` annotations
+had named, and the reflow classes visible under `git diff -w` are rustfmt's own textbook output
+(import reordering, chain splitting, trailing commas). Idempotency (a second pass moved nothing)
+was the third check. The 131-hunk fmt debt closed at `63accba` - not by guessing rustfmt's mind,
+but by running rustfmt, shipped inside an npm package because the normal roads were dead.
