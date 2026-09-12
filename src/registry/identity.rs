@@ -89,9 +89,13 @@ pub fn address_of_did(did: &str) -> Option<Address> {
         return None;
     }
     let mut raw = [0u8; 32];
-    for (i, out) in raw.iter_mut().enumerate() {
-        let hi = hex_val(bytes[i * 2])?;
-        let lo = hex_val(bytes[i * 2 + 1])?;
+    // chunks_exact + zip: `bytes.len() == 64` is checked above, so the
+    // chunker yields exactly 32 pairs and the fold has no index to get
+    // out of range - the old `bytes[i * 2]` relied on that arithmetic
+    // being right; this relies on the iterator's type instead.
+    for (pair, out) in bytes.chunks_exact(2).zip(raw.iter_mut()) {
+        let hi = hex_val(pair[0])?;
+        let lo = hex_val(pair[1])?;
         *out = (hi << 4) | lo;
     }
     // Lowercase-only rule: an "uppercase DID" is the same key two spellings
@@ -205,7 +209,7 @@ impl IdentityRecord {
             return Err(IdentityError::NoMethods { did: did_of(&self.subject) });
         }
         for (i, method) in self.methods.iter().enumerate() {
-            if self.methods[..i].iter().any(|m| m.key_id == method.key_id) {
+            if self.methods.iter().take(i).any(|m| m.key_id == method.key_id) {
                 return Err(IdentityError::DuplicateKeyId { did: did_of(&self.subject) });
             }
         }
@@ -213,7 +217,7 @@ impl IdentityRecord {
             if guardian == &self.subject {
                 return Err(IdentityError::SubjectIsOwnGuardian { did: did_of(&self.subject) });
             }
-            if self.guardians[..i].contains(guardian) {
+            if self.guardians.iter().take(i).any(|g| g == guardian) {
                 return Err(IdentityError::DuplicateGuardian { did: did_of(&self.subject) });
             }
         }
@@ -310,7 +314,7 @@ impl CredentialCommitment {
                     schema: format!("field name `{}`", field.name),
                 });
             }
-            if self.fields[..i].iter().any(|f| f.name == field.name) {
+            if self.fields.iter().take(i).any(|f| f.name == field.name) {
                 return Err(IdentityError::DuplicateField { name: field.name.clone() });
             }
         }
@@ -361,7 +365,10 @@ pub fn disclosure_proof(leaves: &[[u8; 32]], leaf_index: usize) -> Option<Disclo
     let mut siblings = Vec::new();
     while level.len() > 1 {
         let pair = if index % 2 == 0 { index + 1 } else { index - 1 };
-        siblings.push(level.get(pair).copied().unwrap_or(level[index]));
+        // `pair` may run past the level (odd tail); the leaf then pairs
+        // with itself - fetched by `get` so no index expression exists.
+        let sib = *level.get(pair).or_else(|| level.get(index)).unwrap_or(&[0u8; 32]);
+        siblings.push(sib);
         let mut next = Vec::with_capacity(level.len().div_ceil(2));
         for chunk in level.chunks(2) {
             let left = chunk[0];

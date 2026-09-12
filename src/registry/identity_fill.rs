@@ -141,12 +141,12 @@ pub fn template_slots(template: &str) -> Result<Vec<String>, FillError> {
     let mut slots = Vec::new();
     let mut cursor = 0usize;
     while cursor < template.len() {
-        let rest = &template[cursor..];
+        let Some(rest) = template.get(cursor..) else { break };
         if let Some(name) = rest.strip_prefix("{{") {
             let close = name
                 .find("}}")
                 .ok_or_else(|| FillError::MalformedTemplate(take_preview(rest)))?;
-            let raw = &name[..close];
+            let raw = name.get(..close).unwrap_or(name);
             if raw.trim().is_empty() {
                 return Err(FillError::EmptySlot);
             }
@@ -213,14 +213,14 @@ pub fn fill_template(template: &str, disclosures: &[SlotDisclosure]) -> Result<S
     let mut out = String::with_capacity(template.len());
     let mut cursor = 0usize;
     while cursor < template.len() {
-        let rest = &template[cursor..];
+        let Some(rest) = template.get(cursor..) else { break };
         if let Some(name) = rest.strip_prefix("{{") {
             let close = name
                 .find("}}")
                 .ok_or_else(|| {
                     FillError::MalformedTemplate("unreachable after validate".to_string())
                 })?;
-            let slot = &name[..close];
+            let slot = name.get(..close).unwrap_or(name);
             let disclosure = disclosures
                 .iter()
                 .find(|d| d.slot == slot)
@@ -234,7 +234,7 @@ pub fn fill_template(template: &str, disclosures: &[SlotDisclosure]) -> Result<S
             let next_open = rest.find("{{").unwrap_or(rest.len());
             let next_close = rest.find("}}").unwrap_or(rest.len());
             let take = next_open.min(next_close);
-            out.push_str(&rest[..take]);
+            out.push_str(rest.get(..take).unwrap_or(rest));
             cursor += take;
         }
     }
@@ -348,6 +348,14 @@ pub fn build_presentation(
         let proof = credential_proof(credential, index).ok_or(FillError::DisclosureMismatch {
             slot: disclosure.slot.clone(),
         })?;
+        // The field must exist to be compared at all: an index past the end
+        // used to panic HERE even though `credential_proof` had already said
+        // the slot was real - now it fails closed like every other mismatch.
+        let Some(field) = credential.fields.get(index) else {
+            return Err(FillError::DisclosureMismatch {
+                slot: disclosure.slot.clone(),
+            });
+        };
         let recomputed = disclosure.recompute_commitment(&credential.schema);
         let opens = verify_disclosure(
             &credential.root(),
@@ -357,7 +365,7 @@ pub fn build_presentation(
             &value_digest_of(&disclosure.value),
             &proof,
         );
-        if !opens || recomputed != credential.fields[index].commitment {
+        if !opens || recomputed != field.commitment {
             return Err(FillError::DisclosureMismatch { slot: disclosure.slot.clone() });
         }
         entries.push(ReceiptEntry {

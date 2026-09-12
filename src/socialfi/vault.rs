@@ -240,7 +240,7 @@ impl VaultRegistry {
         if !seen.insert(from) {
             return false;
         }
-        for member in self.members.get(&from).map_or(&[][..], Vec::as_slice) {
+        for member in self.members.get(&from).map(Vec::as_slice).unwrap_or_default() {
             if self.folders.contains(member) && self.reaches_walk(*member, target, seen) {
                 return true;
             }
