@@ -1017,7 +1017,9 @@ mod tests {
     ///
     /// Measured with a canary before the fix, at `max_per_sender = 2`:
     ///
+    ///```text
     ///     A holds 2, pool is full, A submits a third at a higher fee -> Ok(())
+    ///```
     ///
     /// The per-sender cap exists so one account cannot occupy the pool, and it
     /// stopped holding exactly when the pool was full and contention mattered.

@@ -2194,8 +2194,10 @@ mod storage_decode_locks {
     /// arbitrary bytes can still decode into a structurally valid value.
     /// Measured on this very input:
     ///
+    ///```text
     ///     decode::<Stored>(b"{\"a\":\"not-a-number\"}")
     ///       -> Ok(Stored { a: 8029392818728411771 })
+    ///```
     ///
     /// So integrity on this path rests on the checksum in
     /// `decode_database_backup` and on the database file itself, not on the

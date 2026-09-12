@@ -570,9 +570,11 @@ fn mainnet_state_with_distribution() -> AccountState {
 ///
 /// Measured with a canary before the fix, on `mainnet_genesis()`:
 ///
+///```text
 ///     epoch_at_timestamp       = 5579531250
 ///     spendable before advance = 0
 ///     spendable after  advance = 20000000000000
+///```
 ///
 /// 20M $BUD, 20% of total supply, unlocked at the first epoch close.
 /// `spendable_balance` gates transfers (`executor.rs`), so this was spendable.
@@ -632,8 +634,10 @@ fn the_team_cliff_still_opens_after_its_epochs_elapse() {
 ///
 /// Measured with a canary before the fix, on `mainnet_genesis()`:
 ///
+///```text
 ///     years_burned    0 -> 106155
 ///     reserve balance 40000000000000 -> 0
+///```
 #[test]
 fn one_epoch_close_does_not_drain_the_burn_reserve() {
     let mut state = mainnet_state_with_distribution();

@@ -162,8 +162,10 @@ fn test_bns_full_resolve_with_storage() {
 /// re-register after expiry without being front-run. It does not replace
 /// renewal, because the two compute a different expiry -
 ///
+///```text
 ///     renew:    expires_at += duration
 ///     register: expires_at  = current_epoch + duration
+///```
 ///
 /// So the only reachable path discards the remaining term. Renewing a year
 /// early costs that year; waiting until the last epoch to avoid the loss puts

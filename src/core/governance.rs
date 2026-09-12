@@ -1241,12 +1241,14 @@ mod l4_tests {
     /// `activation_epoch()`'s `unwrap_or(self.end_epoch)` and executed the
     /// moment voting closed. Measured with a canary before the fix:
     ///
+    ///```text
     ///     ChangeBaseFee          delay=0
     ///     ChangeBlockReward      delay=0
     ///     SlashValidator         delay=0
     ///     ParameterUpdate        delay=10
     ///     WhitelistVerifier      delay=0
     ///     DewhitelistVerifier    delay=0
+    ///```
     ///
     /// A zero delay on a governance action is what turned two 2026 incidents
     /// into drains rather than near-misses: there was no window in which a

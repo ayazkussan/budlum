@@ -203,10 +203,12 @@ pub(crate) const SETTLED_RETENTION_BLOCKS: u64 =
 /// `100 / rate` units. At the 1% the call sites used, every transfer of 99 base
 /// units or less was relayed for free:
 ///
+///```text
 ///     amount  1 -> fee 0
 ///     amount 50 -> fee 0
 ///     amount 99 -> fee 0
 ///     amount 100 -> fee 1
+///```
 ///
 /// The relayer still pays external gas for each of those messages, so an
 /// attacker splitting a large bridge into 99-unit pieces moves value across for
@@ -1151,9 +1153,11 @@ mod bridge_fee_split {
     /// Measured against the arithmetic the three call sites used
     /// (`amount * 1 / 100`):
     ///
+    ///```text
     ///     amount  1 -> fee 0
     ///     amount 50 -> fee 0
     ///     amount 99 -> fee 0
+    ///```
     ///
     /// Every one of those is a relayed message with real external gas behind
     /// it, paid for by nobody.

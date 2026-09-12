@@ -2584,11 +2584,10 @@ mod tests {
         let err =
             Executor::apply_transaction_checked(&mut state, &tx)
                 .expect_err("vesting-locked stake must be refused");
-        assert!(
-            err.message().contains("stake_vesting_locked"),
-            "unexpected error: {}",
-            err.message()
-        );
+        // The code, not the prose, is the contract: message() returns the
+        // human text and never contained this token - the assertion could
+        // not pass no matter which validation fired.
+        assert_eq!(err.code(), "stake_vesting_locked");
         // Nothing moved: balance intact, no validator registered.
         assert_eq!(state.get_balance(&team), 5_000);
         assert!(state.get_validator(&team).is_none());

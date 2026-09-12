@@ -172,9 +172,13 @@ mod rpc_tests {
 
         // The lowercase-only rule is the registry's and the RPC inherits it:
         // an uppercased DID is refused, never normalized into a second key.
-        let upper = crate::registry::did_of(&subject)
-            .to_uppercase()
-            .replacen("DID:BUD:", "did:bud:", 1);
+        // The probe address carries hex LETTERS on purpose: the seeded
+        // subject (0x01..01) is all digits, and uppercasing digits is a
+        // no-op - that made this case pass vacuously against the wrong
+        // string until the fixture's DID leaked in here.
+        let probe = crate::registry::did_of(&Address::from([0xa1u8; 32]));
+        let upper = probe.to_uppercase().replacen("DID:BUD:", "did:bud:", 1);
+        assert_ne!(upper, probe, "the probe must contain hex letters or the case rule never bites");
         let err = server.identity_resolve(upper).await.unwrap_err();
         assert_eq!(err.code(), -32602);
     }

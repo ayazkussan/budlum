@@ -760,8 +760,10 @@ mod merkle_duplicate_leaf_locks {
     /// Measured before the fix - both lists produced
     /// `2f76bf7e7413d28edd1e7b531c6b023d2e9460bf8df9943d59594d72f055a446`:
     ///
+    ///```text
     ///     [A, B, C]     -> 2f76bf7e...
     ///     [A, B, C, C]  -> 2f76bf7e...
+    ///```
     ///
     /// A peer could take a valid block, append a duplicate of its last
     /// transaction, and the header's `tx_root` would still verify. Nodes that
