@@ -16,7 +16,7 @@ git -C <lubot-clone> -c core.hooksPath=/dev/null show --stat HEAD   # eyeball th
 git push -u origin lubot-series && gh pr create --fill   # the 403 stops the bot, not you
 ```
 
-Verified, not asserted: a clean clone of `main` @ `37d32c9` takes all 31 files
+Verified, not asserted: a clean clone of `main` @ `37d32c9` takes all 32 files
 with strict `git am -3` - no `--reject`, no fallback - and the resulting tree
 has `Cargo.toml` members equal to the 21 directories under `crates/`, and
 `docs/CRATES.md` with one row per crate the series adds (13). The 0029 am ran
@@ -84,7 +84,7 @@ totals cannot silently wrap past u64, and a sealed media is never written over;
 and 0029 held 331 while deleting fifty-two lines - no test attribute left, only two
 assertions their finding-level checks duplicated one line above, and the pairing rule
 caught mid-cut the `prose_only` the first deletion had orphaned, so accessor and query
-died together (floor 29 to 25) with the rule outliving both inside `close()`. Both moves were recounts of the
+died together (floor 29 to 25) with the rule outliving both inside `close()`. 0030 held 331 with its two rewritten probes, 0031 brought 332 - the client test the restored door demands - and 0032 brought 334 with the two window assertions; the answer crate's README claim of 14 had rotted from 12 while the count in this file was still true, which is what recounting the applied tree is for. Both moves were recounts of the
 applied tree (176 base + 156 series after 0025), never decrements by hand. The base README said 191 while the base tree measures 178, a
 13-test overstatement that predates this series; 0019 replaces it with a count
 derived from the applied tree instead of inflating the old number. `38 gates`
@@ -123,7 +123,7 @@ lines stale, and the patch that deleted the functions had to delete their entrie
 Unlike the compiled parts of this series, the gate was executed rather than
 inspected, because it is std-only Python and python3 exists here: `--self-test`
 OK, `public-api-is-reached` OK at 53/53, 51/51 after 0022, 41/41 after 0023, 40/40 after 0024, 34/34 after 0025, 30/30 after 0026,
-29/29 after 0027, 25/25 after 0029 and 21/21 after 0030, and
+29/29 after 0027, 25/25 after 0029, 21/21 after 0030, 20/20 after 0032, and
 both failure directions reproduced
 on a scratch copy - a freshly injected unreached `pub fn` failed with
 "1 public function(s) nothing in the tree calls", and deleting a live baseline
@@ -184,3 +184,4 @@ number and the tree it describes first part company.
 | `0029` | lubot: dead-pub wave 1 - kanit'in erişilmeyen erişimcileri ve yetenek'in kanıtsız setter'ı gitti | 3 files, -52 |
 | `0030` | lubot: dead-pub wave 2 - dört erişimci gitti, rule-carrier'lar gerekçesiyle kaldı | 5 files, +2 -34 |
 | `0031` | lubot: chain: bud_aiGetCeilings okuyucusu geldi - kapi kirmizisi kapandi, sekim sozlesmesi burada | 2 files, +94 -2 |
+| `0032` | lubot: answer: README'nin sözü tutuldu - karakter penceresi devrede, compact tüketti | 2 files, +53 -2 |
