@@ -1886,3 +1886,15 @@ had named, and the reflow classes visible under `git diff -w` are rustfmt's own 
 (import reordering, chain splitting, trailing commas). Idempotency (a second pass moved nothing)
 was the third check. The 131-hunk fmt debt closed at `63accba` - not by guessing rustfmt's mind,
 but by running rustfmt, shipped inside an npm package because the normal roads were dead.
+
+The reformat did not just tidy: with the fixtures finally walking into their assertions,
+`a_claim_binds...` tripped on the claim verifier's own hole - `verify_identity_claim` took a
+`subject` parameter and never read it. The api doc promised "bound to the claimed subject"; the
+body compared the credential only to the witness's record, so a bystander could present subject
+2's honest proof as a claim about subject 3 and hear `accepted:true`. The red test that had never
+been allowed to reach its assertions was the one that caught it; the binding check and two new
+rpc-layer tests (shape -32602s and the three refusal reasons through the real server method) are
+the fix and its gravestones. The lesson about truncated annotation lists now has its second
+half: a truncation does not only hide how many suites are red, it hides which of them were
+ALWAYS red - two of the witness tests had been failing at their first assert since the day they
+were written, and nobody, including their author, knew, because the panic line sat before them.
