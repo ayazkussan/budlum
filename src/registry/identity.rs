@@ -1958,6 +1958,19 @@ mod registry_witness_tests {
     }
 
     fn registry_with(subjects: &[u8]) -> IdentityRegistry {
+        // `issue` refuses an issuer that is neither a registered DID nor a
+        // live registered key of the subject (the credential-farm guard) -
+        // `credential_for` names addr(9) as issuer, so the issuer record is
+        // part of every registry these tests build.
+        if !subjects.contains(&9) {
+            let mut with_issuer = vec![9u8];
+            with_issuer.extend_from_slice(subjects);
+            return registry_with_sorted(&with_issuer);
+        }
+        registry_with_sorted(subjects)
+    }
+
+    fn registry_with_sorted(subjects: &[u8]) -> IdentityRegistry {
         let poa = crate::domain::ConsensusKind::PoA;
         let mut registry = IdentityRegistry::new();
         for s in subjects {
@@ -2150,8 +2163,11 @@ mod registry_witness_tests {
         // root() must be recomputable from the public parts alone - if
         // either fold drifts while the other is updated, this fails.
         let registry = registry_with(&[4]);
-        let leaf = RecordWitness::from_record(&addr(4), &registered(4)).leaf_digest();
-        let root1 = merkle_root(&[leaf]);
+        // registry_with registers the issuer (addr 9) as well; records sort
+        // by subject, and [4, 9] is that order.
+        let leaf4 = RecordWitness::from_record(&addr(4), &registered(4)).leaf_digest();
+        let leaf9 = RecordWitness::from_record(&addr(9), &registered(9)).leaf_digest();
+        let root1 = merkle_root(&[leaf4, leaf9]);
         let zero = [0u8; 32];
         assert_eq!(registry.root(), identity_anchor(&root1, &zero));
     }

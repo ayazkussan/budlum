@@ -1384,7 +1384,9 @@ mod tests {
         );
         assert!(report.migrated);
         assert!(report.requires_backup);
-        assert!(report.notes[0].contains("schema<4 snapshot accepted"));
+        assert!(report.notes[0].contains(&format!(
+            "rewritten to schema-{CURRENT_STATE_SNAPSHOT_SCHEMA_VERSION}"
+        )));
 
         snapshot.schema_version = CURRENT_STATE_SNAPSHOT_SCHEMA_VERSION;
         let bytes_current = serde_json::to_vec(&snapshot).unwrap();
