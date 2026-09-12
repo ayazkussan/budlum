@@ -1,0 +1,39 @@
+From ef0cedf8e9dbd0c4afc75887c0a1336c508cb232 Mon Sep 17 00:00:00 2001
+From: Lubo's Ruler <ayazkussann@gmail.com>
+Date: Wed, 9 Sep 2026 16:51:13 +0000
+Subject: [PATCH 08/11] workspace: kararlari logla (upstream PR = CI kaynagi;
+ kalici oturum = zamanlayici)
+
+---
+ BAGLANTILIK-LOG.md | 5 ++++-
+ memory/hafiza.md   | 3 +++
+ 2 files changed, 7 insertions(+), 1 deletion(-)
+
+diff --git a/BAGLANTILIK-LOG.md b/BAGLANTILIK-LOG.md
+index 80db2da..4c653dd 100644
+--- a/BAGLANTILIK-LOG.md
++++ b/BAGLANTILIK-LOG.md
+@@ -74,5 +74,8 @@ doğrulayıcı (run numaraları PR #1 check-runs'da).
+ 1. `reconstruct_object` nereye bağlanacak (kabul doğrulaması mı, ayrı RPC mi) — mimari karar.
+ 2. `declare_self_host_policy` transaction'ı — kapsam kararı.
+ 3. VerifyMerkle açma: 64-derinlik soundness kanıtı + ceremony — harici bağımlılık.
+-4. Zamanlayıcı (cron workflow / kalıcı oturum) — direktif "Otomasyon Notu"; kullanıcı kararı.
++4. ~~Zamanlayıcı~~ — KARAR (2026-09-09): kalıcı Arena oturumu yeter; cron kurulmaz.
+ 5. Model kaynağı (fine-tune / sıfırdan) — direktif açık noktası.
++6. ~~Fork Actions / CI kaynağı~~ — KARAR (2026-09-09): fork'ta Actions açılmaz;
++   kullanıcı UPSTREAM PR açacak (budlum-xyz/budlum) — orijinal CI orada koşar,
++   kanıt numaraları o PR'dan alınacak. Fork PR #1 oturum kaydı + denetim yüzeyi.
+diff --git a/memory/hafiza.md b/memory/hafiza.md
+index 119cd54..e84bb3e 100644
+--- a/memory/hafiza.md
++++ b/memory/hafiza.md
+@@ -6918,3 +6918,6 @@ Tek commit; CI dogrular. E4 sirada.
+   fork'ta Actions muhtemelen KAPALI → kanıt standardı karşılanamaz; kullanıcı
+   Settings→Actions açmalı. PR mergeable=CONFLICTING beklenen (base = eski
+   fork main 685caca; dal usl soyundan) — merge edilmeyecek, kayıttır.
++- KARARLAR (kullanici): (1) fork Actions ACILMAYACAK — upstream PR kullanicinin
++  isareti; CI kanitlari upstream PR'dan gelecek (fork PR = kayit + denetim).
++  (2) Zamanlayici: KALICI ARENA OTURUMU yeter; cron workflow kurulmayacak.
+-- 
+2.39.5
+

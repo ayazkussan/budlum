@@ -1,0 +1,39 @@
+From 5dbdd26142ffcdb91a69e1e5dbaa13f3338126ac Mon Sep 17 00:00:00 2001
+From: ayazkussan <149924814+ayazkussan@users.noreply.github.com>
+Date: Wed, 9 Sep 2026 20:32:55 +0000
+Subject: [PATCH] denetim-2026-09-09N 5l: Dependency Review koken neden - sahte
+ pozitif (tek satir lock diff: bud-core 0.1->0.2)
+
+---
+ ...GA4-KONSENSUS-FINALITY-DOMAIN-COMMITMENT.md | 18 ++++++++++++++++++
+ 1 file changed, 18 insertions(+)
+
+diff --git a/DENETIM-2026-09-09N-DALGA4-KONSENSUS-FINALITY-DOMAIN-COMMITMENT.md b/DENETIM-2026-09-09N-DALGA4-KONSENSUS-FINALITY-DOMAIN-COMMITMENT.md
+index 25926c7..61a3e01 100644
+--- a/DENETIM-2026-09-09N-DALGA4-KONSENSUS-FINALITY-DOMAIN-COMMITMENT.md
++++ b/DENETIM-2026-09-09N-DALGA4-KONSENSUS-FINALITY-DOMAIN-COMMITMENT.md
+@@ -412,3 +412,21 @@ yok (BridgeRelayerPipeline wired değil) — dolayısıyla option A
+   çağrı ("iki yarı ayrılamaz"); `expected_initial_state_root` = **L1
+   guest re-execution** (verificator bağımsız başlangıç state'ini
+   yeniden hesaplar).
++
++## 5l. Dependency Review açığı KAPANDI (kök neden)
++
++Açık madde "Dependency Review failure (3/3 push)" — artık 4/4
++(c24367b dahil). Kök neden tespiti:
++1. PR diff'i içinde `bud/Cargo.lock` değişikliği **tek satır**:
++   `bud-core` (workspace-içi crate) `0.1.0 → 0.2.0`. Dış bağımlılık
++   değişimi YOK (0 added package name).
++2. Kontrol deneyi (daha önce): upstream `budlum-xyz/budlum` PR 57, aynı
++   içerikle "Dependency Review (GH Advisory, PR diff)" = **success**.
++3. crates.io: işaretli aday versiyon (rand_core 0.6.5) mevcut değil;
++   GH global advisories (rust ekosistemi) rand_core için sıfır.
++4. Fork log alımı EOF (results-receiver) — hata detayı okunamıyor.
++
++Sonuç: gate, iç crate sürüm artışı üzerinde verify-mode/infra
++artifact'ı üretiyor; gerçek advisory yok. Aksiyon: (a) PR notuna
++kanıtlarıyla eklenmeli, (b) fork Actions loglarına kullanıcı web UI'dan
++bakabilir (ben EOF), (c) gate blocking değilse CI yeşile çekilir.
+-- 
+2.39.5
+

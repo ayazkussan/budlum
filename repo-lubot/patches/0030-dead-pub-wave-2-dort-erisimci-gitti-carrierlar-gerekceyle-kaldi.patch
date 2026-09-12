@@ -1,0 +1,175 @@
+From f45cf6b8bcbd765f10278216d0fc335a046e7d8a Mon Sep 17 00:00:00 2001
+From: ayazkussan <149924814+ayazkussan@users.noreply.github.com>
+Date: Fri, 11 Sep 2026 21:41:10 +0000
+Subject: [PATCH] =?UTF-8?q?lubot:=20dead-pub=20wave=202=20-=20d=C3=B6rt=20?=
+ =?UTF-8?q?eri=C5=9Fimci=20gitti,=20rule-carrier'lar=20gerek=C3=A7esiyle?=
+ =?UTF-8?q?=20kald=C4=B1?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Wave 1's criterion applied again: what is deleted carries no rule; what is
+kept stays on the baseline with its reason stated, never laundered.
+
+Deleted (each a restatement of an API the crate already publishes):
+`grant_by_id` - `grants()` iterates the same map and `is_valid(id, block)`
+answers the only question worth asking of it; `Disposition::is_fix` - a
+one-variant `matches!()` wrapper over the enum whose variants are the
+actual API (its test now names `Some(Disposition::Fixed(_))`, the fact
+it checked); `read::is_known` - `PerceptionKind::parse(tag).is_some()` is
+the closed list, the wrapper restated it; `anlama::found_in_data` - the
+public `attachments()` reader plus `Attachment::mentions` say exactly
+this, and the test says it in those words now. Four items, 331 tests held
+- no test left, two were rewritten to speak through the live surface,
+which is the whole difference between shrinking and amputating.
+
+Kept, each a sole carrier the gate correctly still records: `open_path`
+(the chain's documented path step - without it `run` has nothing to
+check), `submit`/`peek_due`/`evictions` (kuyruk's entry and its README-named
+ledger), `declare_wired`/`declare_unwired`/`unclaimed` (the whole public
+reason takip exists), `with_capability`/`with_symbol`/`reject_names`/
+`record_of`/`with_attachment`/`with_entries` (sole setters and readers of
+rules enforced elsewhere), `from_hex`/`to_hex` (the only codec pair for
+the id type - no Display to collapse into), `is_finalized` (muhur's
+sealed-chain question), `compact` (index's line in the crate table is
+literally "deterministic context compaction" - either it gets wired or
+the row is retold, and that is a decision for the wiring wave, not a
+delete key). `jsonrpc_request`/`to_corpus_line` stay queued as the known
+chain-debt item (the same queue entry that owes bud_aiGetCeilings its
+client) - they are the plumbing that wiring will call, named where the
+queue already tracks it.
+
+The read-back caught what no gate here can: all four deletions had left
+their own doc comments (and two `#[must_use]` attributes) stranded on the
+item below them - an attribute on a module, two merged doc lines
+describing functions that no longer exist, and in denetim a truly empty
+impl block that would not have compiled. This sandbox has no compiler
+(measured): the fix was reading every deleted region's context, and the
+brace scan across the touched files. Floor 25 -> 21, measured 21/21; all
+24 cargo-free gates green; `chain-surface-fixed` red reproduced identical
+at the base, unchanged queue debt.
+---
+ crates/anlama/src/lib.rs      | 10 +---------
+ crates/denetim/src/lib.rs     | 10 +---------
+ crates/grant/src/training.rs  |  6 ------
+ crates/read/src/perception.rs |  6 ------
+ gates/dead-pub-api.baseline   |  4 ----
+ 5 files changed, 2 insertions(+), 34 deletions(-)
+
+diff --git a/crates/anlama/src/lib.rs b/crates/anlama/src/lib.rs
+index c5ce7fb..e47c1c4 100644
+--- a/crates/anlama/src/lib.rs
++++ b/crates/anlama/src/lib.rs
+@@ -1412,14 +1412,6 @@ impl Understanding {
+         ))
+     }
+ 
+-    /// Whether attached text mentions `word`, in folded form.
+-    #[must_use]
+-    pub fn found_in_data(&self, word: &str) -> bool {
+-        self.attachments
+-            .iter()
+-            .any(|attachment| attachment.mentions(word))
+-    }
+-
+     /// Claim an action the reading did not produce, and say on what ground.
+     ///
+     /// The claim is checked, not believed: `Command` must match a word,
+@@ -2217,7 +2209,7 @@ mod tests {
+         assert!(!u.actions().contains(&Action::ApprovePr));
+         assert!(!u.actions().contains(&Action::Delete));
+         assert!(u.prohibitions().contains(&Action::Delete));
+-        assert!(u.found_in_data("merge"));
++        assert!(u.attachments().iter().any(|a| a.mentions("merge")));
+         assert_eq!(u.attachments().len(), 1);
+         assert!(u.assumptions().iter().any(|note| note.contains("actions anyway")));
+         assert_eq!(u.quantities(), &[Quantity::Order(3), Quantity::Count(40)]);
+diff --git a/crates/denetim/src/lib.rs b/crates/denetim/src/lib.rs
+index bedf798..fce52cc 100644
+--- a/crates/denetim/src/lib.rs
++++ b/crates/denetim/src/lib.rs
+@@ -62,14 +62,6 @@ pub enum Disposition {
+     Rejected(Waiver),
+ }
+ 
+-impl Disposition {
+-    /// Whether the closure is a fix (as opposed to a waiver).
+-    #[must_use]
+-    pub fn is_fix(&self) -> bool {
+-        matches!(self, Self::Fixed(_))
+-    }
+-}
+-
+ /// The state of one finding in the ledger.
+ #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+ pub enum Status {
+@@ -369,7 +361,7 @@ mod tests {
+         let voided = review
+             .record(finding("f-1", Severity::High, "same leak, worse path"))
+             .unwrap();
+-        assert!(voided.is_some_and(Disposition::is_fix));
++        assert!(matches!(voided, Some(Disposition::Fixed(_))));
+         assert_eq!(review.status("f-1"), Some(Status::Open));
+         let err = review.complete().unwrap_err();
+         assert_eq!(err.open, vec!["f-1".to_owned()]);
+diff --git a/crates/grant/src/training.rs b/crates/grant/src/training.rs
+index 04a8498..7ff1261 100644
+--- a/crates/grant/src/training.rs
++++ b/crates/grant/src/training.rs
+@@ -192,12 +192,6 @@ impl EpochBook {
+         Ok(id)
+     }
+ 
+-    /// The grant by its canonical id.
+-    #[must_use]
+-    pub fn grant_by_id(&self, id: &Id) -> Option<&TrainingDataGrant> {
+-        self.grants.get(id)
+-    }
+-
+     /// Whether the grant may be used at this block.
+     #[must_use]
+     pub fn is_valid(&self, id: &Id, now_block: u64) -> bool {
+diff --git a/crates/read/src/perception.rs b/crates/read/src/perception.rs
+index 2f2b28d..9224c07 100644
+--- a/crates/read/src/perception.rs
++++ b/crates/read/src/perception.rs
+@@ -105,12 +105,6 @@ pub fn check_units(kind_tag: u32, units: u64) -> Result<PerceptionKind, Percepti
+     Ok(kind)
+ }
+ 
+-/// Whether the tag is one of the four known kinds ("the set is closed").
+-#[must_use]
+-pub fn is_known(tag: u32) -> bool {
+-    PerceptionKind::parse(tag).is_some()
+-}
+-
+ #[cfg(test)]
+ mod tests {
+     use super::*;
+diff --git a/gates/dead-pub-api.baseline b/gates/dead-pub-api.baseline
+index 2dcfd32..13eeb7c 100644
+--- a/gates/dead-pub-api.baseline
++++ b/gates/dead-pub-api.baseline
+@@ -1,11 +1,8 @@
+ # one `path:name` per line; the gate fails on growth AND on a stale entry
+-crates/anlama/src/lib.rs:found_in_data
+ crates/anlama/src/lib.rs:is_blocking
+ crates/anlama/src/lib.rs:with_attachment
+-crates/denetim/src/lib.rs:is_fix
+ crates/grant/src/lib.rs:revoked_pairs
+ crates/grant/src/training.rs:from_hex
+-crates/grant/src/training.rs:grant_by_id
+ crates/grant/src/training.rs:to_hex
+ crates/index/src/lib.rs:compact
+ crates/izolasyon/src/lib.rs:with_entries
+@@ -14,7 +11,6 @@ crates/kuyruk/src/lib.rs:evictions
+ crates/kuyruk/src/lib.rs:peek_due
+ crates/kuyruk/src/lib.rs:submit
+ crates/muhur/src/lib.rs:is_finalized
+-crates/read/src/perception.rs:is_known
+ crates/takip/src/lib.rs:declare_unwired
+ crates/takip/src/lib.rs:declare_wired
+ crates/takip/src/lib.rs:unclaimed
+-- 
+2.39.5
+

@@ -1,0 +1,54 @@
+From 444dbeb8bcf7a439093551dfb1dc8693c7c282fb Mon Sep 17 00:00:00 2001
+From: Lubo's Ruler <ayazkussann@gmail.com>
+Date: Wed, 9 Sep 2026 16:13:00 +0000
+Subject: [PATCH 05/11] workspace: surekli denetim direktifi + tek PR modeli
+ (kullanici kararlari)
+
+---
+ memory/hafiza.md | 33 +++++++++++++++++++++++++++++++++
+ 1 file changed, 33 insertions(+)
+
+diff --git a/memory/hafiza.md b/memory/hafiza.md
+index fe4ab93..541f902 100644
+--- a/memory/hafiza.md
++++ b/memory/hafiza.md
+@@ -6843,3 +6843,36 @@ Tek commit; CI dogrular. E4 sirada.
+   8 patch /home/user/arena-backup/ altinda (lubot 5 + workspace 3; base sha'lar
+   patch basliklarinda). Tur-sonu dosya kalici; riziko yalniz sandbox yenileme.
+   Kalici çözüm: bot'a lubot+workspace push (collaborator) ya da user push.
++
++## 2026-09-09 — Sürekli denetim direktifi + TEK PR modeli (kullanici kararlari)
++
++- DİREKTİF (kullanici, sohbete yapistirildi): "Budlum Sürekli Denetim ve
++  Yeniden Yapilandirma Direktifi" — tek seferlik gorev listesi DEGİL; kalic
++  denetim-duzeltme dongusu. Charter tek basina yetki; Ayaz'dan gorev-bazi
++  komut beklenmez. Kanit: varsayim degil CANLI KANIT. CI (fmt + clippy -D
++  warnings + test) TEK YETKILI dogrulayici; CI'yi yumusatan degisiklik = ihlal.
++  Sorumlu alanlar (paralel donguler):
++  1) Butunsel kod denetimi: ana repo (~300k satir) duzenli sifirdan yeniden
++     okunur, onceki bulgularla karsilastirilir, sapma loglanir. README =
++     olgunluk sinyali (yoksa modul deneyseldir).
++  2) Modul entegrasyon dogrulama: B.U.D. (erasure coding, shard placement,
++     coding audit, repair trigger) son bilinen durum = kodlanmis+testli ama
++     UNWIRED — canli repoda yeniden dogrulanana kadar boyle kabul.
++     BudZKVM: VerifyMerkle 64-derinlik, STARK/AIR (metin kesildi; kalan
++     bekleniyor).
++  Kapsam: budlum cekirdegi (UMK), BudZero/BudZKVM (Plonky3/STARK, BudL),
++  B.U.D. depolama, Lubot (src/lubot + dev-ajan), ekosistem (Pollen, SocialFi,
++  BNS, budlumxyz, DeEd/DeArt, DAO).
++- KULLANICI KARARLARI (ask_user):
++  1) TEK PR = ayazkussan/budlum#1 (fork, branch arena/01a08674-budlum).
++     "Hepsi fork prda olacak cunku ben sonradan denetleyecegim." PR gunlerce
++     acik kalir; is gunler alabilir.
++  2) Kapsam = HEPSI BURADA: ubot + workspace commit'leri de bu dala
++     (repo-onekli) aynalanir; dagitimi kullanici yapar.
++  3) Erisim (lubot/workspace 403) = kullanici isidir; bot'un o fork'lara
++     push'u gerekmez.
++  4) Upstream PR = kullanici sonradan (denetledikten sonra) acar.
++- KOMUT BAŞLIĞI KURALI: her commit basliginda hangi repo icin yazildigi
++  (lubot:/workspace:/budlum: onegi).
++- AYNA MIMARISI: budlum dalinda repo-lubot/ + repo-workspace/ (format-patch
++  dosyalari + base sha + uygulama notu). Patches /home/user/arena-backup/.
+-- 
+2.39.5
+

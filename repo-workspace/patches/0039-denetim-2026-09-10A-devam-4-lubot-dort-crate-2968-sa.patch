@@ -1,0 +1,91 @@
+From b0fb63c09143498c05bdc25df7f344d039ffb8bf Mon Sep 17 00:00:00 2001
+From: ayazkussan <149924814+ayazkussan@users.noreply.github.com>
+Date: Thu, 10 Sep 2026 08:37:47 +0000
+Subject: [PATCH] denetim-2026-09-10A devam-4: lubot dort crate (2968 satir/45
+ test, derlenmedi) + "derlenmiyor" hukmunun geri alinmasi
+
+rust.yml protoc kurmayan tek derleyen isti; kirmizi X kaynak kodu degil
+ortami tarif ediyordu. Annotation kanalinin 10 satir tavani olculdu ve iki
+teshis adimi secim-temelli yeniden yazildi.
+---
+ ...-09-10A-devam-4-lubot-dort-crate-protoc.md | 68 +++++++++++++++++++
+ 1 file changed, 68 insertions(+)
+ create mode 100644 DENETIM-2026-09-10A-devam-4-lubot-dort-crate-protoc.md
+
+diff --git a/DENETIM-2026-09-10A-devam-4-lubot-dort-crate-protoc.md b/DENETIM-2026-09-10A-devam-4-lubot-dort-crate-protoc.md
+new file mode 100644
+index 0000000..2f0152d
+--- /dev/null
++++ b/DENETIM-2026-09-10A-devam-4-lubot-dort-crate-protoc.md
+@@ -0,0 +1,68 @@
++# DENETIM-2026-09-10A (devam 4) — Lubot: dort crate + "derlenmiyor" hükmünün düzeltilmesi
++
++## 1. Lubot egitim dongusu (yama seti 0006..0010)
++
++Kalip kaynaklari tarandi, seksiz depodan dört mekanizma cikti, biri (ECC)
++koleksiyon genisliginden baska bir sey vermedi — bos kayit da kayittir, yoksa
++"hepsinden bir sey alindi" yalanini sonraki kimse ayirt edemez. Uyarlanan
++kalip → mekanizma → **alinmayan** defteri: `skills/lubot/2026-09-10A-kalip-defteri.md`
++(patch 0038). Kod satiri kopyalanmadi; Lubot agacinda kaynak depo adi gecmiyor.
++
++| crate | satir/test | tuttugu sey |
++|---|---|---|
++| `yetenek` | 782 / 13 | beceri karti = tetik + cikis kaniti; terfi yalniz karti kapatan kosu kaydedilirse |
++| `olcek`   | 715 / 10 | tavan/su hatti/taban + dusurme defteri; reddedilen sayiyla reddedilir |
++| `kanit`   | 883 / 12 | kapsam kilidi → iddia → bag → yol → kos → kapanis; Anlatim kapatamaz |
++| `mimari`  | 588 / 10 | tablodaki her sembel bildirim anahtariyla gecmek zorunda; bos satir ihlal |
++
++Toplam 2968 satir, 45 test, std disinda bagimlilik yok, prod tarafinda
++unwrap/expect yok (testler hicbir sey yakalamaz, kapi hicbir sey yakalamaz).
++
++**Durum: derlenmedi.** Kum havuzunda rustc yok ve indirilemiyor; dolayisiyla
++yukaridaki sayilar satir/test sayimidir, gecen suite degil. Bu kum havuzunda
++*dogrulanan* sey dagitim mekanizmasi: bes patch temiz bir klon uzerinde `git am`
++ile uygulandi; son yama tek satir baglamla (`-c diff.context=1`) uretildi cunku
++uc satir baglam, bos satir duzeni farkli bir kok Cargo.toml'da dusuyor. Dort
++crate `members`'a eklenmezse kod yok sayilir — G-1'deki "hic declare edilmemis
++kapi" ile 205 olu `pub fn` ile ayni hastaligin ucuncu kostumu.
++
++## 2. "Fork derlenmiyor" hukmu bir ortam hukmuymus
++
++Bolum 10'da eklenen annotation kanali ilk kez CI cikti okudu. Job
++`102794189883` (run 37, `6a2a951`) — 11 annotation:
++
++    error: failed to run custom build command for `budlum-core v0.1.0`
++    Caused by:
++      process didn't exit successfully: `.../build-script-build` (exit status: 101)
++      cargo:rerun-if-changed=proto/budlum/network/protocol.proto
++    Process completed with exit code 101.
++
++`build.rs` 35 satir: protoc'u arar (PROTOC env → uc bilinen yol → PATH) ve
++`proto/budlum/network/protocol.proto` icin prost-build calistirir; expect 101'i
++veren satirdir. Yirmi uc workflow'un tamami tarandi: **derleyen ama protoc
++kurmayan tek dosya `rust.yml`.** `ci.yml`'de 14, `determinism.yml`'de 11 (Windows
++i pinli indirme dahil), miri/rust-quality/extra-tooling/security-hardening/
++benchmark/semver/diverse-double-compiling/supply-chain-extra/fuzz-nightly/
++security-audit/cargo-vet/provenance/docker-smoke'ta 1-11 adim var.
++
++Sonuc: `Rust` isinin kirmizisi kaynak kodun bozuk oldugunu soylemiyordu; kod
++uretimi (codegen) bir eksik apt paketi yuzunden paniyordu ve `Run tests` adimi
++hic baslamamisti. Budlum'un agacina dair "derlenmiyor" iddiasi geri aliniyor;
++yerine okunacak sey sudan ibaret: derleme simdi gercek derleme hatalarini
++gosterebilir ya da yesillenebilir.
++
++Yapilan iki degisiklik de bir iddiaya dokunmuyor:
++1. `rust.yml` → `Install protoc` (diger her derleyen isinde zaten olan komut).
++2. Iki teshis adimi **annotation tavanina** gore yeniden yazildi: bir check
++   runu 10 annotation sakliyor ve eskilerini atiyor; 60 satirlik kuyruk yigini
++   yuzunden asil neden satiri kirpilmisti. Artik en fazla 9 *secilmis* satir
++   (Format icin: sekiz `Diff in` basligi + sonda sayim satiri, cunku son
++   gelenler kaliyor). Genis kuyruk "düzeltmesi" yapilmamali: taskinmasi olan
++   bir kanal yalan soyleyen bir kanaldır.
++
++Bölüm 12'deki "alti kirmizi kontrolun hepsi tek derleme hatasinin kostumu"
++okumasi **düzeltildi**: paylasilan neden `rust.yml` + fmt borcu; determinism
++(Miri/Typos gibi) kendi derdine sahip, cunku onlar protoc kuruyor. Sonraki kosu
++icin onceden baglanan tahmin: `Build` adimi ya geciyor ya da kaynaktan
++`error[E...]` satirlari basilıyor; hâlâ "failed to run custom build command"
++derse supheli olan sey bu depo degil, runner imagemizdaki apt cozumu.
+-- 
+2.39.5
+

@@ -1,0 +1,63 @@
+From 1f512453d4e18f3c160f52e4e706fa1600d6d92c Mon Sep 17 00:00:00 2001
+From: ayazkussan <149924814+ayazkussan@users.noreply.github.com>
+Date: Thu, 10 Sep 2026 03:46:38 +0000
+Subject: [PATCH] denetim-2026-09-09N 5m: reset 5 kurtarma + GitHub dogrulama +
+ mempool/snapshot/account/developer_os/mobile clean
+
+---
+ ...A4-KONSENSUS-FINALITY-DOMAIN-COMMITMENT.md | 42 +++++++++++++++++++
+ 1 file changed, 42 insertions(+)
+
+diff --git a/DENETIM-2026-09-09N-DALGA4-KONSENSUS-FINALITY-DOMAIN-COMMITMENT.md b/DENETIM-2026-09-09N-DALGA4-KONSENSUS-FINALITY-DOMAIN-COMMITMENT.md
+index 61a3e01..385bb05 100644
+--- a/DENETIM-2026-09-09N-DALGA4-KONSENSUS-FINALITY-DOMAIN-COMMITMENT.md
++++ b/DENETIM-2026-09-09N-DALGA4-KONSENSUS-FINALITY-DOMAIN-COMMITMENT.md
+@@ -430,3 +430,45 @@ Sonuç: gate, iç crate sürüm artışı üzerinde verify-mode/infra
+ artifact'ı üretiyor; gerçek advisory yok. Aksiyon: (a) PR notuna
+ kanıtlarıyla eklenmeli, (b) fork Actions loglarına kullanıcı web UI'dan
+ bakabilir (ben EOF), (c) gate blocking değilse CI yeşile çekilir.
++
++## 5m. Reset 5 + mempool, snapshot, account, developer_os, mobile — clean
++
++**Reset 5 (oturum içi, 2. olay)**: /home/user/budlum .git yine sıfırlanmış
++(685caca), workspace yine silinmiş. Remote sağlam (85e282b); working tree
++birebir → `git reset --hard FETCH_HEAD` ile temiz kurtarma, veri kaybı
++YOK. Workspace 31 patch'ten yeniden kuruldu (0f64053; bu sefer 0012
++hafiza-reçetesi atlanınca 0013 fail oldu — 0012, sonraki patch'lerin
++önkoşulu; reçete: --exclude + append + commit, sonra devam).
++**GitHub doğrulaması (kullanıcı talebi)**: budlum HEAD 85e282b tracked
++ağaçta 31 workspace + 5 lubot patch'inin tümü + 4 code fix; PR #1
++OPEN/MERGEABLE, body güncel. Workspace git tarihçesi 403 (bot yetkisi
++yok) — içerik kopyası budlum mirror'ında GitHub'da.
++
++- **mempool (1314)**: add_transaction = imza ÖNCE kabul (gossip CPU
++  israfı fix'i; #19/#26 zero-address blanket muafiyeti tuzağı
++  dokümante); dup; min fee; **eviction yalnızca tüm rejection'dan
++  sonra** ("free deletion primitive" fix'i); RBF pozitif bump
++  (max(1, ceil(fee·pct/100)), u128, "same-fee replace-churn" fix'i);
++  per-sender cap; pool size + lowest-fee eviction; **byte budget**
++  (sayaç sonrasına, removal öncesine — sıralama dokümante); kabul
++  yolunda panic yok.
++- **snapshot (V1+V2)**: loader = bounded read, numeric sort, corrupt →
++  quarantine + eski aday (single-shot removal fix'i);
++  `snapshot.verify()` (digest); **mainnet = RequireSigned zorunlu**
++  (require_signed_startup_snapshot: non-empty trust list +
++  verify_authentic; "Mainnet has no unsigned/V1 remote snapshot
++  compatibility path"); trust list state'ten türetilir;
++  quarantine_snapshots_above_height.
++- **core/account (örneklem)**: `ensure_mint_headroom` TAM tutar
++  bridge state'den ÖNCE ("ilk credit indi, ikinci fail, lock tüketildi,
++  fee ödenmedi" fix'i); supply = liquid+staked+unbonding+role-bonds
++  (VALIDATOR hariç — double-count dokümante); spendable_balance =
++  burn_reserve 0 + vesting **epoch-space fix'i** (canary ölçümü
++  dokümante: epoch_at_timestamp 5.5M epoch döndürmüş, 20M BUD ilk
++  epoch'da açılmış olurdu).
++- **developer_os (529)**: fixture'lar shape-validate + `bind_verified`
++  claim→binding ("verified = verificator çalıştı, field sıfır değil
++  demek değil"; manifest katmanı STARK maliyeti taşımaz — ayrım
++  dokümante).
++- **mobile (768, örneklem)**: node profile (battery/NAT/self-host
++  B.U.D.), operatör katmanı, validate'li struct'lar.
+-- 
+2.39.5
+

@@ -1,0 +1,204 @@
+From de625bb015ecafa8f83fe864981101b60e0e5977 Mon Sep 17 00:00:00 2001
+From: Lubo's Ruler <ayazkussann@gmail.com>
+Date: Wed, 9 Sep 2026 16:47:33 +0000
+Subject: [PATCH 07/11] workspace: tam direktif kaydi + BAGLANTILIK-LOG
+ (VerifyMerkle canli tefit) + CI bulgusu
+
+---
+ BAGLANTILIK-LOG.md           | 78 ++++++++++++++++++++++++++++++++++++
+ memory/hafiza.md             | 22 ++++++++++
+ surekli-denetim-direktifi.md | 67 +++++++++++++++++++++++++++++++
+ 3 files changed, 167 insertions(+)
+ create mode 100644 BAGLANTILIK-LOG.md
+ create mode 100644 surekli-denetim-direktifi.md
+
+diff --git a/BAGLANTILIK-LOG.md b/BAGLANTILIK-LOG.md
+new file mode 100644
+index 0000000..80db2da
+--- /dev/null
++++ b/BAGLANTILIK-LOG.md
+@@ -0,0 +1,78 @@
++# BAGLANTILIK-LOG — modül entegrasyon durumu (SHA referanslı)
++
++Direktif §2 gereği: her modül için `BAĞLI` / `KODLANMIŞ-BAĞLANMAMIŞ` / `EKSİK`
++durumu commit SHA ile loglanır. Güncelleme: 2026-09-09, zemin
++`ayazkussan/budlum:arena/01a08674-budlum` (tek PR #1).
++
++Durumlar canlı repoda call-site izlemesiyle belirlendi; CI = tek yetkili
++doğrulayıcı (run numaraları PR #1 check-runs'da).
++
++## B.U.D. (depolama)
++
++| mekanizma | durum | kanıt (dosya:satır) | SHA |
++|---|---|---|---|
++| erasure kodlama (üretim) | BAĞLI (tasarım gereği client tarafı; zincir doğrular) | `storage/erasure.rs:664,735` | f455ba4 |
++| coding audit | BAĞLI (RPC `verify_object_encoding`) | `rpc/server.rs:2284` | f455ba4 |
++| shard yerleşimi `assign_shard` | BAĞLI (`annotate_expected_holders` ← chain_actor) | `domain/storage_deal.rs:3077`, `chain/chain_actor.rs:2866` | f455ba4 |
++| `assign_object` | KODLANMIŞ-BAĞLANMAMIŞ (test-only) | `storage/assignment.rs:212` | f455ba4 |
++| deal açma (escrow'lu) | BAĞLI (RPC `bud_storageOpenDeal`) | `chain/blockchain.rs:5554`, `chain/chain_actor.rs:3730` | f455ba4 |
++| tamir tetikleyici (tespit + bilet) | BAĞLI (bakım süpürmesi, F-16) | `chain/chain_actor.rs:2675-2760` | f455ba4 |
++| tamir kabulü (replacement) | BAĞLI — **bu oturumda kapatıldı** | `chain/blockchain.rs accept_storage_reallocation_with_escrow`, `rpc bud_storageAcceptReallocation`, 4 test `chain/storage_economics_tests.rs` | 07dd372 |
++| rekonstrüksiyon `reconstruct_object` | KODLANMIŞ-BAĞLANMAMIŞ (veri kurtarma yolu yok; tasarım kararı açık) | `storage/erasure.rs:780` | f455ba4 |
++| LRC / MSR | KODLANMIŞ-BAĞLANMAMIŞ (bildirimle tutarlı) | `storage/msr.rs:3`, `storage/lrc.rs` | f455ba4 |
++| self-host policy beyanı | EKSİK (check bağlı, `declare_self_host_policy` transaction'sız; kod yorumu da belirtiyor) | `domain/storage_deal.rs open_deal` yorumu | f455ba4 |
++
++## BudZKVM (VerifyMerkle / VerifyInference)
++
++| madde | durum | kanıt | SHA |
++|---|---|---|---|
++| VerifyMerkle (0x??) | production'da GATED (devre dışı). Neden: 64-derinlik soundness'in tamamlanması bekleniyor (dış opcode denetimi kategorisi); YENİ BİR SORUN DEĞİL. `MainnetActivation::default().verify_merkle_enabled=false`; production decode `Vm::with_mainnet_mode(..., true)`; ungated yol `#[cfg(test)]` only ("never reachable from transaction execution") | `execution/zkvm.rs:78-101,475-516`, `budzero/bud-isa/src/lib.rs:288` | f455ba4 |
++| gate containment | CI'da zorunlu: `containment-defaults --self-test` + `containment-defaults` | `ci.yml:1607-1610`, `xtask/gates/src/gates/containment_defaults.rs` | f455ba4 |
++| F2 geçmiş | ContractCall yolu gate'i atlıyordu (mainnet=false) — DÜZELTİLDİ; regresyon testi her iki yolda (execute + prove) activation reddi doğruluyor | `execution/zkvm.rs contract_call_bytecode_cannot_reach_a_gated_opcode` | f455ba4 |
++| VerifyInference (0x1F) | mainnet decode GATED; opcode fail-closed Poseidon binding (`rd=1 iff output_c==poseidon4(model_c,input_c)`); AÇIK: claimed output commitment → proved guest result bağı (şu an non-binding accumulator) | `budzero/bud-vm/src/lib.rs`, `docs/AI_VERIFICATION_STATUS.md` | f455ba4 |
++| STARK verification (tx yolu) | BAĞLI (inference proof) | `docs/AI_VERIFICATION_STATUS.md` → `execution/executor.rs` | f455ba4 |
++
++## UMK / domain commitment (AR-GE-6)
++
++| madde | durum | kanıt | SHA |
++|---|---|---|---|
++| `external_roots` çapa yaşam döngüsü | BAĞLI: anchor (F-11) → verified checkpoint kökü (F-12) → TEK production yazıcı (verify→accept→anchor, zero fail-closed, orphan yok) → light client tüketici | `chain/blockchain.rs submit_verified_domain_commitment`, `light_client`, `budlum-light.rs` | e5f5c9d, a435726, fa1d4a6, d0a2a9b |
++| domain konsensüs kaydı | BAĞLI (operatör sürerli: RPC + actor) | `rpc/server.rs:1551`, `chain/chain_actor.rs:3294` | f455ba4 |
++
++## Lubot (ürün modülü + dev-ajan)
++
++| madde | durum | kanıt | SHA |
++|---|---|---|---|
++| AiRegistry çağrı zinciri | **DENETLENMEDİ** (açık) | — | — |
++| Pollen AccessGrant çağrı zinciri | **DENETLENMEDİ** (açık) | — | — |
++| BNS çağrı zinciri | **DENETLENMEDİ** (açık) | — | — |
++| B.U.D. ↔ Lubot çağrı zinciri | **DENETLENMEDİ** (açık) | — | — |
++| model kaynağı kararı (fine-tune / sıfırdan) | AÇIK NOKTA (direktif: işaretlenmeye devam) | workspace hafiza | — |
++| yetenek crate'leri (index/sikistir/izolasyon/denetim) | BAĞLI (lubot repo, 191 test, 38 kapi) | repo-lubot aynası (tek PR #1) | db7dec9 (ayna), 12bc9ac..ddf0ac8 (lubot) |
++
++## Ekosistem
++
++| modül | durum | not |
++|---|---|---|
++| Pollen / SocialFi / BNS / budlumxyz / DeEd / DAO | DENETLENMEDİ (döngü 1 butunsel tarama sirasinda) | README olgunluk sinyali o turda kontrol edilecek |
++
++## CI / kanıt durumu (2026-09-09)
++
++- Tek PR #1 (`ayazkussan/budlum`) check-run **üretmiyor**: en eski push
++  (`d0a2a9b`, ~1 saat) dahil hiçbir commit'te workflow run yok
++  (`gh run list --branch` boş, PR `statusCheckRollup` boş). En olası neden:
++  fork'ta GitHub Actions kapalı (fork'lar Actions'u varsayılan çalıştırmaz;
++  fork sahibi Settings → Actions'ta açmalı).
++- Kanıt standardı (SHA + CI run numarası) bu durumda karşılanamaz;
++  kullanıcı açana dek iddialar "CI bekliyor" etiketiyle loglanır.
++- PR #1 `mergeable: CONFLICTING` BEKLENEN: base = fork'un eski main'i
++  (685caca); dal upstream `usl` (f455ba4) soyundan. Fork main'e merge
++  edilmeyecek; PR oturum kaydı + denetim yüzeyi.
++
++## Açık kararlar (eskale gerek)
++
++1. `reconstruct_object` nereye bağlanacak (kabul doğrulaması mı, ayrı RPC mi) — mimari karar.
++2. `declare_self_host_policy` transaction'ı — kapsam kararı.
++3. VerifyMerkle açma: 64-derinlik soundness kanıtı + ceremony — harici bağımlılık.
++4. Zamanlayıcı (cron workflow / kalıcı oturum) — direktif "Otomasyon Notu"; kullanıcı kararı.
++5. Model kaynağı (fine-tune / sıfırdan) — direktif açık noktası.
+diff --git a/memory/hafiza.md b/memory/hafiza.md
+index 6739dd6..119cd54 100644
+--- a/memory/hafiza.md
++++ b/memory/hafiza.md
+@@ -6896,3 +6896,25 @@ Tek commit; CI dogrular. E4 sirada.
+   6d860ce (workspace aynası), 07dd372 (budlum B.U.D. tamir kabulü).
+ - DİREKTİF METNİ KESİK: "VerifyMerkle'ın STARK/AIR tarafı sağlam kabul..."
+   cümlesinin devamı + sonraki bölümler alınamadı → kullanıcıdan tam metin.
++
++## 2026-09-09 — Direktif TAM METİN alındı + VerifyMerkle canlı teyidi + CI bulgusu
++
++- TAM direktif workspace/surekli-denetim-direktifi.md'ye birebir kaydedildi.
++  Yeni maddeler: VerifyMerkle "devre dışıysa NEDENİ canlı teyit" (dış opcode
++  denetimi bekleniyor mu vs yeni sorun), Lubot çağrı zincirleri (AiRegistry,
++  Pollen AccessGrant, BNS, B.U.D. — mock değil), modül durumu SHA ile log
++  (BAGLANTILIK-LOG.md kuruldu), Lubot eğitim döngüsü (8 repo desen → /skills
++  → Lubot PR), repo inceleme (GitHub canlı durum = tek doğruluk; zip+yerel
++  analiz), web araştırma (yalnızca açık noktaya bağlı: HSM/PKCS#11, dış opcode
++  denetimi, Pollen HPKE), sessiz mod, act-and-log/stop-ask, kanıt standardı
++  (SHA + CI run no), bitiş kriterleri (B.U.D./BudZKVM/Lubot).
++- VERIFYMERKLE CANLI TEFİT (kanıt): production'da GATED — neden = 64-derinlik
++  soundness (dış opcode denetimi kategorisi), YENİ SORUN DEĞİL. Kanıt:
++  zkvm.rs:78-101 (ungated = cfg(test) only), MainnetActivation::default
++  (verify_merkle_enabled=false), containment-defaults CI gate (ci.yml:1607),
++  F2 regresyon testi, AI_VERIFICATION_STATUS.md (VerifyInference 0x1F =
++  fail-closed Poseidon binding, gated; AÇIK: output commitment bağı).
++- CI BULGUSU: fork PR'ında HIÇ workflow run yok (1 saatlik commit dahil) →
++  fork'ta Actions muhtemelen KAPALI → kanıt standardı karşılanamaz; kullanıcı
++  Settings→Actions açmalı. PR mergeable=CONFLICTING beklenen (base = eski
++  fork main 685caca; dal usl soyundan) — merge edilmeyecek, kayıttır.
+diff --git a/surekli-denetim-direktifi.md b/surekli-denetim-direktifi.md
+new file mode 100644
+index 0000000..539b527
+--- /dev/null
++++ b/surekli-denetim-direktifi.md
+@@ -0,0 +1,67 @@
++# Budlum Sürekli Denetim ve Yeniden Yapılandırma Direktifi
++
++> Kullanıcı tarafından 2026-09-09 sohbete iletilen TAM METNIN birebir kaydi.
++> Bu charter, oturunun yetki belgesidir; tek basina yeterli yetkidir.
++
++## Amaç
++
++Bu direktif, Arena/Lubot ajanının Budlum kod tabanı üzerinde tek seferlik bir görev listesi yerine, kalıcı ve kendiliğinden devam eden bir denetim-düzeltme döngüsü yürütmesini tanımlar. Amaç, sistemin baştan sona doğru kodlandığından, tüm modüllerin — özellikle Lubot ve B.U.D. — production hattına gerçekten bağlı olduğundan ve BudZKVM'in iddia edildiği gibi çalıştığından, varsayımla değil canlı kanıtla emin olmaktır. Bu charter tek başına yeterli yetkidir; Ayaz'dan görev bazlı komut beklenmez.
++
++## Kapsam
++
++- Budlum çekirdeği (github.com/budlum-xyz/budlum) — PoW/PoS/BFT/PoA genel mutabakat mimarisi, Evrensel Mutabakat Katmanı primitifleri
++- BudZero / BudZKVM — Plonky3/STARK VM, VerifyMerkle 64-derinlik, BudL dili
++- B.U.D. depolama katmanı — erasure coding, shard placement, coding audit, repair trigger, Pollen erişim katmanı
++- Lubot — hem ürün modülü (src/lubot) hem geliştirme-ajanı tarafı
++- Ekosistem modülleri — Pollen, SocialFi, BNS, budlumxyz, DeEd/DeArt, DAO
++- Üç repo yapısı: budlum (çekirdek), workspace, Lubot
++
++## Sürekli Sorumluluk Alanları
++
++Bunlar sıralı adımlar değil, paralel ve tekrar eden döngülerdir.
++
++### 1. Bütünsel Kod Denetimi
++
++Ana repo (~300k satır) düzenli aralıklarla uçtan uca yeniden okunur; sonuçlar önceki bulgularla karşılaştırılır, sapmalar loglanır. Her modülün README'si olgunluk sinyali olarak kontrol edilir — README yoksa modül deneysel sayılır. CI (fmt + clippy -D warnings + test) tek yetkili doğrulayıcıdır; CI'yi yumuşatan hiçbir değişiklik düzeltme sayılmaz, ihlal olarak loglanır.
++
++### 2. Modül Entegrasyon Doğrulaması
++
++- **B.U.D.**: erasure coding, shard placement, coding audit ve repair trigger'ın gerçek production call site'larına bağlı olup olmadığı her döngüde yeniden test edilir. Son bilinen durum kodlanmış ve test edilmiş ama UNWIRED — bu, canlı repo üzerinden yeniden doğrulanana kadar değişmemiş kabul edilir.
++
++- **BudZKVM**: VerifyMerkle'ın STARK/AIR tarafı sağlam kabul edilmiş olsa da production'da devre dışıysa, nedeni — dış opcode denetimi bekleniyor mu, yoksa yeni bir sorun mu var — her döngüde canlı olarak teyit edilir. "Çalışmıyor olabilir" varsayımı ne doğrulanır ne çürütülür; sadece kanıtla kapatılır.
++
++- **Lubot**: AiRegistry, Pollen AccessGrant, BNS ve B.U.D. ile gerçek çağrı zincirleri (mock değil) doğrulanır; model kaynağı kararı (fine-tune / sıfırdan eğitim) açık nokta olarak işaretlenmeye devam eder.
++
++- Her modül için "bağlı" / "kodlanmış ama bağlanmamış" / "eksik" durumu commit SHA referansıyla loglanır.
++
++### 3. Lubot Eğitim Döngüsü
++
++reverse-skill, ECC, jcode, agent-skills, codex-security, graphify, headroom, arcbox repolarından desen çıkarımı sürdürülür — kod doğrudan kopyalanmaz, mimari/dil desenleri Lubot'un kendi implementasyonuna uyarlanır. Uyarlanan her desen workspace repo /skills altına işlenir ve Lubot repo'suna PR olarak yansıtılır.
++
++### 4. Repo İnceleme Döngüsü
++
++Üç repo (budlum, workspace, Lubot) arasında GitHub canlı durumu tek doğruluk kaynağıdır; web_fetch üzerinden gelen PR/Actions verisi bayat kabul edilir, zip export + yerel analiz tercih edilir. Görev döngüleri arasında genel bir oryantasyon turu yapılır: üç repo baştan sona okunur, değişiklik yapılmadan sapmalar loglanır.
++
++### 5. Web Araştırma Direktifi
++
++ZK-STARK opcode denetim pratikleri, post-kuantum kriptografi gelişmeleri, Rust erasure-coding sertleştirme desenleri, çoklu-mutabakat interop literatürü gibi konularda düzenli araştırma yapılır. Bulunan her kaynak, Budlum'un ilgili açık noktalarından biriyle (HSM/PKCS#11, dış opcode denetimi, Pollen HPKE zorunlu uygulaması vb.) ilişkilendirilerek değerlendirilir; alakasız genel araştırma yapılmaz.
++
++## Çalışma Protokolü
++
++- Sessiz mod: sohbette ilerleme anlatımı yok; yapılandırılmış raporlar commit mesajlarına, PR açıklamalarına ve log dosyalarına yazılır.
++- İki katmanlı eskalasyon: act-and-log (varsayılan) / stop-and-ask_user (yalnızca mimari karar, ekonomik karar, çelişen gereksinim veya somut kapsam çatışması durumunda).
++- Core repo'ya doğrudan push yok — her değişiklik PR + onay üzerinden gider (frontend ve workspace repoları için doğrudan push istisnası geçerliliğini korur).
++- Kanıt standardı: her "tamamlandı" iddiası commit SHA + CI run numarasıyla desteklenir; self-report kabul edilmez.
++- Bulgular yeterli kanıt toplanmadan sonuca bağlanmaz; ham bulgular (araştırma) ile yorum/karar (analiz) ayrı tutulur.
++
++## Otomasyon Notu
++
++Bu charter komut beklemeden çalışacak şekilde yazıldı, ama "komutsuz" çalışması için bir zamanlayıcıya bağlanması gerekir — örneğin bir GitHub Actions cron job'u ya da kalıcı bir Arena/Claude Code oturumu. Bu belge tek başına bir zamanlayıcı değildir; zamanlayıcının her tetiklemesinde okunacak sabit talimat setidir. İstersen zamanlayıcı tarafını (repoya bir workflow dosyası olarak) ayrı bir adımda kurabiliriz.
++
++## Bitiş Kriterleri (modül bazlı)
++
++- **B.U.D.**: erasure coding / shard placement / repair trigger production call site'larına bağlı, entegrasyon testleri CI'de yeşil.
++- **BudZKVM**: dış opcode denetimi tamamlanmış, VerifyMerkle production'da aktif.
++- **Lubot**: model kaynağı kararlaştırılmış, operatör senkron modeliyle eğitilmiş, Pollen/BNS/B.U.D. çağrı zincirleri canlı repo üzerinde doğrulanmış.
++
++Bunlardan hiçbiri karşılanmadan sadece rapor üretmek yeterli sayılmaz; her döngü en az bir açık noktayı somut bir PR'a taşımayı hedefler.
+-- 
+2.39.5
+

@@ -1,0 +1,35 @@
+From c0b88e18ac900d30cbcff6111cbfbcfa89d49b0b Mon Sep 17 00:00:00 2001
+From: ayazkussan <149924814+ayazkussan@users.noreply.github.com>
+Date: Wed, 9 Sep 2026 20:29:50 +0000
+Subject: [PATCH] denetim-2026-09-09N 5j: genesis bootstrap + pkcs11 clean
+
+---
+ ...DALGA4-KONSENSUS-FINALITY-DOMAIN-COMMITMENT.md | 15 +++++++++++++++
+ 1 file changed, 15 insertions(+)
+
+diff --git a/DENETIM-2026-09-09N-DALGA4-KONSENSUS-FINALITY-DOMAIN-COMMITMENT.md b/DENETIM-2026-09-09N-DALGA4-KONSENSUS-FINALITY-DOMAIN-COMMITMENT.md
+index fb7d36e..da35576 100644
+--- a/DENETIM-2026-09-09N-DALGA4-KONSENSUS-FINALITY-DOMAIN-COMMITMENT.md
++++ b/DENETIM-2026-09-09N-DALGA4-KONSENSUS-FINALITY-DOMAIN-COMMITMENT.md
+@@ -364,3 +364,18 @@ yok (BridgeRelayerPipeline wired değil) — dolayısıyla option A
+   (submit_qc_fault_proof → kayıtlı blob'a karşı, submit_zk_proof,
+   ai_submit_result → verifier yetki kapısı §5d).
+ - Sonuç: E-7, sistematik bir pattern değil; tekil atlanmış kapıydı.
++
++## 5j. Genesis bootstrap domain'ları + PKCS#11 — clean
++
++- **Bootstrap domain'lar (genesis.rs)**: 4 domain (1=PoW/6 conf,
++  2=PoS/QC, 3=BFT/quorum-commit, 4=PoA/placeholder authorities, bridge
++  default kapalı). Kritik invariant dokümante: PoS/BFT set'siz iken
++  `reject_unregistered_set_for_bridge` TÜM proof'u reddeder — "proof'un
++  kendi set'ini adlandırmasına izin vermek, herkesin finalize edip
++  mintlemesini olurdu". Launch ceremony placeholder'ları değiştirir.
++  Test: startup 1..=4 domain kaydeder.
++- **PKCS#11 (963)**: startup'ta **key-binding testi** (HSM'deki özel anahtar,
++  okunan public key'e ait olduğunu test imzasıyla kanıtlar); BLS/PQ
++  asla process memory'ye yüklenmez (`bls_key: None`, vendor mechanism
++  üzerinden imza); `new_without_software_fallback` = mainnet zorunlu yol
++  (vendor failure → fail-closed); PIN env'den.
+-- 
+2.39.5
+

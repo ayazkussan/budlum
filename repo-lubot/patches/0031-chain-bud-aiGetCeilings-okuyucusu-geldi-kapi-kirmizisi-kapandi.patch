@@ -1,0 +1,173 @@
+From 88ccd7febea42f50d55167c56747809c4a419787 Mon Sep 17 00:00:00 2001
+From: ayazkussan <149924814+ayazkussan@users.noreply.github.com>
+Date: Fri, 11 Sep 2026 21:52:22 +0000
+Subject: [PATCH] lubot: chain: bud_aiGetCeilings okuyucusu geldi - kapi
+ kirmizisi kapandi, sekim sozlesmesi burada
+
+The red the queue had been carrying as `chain-surface-fixed` - registered
+in `training/rpc-seti.json`, client nowhere in the production surface -
+closes by writing the reader the registry's own note describes: a
+read-only node query the operator's tooling answers, deliberately outside
+`ALLOWED_METHODS` (the agent must not aim it at a node), so the client is
+parse-only: no request builder, and the doc says so at the declaration
+with the `WIRING:` marker the exemption rule provides - the node endpoint
+that grows later has exactly one shape to satisfy, and this test pins it.
+
+What the parser refuses is the whole design: a missing ceiling is refused,
+not defaulted - reading "no value" as "no limit" is the one mistake a
+ceiling reader must never make, so `0` is refused by name ("no-ceiling as
+no-limit") rather than flowing through as truth - and an inverted effort
+range is refused before a caller could honor one end by violating the
+other. Zero, missing, inverted, errored: four refusals plus the happy
+shape, one test; the `str_field`/`uint_field` idiom the file already speaks,
+reused rather than paralleled.
+
+`chain-surface-fixed` now reports 8/8 methods agreeing in both
+directions (the gate's first green this queue has existed); all 25
+cargo-free gates green; floor unchanged at 21/21 by design - the new
+function is exempt at its declaration, not added to the baseline, because
+an exemption that names its future caller is a record while a baseline
+line is an excuse. README tables recounted from the applied tree (41 to 42
+tools, 331 to 332 total), ratchet sentence extended. Not compiled: no
+cargo (measured); serde_json is a live dependency of this crate already,
+and every construct is the file's own vocabulary.
+---
+ README.md                 |  4 +-
+ crates/tools/src/chain.rs | 92 +++++++++++++++++++++++++++++++++++++++
+ 2 files changed, 94 insertions(+), 2 deletions(-)
+
+diff --git a/README.md b/README.md
+index e72e08d..e92d412 100644
+--- a/README.md
++++ b/README.md
+@@ -24,7 +24,7 @@ nothing to check a generation against.
+ |---|---|---|
+ | permission before bytes; epoch-bounded training budgets (fail-closed) | `crates/grant` | 19 tests |
+ | three channels, digest-verified, no fourth; the Markdown reply schema; magic-byte file kind with route refusals before reading | `crates/read` | 28 tests |
+-| exact arithmetic instead of a guessed number; chain record client; effort tier as a hashed ceiling (bond, `model_hash` and window rules live in the node, not here); scope refusals (generation, secret hunts); effort-bounded answer budget; deterministic command-risk shapes; the closed licence set for anything admitted to the corpus; the credential-shape scanner (closed list, exact lengths, a mention is never a leak) | `crates/tools` | 41 tests |
++| exact arithmetic instead of a guessed number; chain record client; the ceilings read (parse-only: a zero ceiling is refused, never defaulted; the method stays outside the agent's send list); effort tier as a hashed ceiling (bond, `model_hash` and window rules live in the node, not here); scope refusals (generation, secret hunts); effort-bounded answer budget; deterministic command-risk shapes; the closed licence set for anything admitted to the corpus; the credential-shape scanner (closed list, exact lengths, a mention is never a leak) | `crates/tools` | 42 tests |
+ | retrieval with line-accurate citations, masking on the write path; normalized BM25 with a coverage floor and one-edit tolerance; deterministic context compaction under a character budget | `crates/index` | 18 tests |
+ | the assembled reading loop, schema-validated exit; scope refusals; the finalized-output handoff (`ai-inference` tag) | `crates/answer` | 14 tests |
+ | rich-document reading: PDF text extraction, paragraph-aware chunking | `crates/doc` | 4 tests |
+@@ -33,7 +33,7 @@ nothing to check a generation against.
+ | the security review as an evidenced ledger (scan, validate, fix): every finding ends in a disposition, a fix closes only with the check that proves it plus the commit that is it, no waiver at the attestation floor without an attester, and a finding that changes on re-scan voids its stale closure | `crates/denetim` | 9 tests |
+ | the runnable binary: corpus load, `ask`, grant book, output audit, closed-loop handoff; `ceilings`; multi-question `batch`; the uninterrupted-work queue (resume, budget, per-job gate check, loud halt); measured baselines that may only rise (`ratchet`); repository `envanter`; restricted `it` (only the listed paths are committed and pushed); the four-step `olc` verification chain; `durum`; the manifest map `graf`; the credential scan `guvenlik`; the file-kind router `dosya`; the ask_user-shaped decision battery `soru` (list/get/cevapla/durum); content search `ara`, measured `indeks`, the ordered reading plan `mufredat`, effort comparison `karsilastir`; context compression `sikistir` (--path/--geri-getir: typed routing, pinned lines, reversible CCR store, measured ledger) and failure mining `ogren` (pattern grouping, two-tier promotion); the queue operator (`queue ls`, `queue iptal` - a cancelled job never runs); batch writes the same audit and closed-loop trace as `ask` | `crates/cli` | 37 tests |
+ 
+-331 tests, `clippy -D warnings` clean, `unwrap`/`expect` denied outside tests. 39 gates, each with its own self-test; the ratchet holds (331 tests, 39 gates, 0 pedantic warnings, 793 corpus records) - the count moved 328 to 334 when the settlement layer joined with its own six tests, 334 to 332 when `olcek`'s callerless report surface left with the two tests that were its only assertions, and 332 to 328 when operator's registry rules - bond, single-hash sync, the transition window - left with their four fixtures and the gate's name-list shrank to the one rule with a caller, and 0028 moved it to 331 with three `usl` refusal tests written against a forger who can recompute the seal, measured on the applied tree, not retyped.
++332 tests, `clippy -D warnings` clean, `unwrap`/`expect` denied outside tests. 39 gates, each with its own self-test; the ratchet holds (332 tests, 39 gates, 0 pedantic warnings, 793 corpus records) - the count moved 328 to 334 when the settlement layer joined with its own six tests, 334 to 332 when `olcek`'s callerless report surface left with the two tests that were its only assertions, and 332 to 328 when operator's registry rules - bond, single-hash sync, the transition window - left with their four fixtures and the gate's name-list shrank to the one rule with a caller, and 0028 moved it to 331 with three `usl` refusal tests written against a forger who can recompute the seal, 0030 held 331 while four accessors left, and 0031 moved it to 332 with the ceilings client's own shape test, measured on the applied tree, not retyped.
+ 
+ ## Permission is an admission decision
+ 
+diff --git a/crates/tools/src/chain.rs b/crates/tools/src/chain.rs
+index d74211e..a1cab4b 100644
+--- a/crates/tools/src/chain.rs
++++ b/crates/tools/src/chain.rs
+@@ -197,6 +197,63 @@ pub fn parse_result(record: &str) -> Result<AiInferenceResult, String> {
+     })
+ }
+ 
++/// What the node says the limits are: the four modality ceilings plus the
++/// effort range, as one record.
++#[derive(Debug, Clone, PartialEq, Eq)]
++pub struct ChainCeilings {
++    pub text_bytes: u64,
++    pub image_pixels: u64,
++    pub audio_ms: u64,
++    pub video_frames: u64,
++    pub effort_min_tenths: u64,
++    pub effort_max_tenths: u64,
++}
++
++/// Parse a `bud_aiGetCeilings` response.
++///
++/// WIRING: the read-only node query the registered set carries but the agent
++/// must not send - it is deliberately outside `ALLOWED_METHODS`, so there is
++/// no request builder here; the operator's tooling supplies the response and
++/// this parser is the shape contract the node endpoint must satisfy.
++///
++/// A missing or zero ceiling is a refusal, not a default: reading "no value"
++/// as "no limit" is the one mistake a ceiling reader must never make, and an
++/// inverted effort range is an answer that cannot be honored by both ends.
++///
++/// # Errors
++/// Malformed JSON-RPC, an error object, a missing field, a zero ceiling, or
++/// a range where the maximum is below the minimum.
++pub fn parse_get_ceilings(response: &str) -> Result<ChainCeilings, String> {
++    let value: Value =
++        serde_json::from_str(response).map_err(|e| format!("not valid JSON-RPC: {e}"))?;
++    if let Some(error) = value.get("error") {
++        return Err(format!("RPC error: {error:?}"));
++    }
++    let result = value.get("result").ok_or("response has no result object")?;
++    let ceiling = |name: &str| -> Result<u64, String> {
++        let got = uint_field(result, name)?;
++        if got == 0 {
++            return Err(format!("`{name}` is zero; refusing to read no-ceiling as no-limit"));
++        }
++        Ok(got)
++    };
++    let ceilings = ChainCeilings {
++        text_bytes: ceiling("text_bytes")?,
++        image_pixels: ceiling("image_pixels")?,
++        audio_ms: ceiling("audio_ms")?,
++        video_frames: ceiling("video_frames")?,
++        effort_min_tenths: uint_field(result, "effort_min_tenths")?,
++        effort_max_tenths: uint_field(result, "effort_max_tenths")?,
++    };
++    if ceilings.effort_max_tenths < ceilings.effort_min_tenths {
++        return Err(format!(
++            "effort range is inverted: {} below {}",
++            ceilings.effort_max_tenths, ceilings.effort_min_tenths
++        ));
++    }
++    Ok(ceilings)
++}
++
+ /// The only chain methods Lubot may call. The set is registered in
+ /// `training/rpc-seti.json`; the gate keeps the file and this constant in
+ /// agreement, so an extension is a reviewable change in both places - and
+@@ -238,6 +295,41 @@ pub fn consumes(agreeing: usize, threshold: u64) -> bool {
+ mod tests {
+     use super::*;
+ 
++    #[test]
++    fn ceilings_parse_their_shape_and_refuse_defaults() {
++        let good = r#"{
++            "jsonrpc": "2.0",
++            "id": 1,
++            "result": {
++                "text_bytes": 8192,
++                "image_pixels": 1048576,
++                "audio_ms": 60000,
++                "video_frames": 120,
++                "effort_min_tenths": 5,
++                "effort_max_tenths": 100
++            }
++        }"#;
++        let ceilings = parse_get_ceilings(good).expect("a complete answer parses");
++        assert_eq!(ceilings.text_bytes, 8192);
++        assert_eq!(ceilings.effort_max_tenths, 100);
++
++        let zeroed = good.replace("8192", "0");
++        assert!(parse_get_ceilings(&zeroed)
++            .unwrap_err()
++            .contains("no-ceiling as no-limit"));
++
++        let missing = good.replace("\"audio_ms\": 60000,", "");
++        assert!(parse_get_ceilings(&missing)
++            .unwrap_err()
++            .contains("missing field"));
++
++        let inverted = good.replace("\"effort_max_tenths\": 100", "\"effort_max_tenths\": 1");
++        assert!(parse_get_ceilings(&inverted).unwrap_err().contains("inverted"));
++
++        let errored = r#"{"jsonrpc":"2.0","id":1,"error":{"code":-32000,"message":"no"}}"#;
++        assert!(parse_get_ceilings(errored).unwrap_err().starts_with("RPC error"));
++    }
++
+     #[test]
+     fn request_bodies_name_the_method_and_params() {
+         let body = jsonrpc_request("bud_aiGetOutcome", vec![Value::String("0x01".into())])
+-- 
+2.39.5
+

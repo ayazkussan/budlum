@@ -1,0 +1,75 @@
+From b24a9b4473b175d62b089b939e6d5aff79c1d372 Mon Sep 17 00:00:00 2001
+From: ayazkussan <ayazkussan@users.noreply.github.com>
+Date: Fri, 11 Sep 2026 08:30:17 +0000
+Subject: [PATCH] lubot: tools: Rational getter cifti kaldirildi - taban 29'a
+
+`numerator` and `denominator` were read only by the test proving lowest-terms
+reduction; the fields they mirrored are used directly by the arithmetic and
+the `Display` impl, which is where a rational is actually consumed. The test
+keeps its claim and loses its crutch: the same assertion now reads the
+rendered form ("3/4", "-1/2"), which is also what any downstream consumer
+sees, so the sign-normalisation and gcd rules stay tested through the door
+that is open. The pair went together: `numerator` sat in the baseline while
+`denominator` had escaped it only by bookkeeping, and deleting half a
+symmetric getter pair is exactly the surface rot the ratchet exists to
+prevent. The three remaining mentions of the word "denominator" are prose
+about the arithmetic (invariant, error text, the 2/5-smooth decimal rule)
+and stay true.
+
+Baseline 30 to 29 in the same patch; README total unchanged (no test was
+deleted, one was rewritten); gates rc=0 on the applied tree; not compiled
+(no cargo here, measured).
+---
+ crates/tools/src/lib.rs     | 16 ++--------------
+ gates/dead-pub-api.baseline |  1 -
+ 2 files changed, 2 insertions(+), 15 deletions(-)
+
+diff --git a/crates/tools/src/lib.rs b/crates/tools/src/lib.rs
+index fe11447..89e7150 100644
+--- a/crates/tools/src/lib.rs
++++ b/crates/tools/src/lib.rs
+@@ -45,16 +45,6 @@ impl Rational {
+         Self { num: n, den: 1 }
+     }
+ 
+-    #[must_use]
+-    pub fn numerator(self) -> i128 {
+-        self.num
+-    }
+-
+-    #[must_use]
+-    pub fn denominator(self) -> i128 {
+-        self.den
+-    }
+-
+     /// # Errors
+     /// Returns a description on overflow.
+     pub fn checked_add(self, other: Self) -> Result<Self, String> {
+@@ -492,10 +482,8 @@ mod tests {
+     #[test]
+     fn rationals_are_kept_in_lowest_terms() {
+         let r = Rational::new(6, 8).unwrap();
+-        assert_eq!(r.numerator(), 3);
+-        assert_eq!(r.denominator(), 4);
++        assert_eq!(r.to_string(), "3/4");
+         let neg = Rational::new(1, -2).unwrap();
+-        assert_eq!(neg.numerator(), -1);
+-        assert_eq!(neg.denominator(), 2);
++        assert_eq!(neg.to_string(), "-1/2");
+     }
+ }
+diff --git a/gates/dead-pub-api.baseline b/gates/dead-pub-api.baseline
+index 1de4ac2..c695638 100644
+--- a/gates/dead-pub-api.baseline
++++ b/gates/dead-pub-api.baseline
+@@ -23,7 +23,6 @@ crates/takip/src/lib.rs:declare_wired
+ crates/takip/src/lib.rs:unclaimed
+ crates/tools/src/chain.rs:jsonrpc_request
+ crates/tools/src/chain.rs:to_corpus_line
+-crates/tools/src/lib.rs:numerator
+ crates/yetenek/src/lib.rs:record_of
+ crates/yetenek/src/lib.rs:reject_names
+ crates/yetenek/src/lib.rs:with_capability
+-- 
+2.39.5
+

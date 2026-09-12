@@ -23,7 +23,7 @@ fn genesis_state() -> (AccountState, TokenomicsAddresses) {
     let params = TokenomicsParams::default();
     let addrs = TokenomicsAddresses::reserved();
     let mut state = AccountState::new();
-    for (addr, amount) in genesis_allocations(&params, &addrs) {
+    for (addr, amount) in genesis_allocations(&params, &addrs).unwrap() {
         state.add_balance(&addr, amount);
     }
     (state, addrs)
@@ -544,6 +544,22 @@ fn f4_boost_share_accumulates_in_pending_bud_boost_share() {
     assert_eq!(state.get_balance(&booster), 10_000_000 - boost_amount - 100);
 }
 
+/// The mainnet template seeds no $BUD distribution until the ceremony
+/// addresses are set (marker accounts must not enter the mainnet state
+/// root). These tests measure the epoch arithmetic of the burn reserve and
+/// the team cliff, so they run the template with ceremony addresses.
+fn mainnet_state_with_distribution() -> AccountState {
+    let mut genesis = crate::chain::genesis::mainnet_genesis();
+    genesis.tokenomics_addresses = Some(TokenomicsAddresses {
+        community: test_addr_from_byte(0xC1),
+        liquidity: test_addr_from_byte(0xC2),
+        ecosystem: test_addr_from_byte(0xC3),
+        team: test_addr_from_byte(0xC4),
+        burn_reserve: test_addr_from_byte(0xC5),
+    });
+    genesis.build_state()
+}
+
 /// One epoch boundary must not expire a one-year cliff.
 ///
 /// `spendable_balance` read the team schedule at
@@ -554,15 +570,17 @@ fn f4_boost_share_accumulates_in_pending_bud_boost_share() {
 ///
 /// Measured with a canary before the fix, on `mainnet_genesis()`:
 ///
+///```text
 ///     epoch_at_timestamp       = 5579531250
 ///     spendable before advance = 0
 ///     spendable after  advance = 20000000000000
+///```
 ///
 /// 20M $BUD, 20% of total supply, unlocked at the first epoch close.
 /// `spendable_balance` gates transfers (`executor.rs`), so this was spendable.
 #[test]
 fn one_epoch_close_does_not_expire_the_team_cliff() {
-    let mut state = crate::chain::genesis::mainnet_genesis().build_state();
+    let mut state = mainnet_state_with_distribution();
     let (team, schedule) = state.team_vesting.expect("mainnet vests the team");
 
     assert_eq!(schedule.start_epoch, 0, "schedule is genesis-relative");
@@ -590,7 +608,7 @@ fn one_epoch_close_does_not_expire_the_team_cliff() {
 /// unlocks anything.
 #[test]
 fn the_team_cliff_still_opens_after_its_epochs_elapse() {
-    let mut state = crate::chain::genesis::mainnet_genesis().build_state();
+    let mut state = mainnet_state_with_distribution();
     let (team, schedule) = state.team_vesting.expect("mainnet vests the team");
 
     state.epoch_index = schedule.cliff_epochs;
@@ -616,11 +634,13 @@ fn the_team_cliff_still_opens_after_its_epochs_elapse() {
 ///
 /// Measured with a canary before the fix, on `mainnet_genesis()`:
 ///
+///```text
 ///     years_burned    0 -> 106155
 ///     reserve balance 40000000000000 -> 0
+///```
 #[test]
 fn one_epoch_close_does_not_drain_the_burn_reserve() {
-    let mut state = crate::chain::genesis::mainnet_genesis().build_state();
+    let mut state = mainnet_state_with_distribution();
     let reserve = state
         .burn_reserve_address
         .expect("mainnet configures a burn reserve");
@@ -646,7 +666,7 @@ fn one_epoch_close_does_not_drain_the_burn_reserve() {
 /// The annual burn must still fire once a year of epochs elapses.
 #[test]
 fn the_annual_burn_still_fires_after_a_year_of_epochs() {
-    let mut state = crate::chain::genesis::mainnet_genesis().build_state();
+    let mut state = mainnet_state_with_distribution();
     let reserve = state
         .burn_reserve_address
         .expect("mainnet configures a burn reserve");

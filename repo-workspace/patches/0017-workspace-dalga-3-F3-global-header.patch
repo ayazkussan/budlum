@@ -1,0 +1,101 @@
+From 4ae23f1d49a167d57228a03e3f1e73b0c4a50c46 Mon Sep 17 00:00:00 2001
+From: Lubo's Ruler <ruler@lubot.local>
+Date: Wed, 9 Sep 2026 18:57:03 +0000
+Subject: [PATCH] workspace: dalga 3 raporu (F-3 fix 8ba7eab + F-2/domain
+ kapanislar) + sandbox yenileme
+
+---
+ ...26-09-09L-GLOBAL-HEADER-VE-DOMAIN-STATE.md | 57 +++++++++++++++++++
+ memory/hafiza.md                              | 15 +++++
+ 2 files changed, 72 insertions(+)
+ create mode 100644 DENETIM-2026-09-09L-GLOBAL-HEADER-VE-DOMAIN-STATE.md
+
+diff --git a/DENETIM-2026-09-09L-GLOBAL-HEADER-VE-DOMAIN-STATE.md b/DENETIM-2026-09-09L-GLOBAL-HEADER-VE-DOMAIN-STATE.md
+new file mode 100644
+index 0000000..e043e20
+--- /dev/null
++++ b/DENETIM-2026-09-09L-GLOBAL-HEADER-VE-DOMAIN-STATE.md
+@@ -0,0 +1,57 @@
++# DENETIM-2026-09-09L — Bütünsel sorgulama, dalga 3: global header + relay/domain state kök bağı
++
++**Tarih:** 2026-09-09 · **Yazar:** Lubo's Ruler
++**Zemin:** `arena/01a08674-budlum` @ `46bad94` → fix `8ba7eab`.
++
++## Ham bulgular
++
++**F-3 (HIGH, consensus) — `global_header_summary` node-local değeri state root'ta:**
++- Üretim (`produce_block`, blockchain.rs ~4210): `committed_state.global_header_summary = self.global_headers.last().hash()` — node'un KENDİNİN son global header'i.
++- Canlı doğrulama (`validate_and_add_block` ~4529): aynı — receiver'ın KENDİNİN `global_headers`'i.
++- Reorg doğrulama (`validate_candidate_chain` 4752, `try_reorg` 4957/5006): **sıfır** + comment: "External settlement/header effects are not reconstructible from an L1 block today. The empty canonical values are replayable; a chain with out-of-band roots is rejected **until H-10** atomically carries those commitments in the L1 block."
++- `seal_global_header` = operator RPC (`bud_sealGlobalHeader`, require_operator) — arka planda otomatik seal YOK. `build_global_header` tamamen deterministik (timestamp = len).
++- Sonuç (fix öncesi): node bir kez seal ederse → ürettiği blokların kökü diğer node'larca üretilemez → **kalıcı node izolasyonu**; aynı node'un reorg doğrulaması da kendi zincirini reddediyordu (canlı yol = self, reorg yolu = sıfır; iç tutarsızlık). **Guard YOKTU** (grep: production'da `global_headers.is_empty` yok).
++- `settlement_root` AYNI noktalarda hesaplanıyor ama **chain'den türetiliyor** (`settlement_finality_window` = retention band'daki blok hash'leri + chain_id konfigi) → tüm node'larda aynı → sorun YOK (korundu).
++
++**F-2 KAPANIŞI (relay ledger):**
++- `universal_relayer` yazı yolları: `enqueue_bridge_relay` (bridge lock/burn — operator RPC akışı), `submit_relay_proof` (RPC, artık gate'li), `relayer/worker.rs` (node-side async). **Blok akışında YAZAN YOK.**
++- `expired_relays()` ("for slashing") production tüketici YOK (yalnız test) → relay slashing UNWIRED (info).
++- `relay_ledger_root` yalnız testlerde okunuyor; ledger node-local operational state (store-persist) → state root dışında olmasi DOĞRU (consensus read path yok).
++- Post-commit `sweep_retired_relays` (4258) = operational ledger housekeeping → F-2 olarak KALAN YOK.
++
++**Domain registry (F-1 alt sorusu) KAPANIŞI:**
++- `ConsensusDomainRegistry` = Blockchain alanı (AccountState DIŞI), store-persist, snapshot DIŞI.
++- Yalnız operator/RPC yollarından yazılıyor (`register_consensus_domain` gate'li, proof doğrulama yolu progress gate'i).
++- **Blok doğrulama/execution yolunda okuyan YOK** (executor: 0 hit, consensus modülü: 0 hit).
++- Commitment: `domain_registry.root()` GLOBAL HEADER'a gidiyor (1840) — operator seal zinciri + persist üzerinden denetlenebilir.
++- → PoA domainleri = node-local OPERATOR POLICY (poa_admitted'in "NOT HERE and must not be" yorumuyla tutarlı). Governance unfreeze (consensus kararı) node-local policy'ye etki eder — tasarım tutarlı. F-1'in kök bağlaması (kuyruk = AccountState = consensus) doğrulanmış.
++
++## Yorum
++
++F-3'ün özeti: kök, **yalnız L1 blok + ortak chain'den yeniden üretilebilen** değerleri
++içerme kuralına aykırıydı. Kodun kendi beyan etmiş olduğu kanonik semantik
++("empty canonical values are replayable") üretim yolunda ihlal edilmişti —
++düzeltme, üretimi beyana hizaladı (H-10'a kadar geçiş kanonu = sıfır).
++Seal zinciri korunuyor: `previous_global_hash` bağı + persist + global
++header'ın kendi field commitment'ları (`domain_registry_root`,
++`domain_commitment_root`, `message_root`).
++
++**Risk notu:** bu değişim state root LAYOUT'unu etkiler (seal'sız zincirlerde
++değer zaten sıfırdı → kök DEĞİŞMEZ; seal'lı node'ların kökü normalleşir).
++Pre-mainnet; CI (Determinism + full test) tek doğrulayıcı.
++
++## Kanıtlar
++
++Fix SHA `8ba7eab` (iki nokta + regresyon testi
++`sealed_global_header_does_not_fork_peer_state_root`: 2 seal → peer kabul).
++CI run seti `8ba7eab` bekleniyor.
++
++## Sonraki
++
++- Consensus/finality çekirdeği (vote/finality cert, slashing_evidence akışı).
++- E-7 refactor tasarımı (off-block bridge mutasyon → on-chain).
++- Unfreeze+sweep kök-öncesi refactor (F-1 kalanı; domain registry node-local
++  OLDUĞUNA GÖRE bu refactor'un gerekçesi zayıfladı — yeniden değerlendir:
++  kuyruk zaten kökte; etki node-local policy'ye. Sadece replay-determinism
++  kozmetiği kalıyor — ÖNCELİK DÜŞÜRÜLDÜ).
++- Lubot /skills (direktif kalem 3, hâlâ yazılmadı).
+diff --git a/memory/hafiza.md b/memory/hafiza.md
+index 6b5f613..4489294 100644
+--- a/memory/hafiza.md
++++ b/memory/hafiza.md
+@@ -6958,3 +6958,18 @@ Tek commit; CI dogrular. E4 sirada.
+   TEKLİ KAYNAK = tek PR dalı (repo-lubot + repo-workspace patch'leri ağaçta).
+ - LUBOT klonu bu turla yeniden kurulmadı (gerektiğinde repo-lubot patch'lerinden
+   kurdurulur; base 12bc9ac).
++## Dalga 3 + sandbox yenileme (2026-09-09)
++- F-3 (HIGH, KAPANDI): global_header_summary node-local operator seal'i state root'taydi →
++  seal eden node karsilikli izolasyona giriyordu (guarantee self-fork). Fix 8ba7eab:
++  prod + live-verify kanonik sifir (validation yollarinin beyan etmis oldugu semantik).
++  Regresyon: sealed_global_header_does_not_fork_peer_state_root.
++- F-2 KAPANDI: relay ledger = node-local operational state (blok akisinda yazi/yok,
++  consensus read path yok) → root disinda dogru. Relay slashing UNWIRED (expired_relays
++  production tuketicisi yok) — info.
++- Domain registry KAPANDI: Blockchain alani, operator policy, blok execution'da okuyan
++  yok; commitment global header'a. F-1'in kuyruk baglamasi dogrulanadi.
++- Unfreeze+sweep kok-oncesi refactor: ONCELIK DUSURULDU (etki node-local policy'ye;
++  kuyruk zaten kokte — F-1 fix).
++- Sandbox workspace SILINDI; 16 patch'ten yeniden kuruldu (0012 duplicate 0001 olarak
++  kaliyormus — dogrulandi ve yeniden isimlendi; hafiza hunk'lari sona append).
++- Fork log altyapisi henuz EOF (tum runlar). CI kaniti: run sayilari + status.
+-- 
+2.39.5
+

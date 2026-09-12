@@ -1,0 +1,57 @@
+From ff9264edeaae8e4bb8e6315cca8bd2111c37f139 Mon Sep 17 00:00:00 2001
+From: ayazkussan <149924814+ayazkussan@users.noreply.github.com>
+Date: Wed, 9 Sep 2026 20:27:23 +0000
+Subject: [PATCH] denetim-2026-09-09N 5g: reset 4 kurtarma +
+ budlumxyz/money/account_abstraction/storage-db clean
+
+---
+ ...A4-KONSENSUS-FINALITY-DOMAIN-COMMITMENT.md | 36 +++++++++++++++++++
+ 1 file changed, 36 insertions(+)
+
+diff --git a/DENETIM-2026-09-09N-DALGA4-KONSENSUS-FINALITY-DOMAIN-COMMITMENT.md b/DENETIM-2026-09-09N-DALGA4-KONSENSUS-FINALITY-DOMAIN-COMMITMENT.md
+index 20b2e08..44024ff 100644
+--- a/DENETIM-2026-09-09N-DALGA4-KONSENSUS-FINALITY-DOMAIN-COMMITMENT.md
++++ b/DENETIM-2026-09-09N-DALGA4-KONSENSUS-FINALITY-DOMAIN-COMMITMENT.md
+@@ -251,3 +251,39 @@ dokümante değil.
+   reddediyor; 2 commit local'de: 1478017 + 3dae858); (2) model kaynağı
+   kararı; (3) F-4 dispozisyon kararı (A: pipeline wire + root anchoring,
+   B: dekoratif kapı notu).
++
++## 5g. Reset olayı (4.) + budlumxyz, money, account_abstraction, storage/db
++
++**Reset 4 (2026-09-09, oturum içi)**: `/home/user/budlum` .git yeniden
++kurulmuş (reflog: yalnız clone+checkout @ 685caca), `/home/user/workspace`
++silinmiş, `/home/user` yalnızca budlum içermiş. Durum değerlendirmesi:
++- Remote budlum @ 42df5df TAM (tüm fix'ler + mirror 0001-0020).
++- Remote workspace @ 18167ee (eski baz) — kullanıcı push'lamamış.
++- Working tree 0021-0024 patch dosyalarını UNTRACKED olarak korumuş →
++  4 kayıp mirror commit içerik kaybı olmadan yeniden kuruldu
++  (a3fd42b, 05fb36f, 383c9a9, a44777b — PUSH, ff 42df5df→a44777b).
++- Workspace 24 patch'le yeniden kuruldu (0012 hafiza drift'i aynı reçete:
++  --exclude + append); HEAD 3ee49a2 (949 commit); 09N §5c-5f içeriği
++  budlum mirror'ından geri geldi.
++- Ders: budlum mirror'ı workspace'in tek dayanıklı kopyasıdır; push gecikmesi
++  = kayıp yüzeyi. (Görsel: reset 1/2/3 aynı desen — platform .git'i
++  sıfırlıyor, dosyaları koruyor.)
++
++- **budlumxyz (620)**: register = dup-ID guard (snapshot restore'da
++  next_app_id < max live id drift'i dokümante, NftRegistry::mint ile aynı
++  shape); update/attest yalnız developer; `mark_verified_by_governance`
++  **fail-open bug fix'i dokümante** ("empty set used to admit... gate stood
++  open; default inverted: no governor configured → nobody is governor").
++- **core/money (95)**: `Bud` newtype — F-8/F-9/F-10 audit trail dokümante;
++  From<u128>/From<u64> YOK (TryFrom red + named `Bud::new`); wire uyumu testi
++  (bincode byte-identical u64).
++- **account_abstraction (520)**: register = adres public key'den türetilmiş
++  olmalı (binding), shape validate, dup red; **pact_root claim→binding fix'i**
++  (register_with_pacts: pact registry root'u recompute + account.pact_root
++  eşleşmesi); update = candidate-clone + revalidate + bound-field guard
++  (address/pk/pact_root immutable).
++- **storage/db (örneklem)**: commit_block = tek atomik sled batch
++  (block + HEIGHT + LAST + STATE_ROOT + CANONICAL_HEIGHT + TX_IDX) + flush;
++  recover_interrupted_commit: IN_PROGRESS_HEIGHT marker; **corrupt marker
++  fail-closed** ("0 olarak okunsa genesis rollback + LAST/CANONICAL_HEIGHT/
++  bridge silinirdi" — dokümante); snapshot create/verify/restore.
+-- 
+2.39.5
+

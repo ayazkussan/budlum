@@ -1,0 +1,48 @@
+From 2d19b8d90cad9fa9d769712902840f88b0a34ffb Mon Sep 17 00:00:00 2001
+From: Lubo's Ruler <ayazkussann@gmail.com>
+Date: Thu, 10 Sep 2026 08:28:53 +0000
+Subject: [PATCH 10/21] workspace: dort crate members listesine, envanter
+ dosyasi
+
+---
+ Cargo.toml     |  4 ++++
+ docs/CRATES.md | 12 ++++++++++++
+ 2 files changed, 16 insertions(+)
+ create mode 100644 docs/CRATES.md
+
+diff --git a/Cargo.toml b/Cargo.toml
+index 108812b..c3a3870 100644
+--- a/Cargo.toml
++++ b/Cargo.toml
+@@ -11,6 +11,10 @@ members = [
+     "crates/sikistir",
+     "crates/izolasyon",
+     "crates/denetim",
++    "crates/yetenek",
++    "crates/olcek",
++    "crates/kanit",
++    "crates/mimari",
+ ]
+ 
+ # The panic limit: a reader that panics is a reader that stops answering.
+diff --git a/docs/CRATES.md b/docs/CRATES.md
+new file mode 100644
+index 0000000..a18a33f
+--- /dev/null
++++ b/docs/CRATES.md
+@@ -0,0 +1,12 @@
++# Crate inventory, four entries added in this series
++
++| crate | holds | fails closed on |
++|---|---|---|
++| `yetenek` | skill cards and the ledger of what proved them | a card with no trigger, no steps, or prose-only exit evidence |
++| `olcek` | ceiling, watermark, reserved floor, and the drop ledger | an admission past the ceiling, an uncounted eviction, a reserve spent by reading |
++| `kanit` | scope, evidence, findings, paths, closure | observation before a plan, evidence outside the scope, closure without an observation that can carry it |
++| `mimari` | the pipeline table and the tree it must match | a row naming a symbol that is not declared, an empty contract, an empty table |
++
++None of the four depends on another. All are `std` only, no I/O, no clock, no
++randomness: a run that reads them can be reproduced from its inputs, which is
++the only property that makes a review finding reviewable a second time.
+-- 
+2.39.5
+

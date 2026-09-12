@@ -1,0 +1,96 @@
+From 3329aba0a99e76cc455035736ea9fd64ff07b215 Mon Sep 17 00:00:00 2001
+From: ayazkussan <149924814+ayazkussan@users.noreply.github.com>
+Date: Thu, 10 Sep 2026 08:54:23 +0000
+Subject: [PATCH] denetim-2026-09-10A devam-5: bassat duzeltmesi (Build yesil,
+ kirmizi olan testler) + F-16 onarim slotlari
+
+protoc eksigi yuzunden "fork derlenmiyor" diyen her satir yanlismisti; artik
+okunabilir tek sey var: `cargo test` 101. Onun icin test yuzeyi eklendi.
+F-16'nin kayip-replika tarafi bilet aciyor; kaybedilmemis-replika tarafi
+konsensus-karari olarak kayda gecti.
+---
+ ...16-onarim-slotlari-ve-bassat-duzeltmesi.md | 72 +++++++++++++++++++
+ 1 file changed, 72 insertions(+)
+ create mode 100644 DENETIM-2026-09-10A-devam-5-f16-onarim-slotlari-ve-bassat-duzeltmesi.md
+
+diff --git a/DENETIM-2026-09-10A-devam-5-f16-onarim-slotlari-ve-bassat-duzeltmesi.md b/DENETIM-2026-09-10A-devam-5-f16-onarim-slotlari-ve-bassat-duzeltmesi.md
+new file mode 100644
+index 0000000..33b4c18
+--- /dev/null
++++ b/DENETIM-2026-09-10A-devam-5-f16-onarim-slotlari-ve-bassat-duzeltmesi.md
+@@ -0,0 +1,72 @@
++# DENETIM-2026-09-10A (devam 5) — F-16'nın uygulanabilir yarısı + bassatın düzeltilmesi
++
++## 1. Bassat: fork derleniyor
++
++Run 39 (`6fba22a`) adım listesi ilk kez okunabildi ve earlier "lineage derlenmiyor"
++hükmü düzeltildi: `Install protoc` → **success**, `Build (cargo build)` →
++**success**, `Run tests` → **failure (101)**. Kırmızı olan kaynağın derlenmesi
++değil, testlerdi. Bölüm 12'nin "altı kırmızı kontrol tek derleme hatasının
++kostümü" atfi da ikiye ayrıldı: protoc kuran işler (Determinism, kapi işleri)
++o nedenin downstream'u hiç değildi; onların 101'i kendi dertleri ve tek tek
++okunacak.
++
++Sebep tek bir eksik apt adımıydı: `build.rs` protoc arıyor, 23 workflow içinde
++derleyip de protoc kurmayan tek dosya `rust.yml`'di. Eklenen şey bağımlılık ve
++görünürlük; hiçbir iddiaya dokunulmadı — "CI sayılarını yumuşatma" çizgisinin
++ihlali sayılacak bir satır yok.
++
++Aynı commit'te `Test failure surface (annotations)`: kırmızı bir `cargo test`
++iki başka hatadır ve job başlığından aynı görünür — (a) test koşar ve yanılır,
++(b) yalnız `cargo test`'in derlediği hedef derlenmez (test modülleri
++kütüphaneden fazlasını import eder; `src/tests/` içindeki bir unresolved-import
++yeşil build + kırmızı test üretir). Yüzey `error[E…]` ile `failures:` bloğunu
++ayırt edip basar; `--no-fail-fast` ile tek geçiş tüm başarısız suite'leri sayar.
++
++On-registered tahmin (okumadan önce, Bolum 16): ağaç derlenirken 101'in en olası
++biçimi `src/tests/*` içinde küçük sayıda gerçek assertion hatasıdır; yüzey
++`error[E` basarsa yazılacak düzeltme şudur: bu workflow'ta `--all-targets` hiçbir
++işte koşmuyor.
++
++## 2. F-16: kaybedilen replikanın slotu artık bilet
++
++Bant iki şeyi ölçüyor, birini eyleme bağlıyordu: `objects_below_own_repair_margin`
++sıfır-aktif-repikalı shard'a bilet açar; `under_replicated_shards` (hedefi 3,
++elinde 1) hesaplanıp loglanırdı — en sık arıza biçimi uyarıyla geçiştirilirdi.
++
++`StorageRegistry::open_repair_tickets_for_free_slots(now_epoch)`: hedefinin
++altındaki her shard için **boş olan replica slotlarına** yedek bilet açar.
++Üç karar:
++* koruma `(shard_id, replica_index)`, `shard_id` değil — "shard'ın aktif deal'i
++  var" ile "bu slotun var" farklı cümleler; yalnız ikincisi iki operatörün bir
++  slot için ücreti demek (never-placed yolunun reddettiği tehlike budur);
++* yalnız `DealStatus::Expired` geçmişi yeniden açılır — `Slashed`'in slotunu
++  slash yolu bilir ve kimi yasaklayacağını o kaydeder; buradan açılsaydı bilet
++  `slashed_operator = 0` taşır ve bond'u yeni kaybolmuş operatöre slotu geri
++  verirdi;
++* geçmişi hep aktif shard hiçlik üretir; bu sessiz atlama değil kayıtlı sınır:
++  kimsenin kaybetmediği kopyayı eklemek reallokasyon değil replikasyon talebi,
++  bilet tipinin böyle bir cause'u yok. Testle sabit.
++
++Bilet = registry durumu, o yüzden sayı `registry_changed`'e girdi: bir açışın
++persist edilmediği epok, o epok'un onarımını kaybeder.
++
++Bes test: boş slot biletlenir (2/2); slashed slot slash yoluna bırakılır (1/2);
++hepsi-aktif geçmiş bilet üretmez; iki epokta idempotence (`failed_deal_id` ile
++dedupe — her tikte koşabilmenin sebebi); hedefindeki nesneye dokunulmaz.
++
++Modül dokümanına `WIRING: wired` satırı eklendi — hangi fonksiyon nereden
++sürülüyor, adla ve dosyayla; ve "bu paragrafa güvenmeden önce ağaca karşı
++yeniden türet" notu. Lubot'un `takip` crate'inin gerekçesiyle aynı cümle:
++bağlantı notası bir son kullanma tarihidir, metnin özelliği değil.
++
++## 3. Kalan yarı (AR-GE sorusu, yazıldı; bloklamıyor)
++
++F-16'nın kalan yarısı reallokasyon olmayan bir bilet istiyor: `ReallocationCause::
++ReplicationDeficit` (veya registry tarafında ayrı bir talep kuyruğu), ki hedefinin
++altındaki ama hiçbir deal'i kaybetmemiş nesne de hedefine çekilebilsin. Burada
++yapılmadı, sebebi kaçınma değil: acceptance yolu bir *replacement*'ı *başarısız*
++bir deal'in bond/deadline'ı üzerinden fiyatlıyor; cause uydurmak, hiçbir
++operatörün doğru kabul edemeyeceği bilet açmak olurdu. Bilet haritası state
++root'a girdiği için değişiklik, `BDLM_MAINTENANCE_PLACEMENT_V1`'in geçtiği
++türden epok-kapılı bir sürüm adımı istiyor — bu bir konsensus kararı, yardımcı
++fonksiyonla sokulmaz.
+-- 
+2.39.5
+

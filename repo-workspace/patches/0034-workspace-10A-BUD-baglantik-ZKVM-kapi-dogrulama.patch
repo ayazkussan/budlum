@@ -1,0 +1,131 @@
+From d3c092b5f01c943472417c475458b7978e0b2504 Mon Sep 17 00:00:00 2001
+From: ayazkussan <149924814+ayazkussan@users.noreply.github.com>
+Date: Thu, 10 Sep 2026 07:14:50 +0000
+Subject: [PATCH] denetim-2026-09-10A: BUD baglantiligi canli dogrulama (repair
+ BAGLI, UNWIRED varsayimi curutuldu) + BUD-P-1 assign_object + ZKVM kapi
+ tefiti
+
+---
+ ...TIM-2026-09-10A-BUD-BAGLANTILIK-DONGUSU.md | 110 ++++++++++++++++++
+ 1 file changed, 110 insertions(+)
+ create mode 100644 DENETIM-2026-09-10A-BUD-BAGLANTILIK-DONGUSU.md
+
+diff --git a/DENETIM-2026-09-10A-BUD-BAGLANTILIK-DONGUSU.md b/DENETIM-2026-09-10A-BUD-BAGLANTILIK-DONGUSU.md
+new file mode 100644
+index 0000000..44cda77
+--- /dev/null
++++ b/DENETIM-2026-09-10A-BUD-BAGLANTILIK-DONGUSU.md
+@@ -0,0 +1,110 @@
++# DENETIM-2026-09-10A — B.U.D. baglantiligi + ZKVM kapi, canli yeniden dogrulama
++
++Kok: `budlum` aynasi `88970e3` (agac `6e4a196`). Karsilastirilan referanslar:
++PR 50 head `f455ba4` (acik, 100 commit, base `main`= `acf48ef`). Fork ile
++upstream arasinda ortak atalar yok; fork zip yuklemesi.
++
++## Olcum — sapma
++
++- yerel -> PR50 head: 59 dosya farkli; 48'i yalnizca yerelde (oturum altyapisi:
++  repo-workspace/, repo-lubot/, 3 ek workflow, .quality/, ops/scripts/); 11 dosya
++  modifiye — yerelde PR50 head'te olmayan ~5.4k satir var.
++- yerel -> upstream main: 422 dosya; main ~31k satir geride.
++- Sonuc: **aynadaki satir PR50 head'in ONUNDE**. Burada "duzeltildi" denen bir
++  sey `f455ba4`'te yoksa, yalnizca aynada var. Risk loglanir, gizlenmez.
++
++## Sinirlar (iddiadan once)
++
++1. Bu sandbox'ta Rust toolchain yok (`cargo`/`rustc` yok, `target/` yok).
++   Asagidaki her satir **statik kanit** (call-site erisilebilirligi), test sonucu
++   degil. Direktifin kendi kurali geregi tek yetkili CI; burada "yesil" denmiyor.
++2. Bolum 4'deki `32-base` kurali aynalanan content icinde yok
++   (`repo-workspace/patches/*.patch` icinde grep: 0 isabet). Workspace klonu
++   burada oldugu icin kuralin tam hali okunamadi; bu turde uygulanan: sleep yok,
++   timeout-wait yok, polling durumla. Kural baska bir sey diyorsa buraya
++   aynalanmasi gerekiyor.
++
++## BAGLANTILIK-LOG — B.U.D.
++
++| yetenek | durum | kanit |
++|---|---|---|
++| coding audit | BAGLI | `verify_coding_audit` (storage_deal.rs:2168) <- chain_actor.rs:4106 |
++| erasure re-encode | BAGLI | `verify_object_encoding` (erasure.rs:731) <- rpc/server.rs:2293; icinde `encode_object` (erasure.rs:735) |
++| repair trigger | BAGLI — **direktifin "UNWIRED" varsayimi CURUTULDU** | `objects_below_own_repair_margin()` <- chain_actor.rs:2728 (yerel) / :2684 (PR50) / :2652 (main) |
++| repair eylemi | KISMEN — kod kendisi itiraf ediyor | chain_actor.rs:2734 `F-16`: yalnizca sifir-replika kirimi ticket alir; "A shard the registry never placed cannot be ticketed ... that gap is logged" |
++| shard placement | **KODLANMIS AMA BAGLANMAMIS** | asagida BUD-P-1 |
++| verify_answer_challenge_zk_proof | bilincli olarak bagli degil | `.github/unwired-guards-baseline.txt` = 3, gerekceli |
++
++## BUD-P-1 (yeni, HIGH): placement yayilimi yalnizca testte calisiyor
++
++`assign_object` (src/storage/assignment.rs:212) kendi dokumaninda "the location
++index a reader queries and a repair rebuilds from" diyor; `assign_shard`'dan
++farki used-set yayilimi ve dokuman tehlikeyi adlandiriyor: "one high-scoring
++address can otherwise win many shards of the same object, and its departure
++loses all of them at once."
++
++Cagiranlar: assignment.rs:297, 304, 462, 472, 529 — **hepsi `#[cfg(test)]`**.
++Uc referansta da uretim cagri yeri yok.
++
++Uretim primitife yalnizca *tavsiye* olarak ulasiyor:
++`annotate_expected_holders` (storage_deal.rs:3066) ticket basina
++`assign_shard(..., 1)` cagiriyor ve dokuman sonucu "a recommendation" +
++"make divergence visible" olarak tanimliyor. Yani:
++
++- rendezvous hashing: uretim yolunda, tavsiye mertebesinde;
++- nesne-basi anti-korelasyon yayilimi: test disinda hic calismiyor;
++- bu yuzden tek operatore tum code word dusmesi canli yolda engellenmiyor;
++- gate yesil kaliyor, cunku baseline yalnizca check/verify/validate/... ile
++  baslayan isimleri sayiyor; `assign_*` sayilmiyor. **Kuralin isimlandirma
++  deligi** = kirmizi-listenin `github_pat_` prefix'ini atlamasiyla ayni sinif.
++
++Eylem yok (bilincli): düzeltme mekanik cagri-yeri degisikligi degil; kimin hangi
++shardi tutacagi = operatore gorev/itibar atamasi. Teshat merdiveninde bu
++`stop-and-ask_user`. Adaylar: (a) `assign_object`'i uretime bagla (+ `|v| < n`
++fallback karari), (b) modulu `WIRING: unwired` olarak dusur, (c) en dar etki:
++once eksik karsilastirmayi ekle — "who took the ticket" vs "who the placement
++computation chose" sapma kontrolu.
++
++## BudZKVM — VerifyMerkle kapi, canli tefit
++
++`budzero/bud-isa/src/lib.rs`: default `verify_merkle_enabled: false`,
++`verify_inference_enabled: false`, privacy uclusu `true`. Direktifin her
++turdeki sorusunun cevabi: **dis denetim bekleniyor, yeni bir sorun degil.**
++Kod iki yarayi da yaziyor: eski gerekce gercekdi (64. turun sonucu
++`merkle_current` hucresine yazilmak zorunda degildi; "a prover ... produced a
++proof that verified. That was measured, and it did."), gap kapandi
++(`rejects_verify_merkle_root_not_produced_by_the_path`), ve "the remaining
++condition is an external review, not a missing constraint ... Do not turn this
++flag on merely on the strength of this comment."
++VerifyInference ayri gerekceli: devre yok, sabit sifir donuyor
++(`docs/AI_VERIFICATION_STATUS.md` satiri `open`).
++Durum: **KAPALI-bilincli-ve-gerekceli**; bayragi cevirme hicbir turun eylemi degil.
++
++## Denetim AI'lari "bulguyu koda yapistirdi mi?" — bu turde: hayir
++
++- `src/tests/f20_priority_findings.rs`: 332 satir / 27 assert; assert'ler gercek
++  fonksiyonlari cagiriyor; modul dokumani "names the findings that remain
++  fail-closed rather than pretending a missing AIR is now live" diyor — yon dogru.
++- `src/**/*.rs` icinde finding-id izleri (14 dosya) hepsi provenance yorumu;
++  bulgu cumlesinin implementasyon yerine gectigi vaka yok.
++- Bosluk taramasi: `todo!`/`unimplemented!`/`panic!("not implemented` = 0;
++  `#[ignore]` = 1 (bu turde incelenmedi).
++- Negatif sonuc bir hedefli taramanin sonucu, agac-geni ispat degil.
++
++## Acik noktalar (sirali)
++
++1. BUD-P-1 (yukarida) — kullanici karari bekliyor.
++2. F-16: hic yerlesmemis shard ticket'lanamiyor (kodun kendi itirafi).
++3. `tree_is_english` yeniden sayilmadi: kaba grep src/'te 130, budzero/'da 14,
++   crates/'te 9 satir; baseline 23 satir. Gate'in sayim kurallari (iki sinyal +
++   izinli dizinler + dosya-basi adet) farkli — **ihlal iddia edilmiyor**, cap
++   CI isidir.
++4. Onceki session dalinda (`arena/01a089e3-budlum`, run #29) kirmizi:
++   Determinism, Diverse Double Compiling, CI, Rust, Security Audit, Miri, Typos,
++   Supply Chain Extra (+ Dependency Review #27). Fork Actions calisiyor; bu
++   dala push #29'un loglarini yeniden uretir.
++
++## Bu turun degisikligi
++
++Uretim kodu degisikligi yok. Kayit: bu dosya + `budlum` aynasinda
++`docs/DENETIM-2026-09-10A-BUD-ZKVM-WIRING-LOOP.md` (Ingilizce surumu).
+-- 
+2.39.5
+

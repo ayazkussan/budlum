@@ -1,0 +1,132 @@
+From 88a2c63ed2df311609b0afc5bd1986794232e336 Mon Sep 17 00:00:00 2001
+From: ayazkussan <ayazkussan@users.noreply.github.com>
+Date: Sat, 12 Sep 2026 08:55:01 +0000
+Subject: [PATCH] =?UTF-8?q?lubot:=20answer:=20README'nin=20s=C3=B6z=C3=BC?=
+ =?UTF-8?q?=20tutuldu=20-=20karakter=20penceresi=20devrede,=20compact=20t?=
+ =?UTF-8?q?=C3=BCketti?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Index satırı "deterministic context compaction under a character budget"
+diye bağırıyordu; ölçülen gerçek: compact'ın tek tüketicisi kendi testleriydi
+ve answer, passage SAYISIyla bütçelenmiş, KARAKTER sayısıyla hiç -
+LINES_PER_PASSAGE satır sayısını sınırlar, satır ENİNİ sınırlamaz; tek
+patolojik satır beş-paragraflık bir cevaba megabyte gömebilirdi.
+
+Pencere cevabın kendisinde: ANSWER_CHAR_BUDGET (16.384), search'ün
+sıralı çıktısı compact'tan geçip ground'lanıyor. Sığmayan alıntılanmaz;
+HİÇBİRİ sığmazsa cevap dürüstçe NotFound - birinci sıralı olmak, dev
+parçayı pencereden kaçırma hakkı vermez. Drop sayısı cevap tipini
+değiştirmiyor (citations zaten saklananları sayar); şema-çıkışı aynen
+doğrulanıyor.
+
+İki test: sığan kanıt kırpılmadan geçiyor (pencere no-op); tek-satır
+dev pasaj pencereyi aşınca NotFound - arama BULUYOR, pencere REDDEDİYOR,
+ikisi ayrı kanıtlandı. yanıt crate test sayısı 12->14; README satırı
+ ölçülen ağaçla artık birebir (sayı çürümesi de bu turda kapandı).
+
+dead-pub tabanı: compact satırı silindi - tek-taşıyıcı muafiyeti anlamını
+yitirdi, yüzey artık üretimde; kapı 20/20'de.
+---
+ crates/answer/src/lib.rs    | 54 ++++++++++++++++++++++++++++++++++++-
+ gates/dead-pub-api.baseline |  1 -
+ 2 files changed, 53 insertions(+), 2 deletions(-)
+
+diff --git a/crates/answer/src/lib.rs b/crates/answer/src/lib.rs
+index b6445cc..b5ce15c 100644
+--- a/crates/answer/src/lib.rs
++++ b/crates/answer/src/lib.rs
+@@ -15,10 +15,20 @@
+ //!    from the grant book, so "revoked" is never reported as "not found".
+ 
+ use lubot_grant::{Decision, GrantBook, Seconds, Visibility};
+-use lubot_index::{Index, Passage};
++use lubot_index::{compact, Index, Passage};
+ use lubot_read::Corpus;
+ use lubot_tools::{route, scope, Route};
+ 
++/// The character window one grounded answer embeds. The passage COUNT is
++/// the reader's knob (five by default, effort-tiered on the CLI); this is
++/// the SIZE knob: indexing bounds a passage in lines, never in WIDTH, so
++/// one pathological line could otherwise ship megabytes inside a small,
++/// well-behaved five-passage answer. The window is enforced by
++/// `lubot_index::compact`, which keeps the ranked prefix that fits and
++/// drops the rest in deterministic order - same corpus, same question,
++/// same document, on every reader.
++pub const ANSWER_CHAR_BUDGET: usize = 16_384;
++
+ /// What the reader gets back.
+ #[derive(Debug, Clone, PartialEq, Eq)]
+ pub enum Answer {
+@@ -163,6 +173,12 @@ impl<'a, C: Corpus> Reader<'a, C> {
+         let passages = self
+             .index
+             .search(question, &allowed, self.passages_per_answer);
++        // Size gate before grounding: what does not fit the window is not
++        // cited. If NOTHING fits - a first passage wider than the whole
++        // budget - the honest verdict is the no-evidence answer below: the
++        // ranking must not smuggle an oversized passage past the window
++        // just because it scored first.
++        let (passages, _dropped) = compact(passages, ANSWER_CHAR_BUDGET);
+         if !passages.is_empty() {
+             return Answer::Grounded { passages };
+         }
+@@ -235,6 +251,42 @@ mod tests {
+         }
+     }
+ 
++    #[test]
++    fn evidence_that_fits_walks_through_the_window_untouched() {
++        let c = corpus();
++        let reader = Reader::new(&c, 2, 3);
++        let mut grants = GrantBook::new();
++        match reader.ask("someone", "what does revocation do?", &mut grants, 1) {
++            Answer::Grounded { passages } => {
++                assert_eq!(passages[0].item_id, "public-doc");
++                assert!(
++                    passages.iter().map(|p| p.text.len()).sum::<usize>() < ANSWER_CHAR_BUDGET,
++                    "fixture evidence is small: compaction must be a no-op, not a crop"
++                );
++            }
++            other => panic!("the window must not touch evidence that fits: {other:?}"),
++        }
++    }
++
++    #[test]
++    fn a_huge_passage_is_compacted_out_not_squeezed_in() {
++        let mut c = FixtureCorpus::new();
++        // One line of tiny tokens: the SEARCH hits ("x" is everywhere), the
++        // passage is over the window, and it is the only evidence - so the
++        // answer is NotFound precisely because the window refused a
++        // megabyte-sized citation, not because retrieval found nothing.
++        let body = vec!["x"; ANSWER_CHAR_BUDGET / 2 + 1].join(" ");
++        c.insert(Item::new("giant", "docs/giant.md", SourceKind::Local, false, &body))
++            .unwrap();
++        let reader = Reader::new(&c, 2, 3);
++        let mut grants = GrantBook::new();
++        assert_eq!(
++            reader.ask("someone", "x", &mut grants, 1),
++            Answer::NotFound,
++            "oversized first-ranked evidence grounds nothing - the window is law"
++        );
++    }
++
+     #[test]
+     fn private_content_is_invisible_without_a_grant() {
+         let c = corpus();
+diff --git a/gates/dead-pub-api.baseline b/gates/dead-pub-api.baseline
+index 13eeb7c..60f8bd1 100644
+--- a/gates/dead-pub-api.baseline
++++ b/gates/dead-pub-api.baseline
+@@ -4,7 +4,6 @@ crates/anlama/src/lib.rs:with_attachment
+ crates/grant/src/lib.rs:revoked_pairs
+ crates/grant/src/training.rs:from_hex
+ crates/grant/src/training.rs:to_hex
+-crates/index/src/lib.rs:compact
+ crates/izolasyon/src/lib.rs:with_entries
+ crates/kanit/src/lib.rs:open_path
+ crates/kuyruk/src/lib.rs:evictions
+-- 
+2.39.5
+

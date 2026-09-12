@@ -1,0 +1,356 @@
+From c4ce364cf48888f96c5f2f2ad82b9cfbfbef6df9 Mon Sep 17 00:00:00 2001
+From: ayazkussan <ayazkussan@users.noreply.github.com>
+Date: Fri, 11 Sep 2026 08:52:27 +0000
+Subject: [PATCH] lubot: usl sertlestirildi - okuyucu yazarin kurallariyla
+ konusur, medya ezilmez
+
+Four real holes from the read-through of 0024's own contract, closed with
+tests that assume the forger is competent - they recompute the seal, because
+muhur's digest is public arithmetic and the crate says so: tamper-EVIDENCE,
+not tamper-proof. What a forged tail must now survive:
+
+1. The reader ran `check` but not the construction-time rules: a duplicate
+   PAY line smuggled into a re-sealed media parsed through a direct push and
+   was accepted. The duplicate rule moved into `check` itself, and
+   `from_media` now feeds `add_payout` - the same door the writer uses - so
+   "reader enforces exactly what writer enforced", claimed in 0024, became
+   true instead of intended. `check` also gained the pairwise scan the
+   builder alone could not provide for lines it never saw being built.
+2. Numbers were parseable, not canonical: `SEQ 007` or `007.50` read fine,
+   and the manifest then wrote back a DIFFERENT file than it read - byte
+   stability, the one promise a sealed media makes to the next audit, was
+   broken by accident in the same way a forger breaks it on purpose. A
+   canonical-u64 rule guards each numeric line, and the read path re-renders
+   the parsed manifest and requires the file's own lines back, in order
+   ("the lines parse, but they are not the lines this manifest would write").
+3. `total` accumulated in u64 and could wrap without a word - a silent wrong
+   total on the one line a human reads off the stick. Sums now happen in
+   u128 inside `check`, and a batch past the u64 range is refused at sealing
+   and at reading, not at display time.
+4. `lubot usl make` overwrote an existing media without comment. Cold-wallet
+   media are append-only records: rewriting #7 under the number 7 is
+   indistinguishable from editing what the last reader saw. Writing moved
+   into `write_media` in the crate - create the dir, write with `create_new`
+   - and the second write to an occupied seq fails with the OS saying so.
+   There is no overwrite path to reach by mistake; a new batch means a new
+   seq. The refusal is tested (write, write again, read back: the file is
+   byte-equal to what `to_media` sealed).
+
+Also: `with_maturity` got the `#[must_use]` its Result siblings carry -
+`make` checked it, but the door itself should refuse a caller who does not.
+
+Three tests (9 in usl now; tree recount 328 to 331, applied tree by grep).
+No baseline movement to make: every name here is reached from cli or tests
+through pub doors that already had callers; `write_media` is cli's. README
+tail records the move.
+
+Not compiled: no cargo here (measured). Floor: gates rc=0 on the applied
+tree, parser rules simulated line-by-line, full read of every hunk.
+---
+ README.md              |   2 +-
+ crates/cli/src/main.rs |  11 +--
+ crates/usl/src/lib.rs  | 186 +++++++++++++++++++++++++++++++++++++++--
+ 3 files changed, 184 insertions(+), 15 deletions(-)
+
+diff --git a/README.md b/README.md
+index 40df413..e72e08d 100644
+--- a/README.md
++++ b/README.md
+@@ -33,7 +33,7 @@ nothing to check a generation against.
+ | the security review as an evidenced ledger (scan, validate, fix): every finding ends in a disposition, a fix closes only with the check that proves it plus the commit that is it, no waiver at the attestation floor without an attester, and a finding that changes on re-scan voids its stale closure | `crates/denetim` | 9 tests |
+ | the runnable binary: corpus load, `ask`, grant book, output audit, closed-loop handoff; `ceilings`; multi-question `batch`; the uninterrupted-work queue (resume, budget, per-job gate check, loud halt); measured baselines that may only rise (`ratchet`); repository `envanter`; restricted `it` (only the listed paths are committed and pushed); the four-step `olc` verification chain; `durum`; the manifest map `graf`; the credential scan `guvenlik`; the file-kind router `dosya`; the ask_user-shaped decision battery `soru` (list/get/cevapla/durum); content search `ara`, measured `indeks`, the ordered reading plan `mufredat`, effort comparison `karsilastir`; context compression `sikistir` (--path/--geri-getir: typed routing, pinned lines, reversible CCR store, measured ledger) and failure mining `ogren` (pattern grouping, two-tier promotion); the queue operator (`queue ls`, `queue iptal` - a cancelled job never runs); batch writes the same audit and closed-loop trace as `ask` | `crates/cli` | 37 tests |
+ 
+-328 tests, `clippy -D warnings` clean, `unwrap`/`expect` denied outside tests. 39 gates, each with its own self-test; the ratchet holds (328 tests, 39 gates, 0 pedantic warnings, 793 corpus records) - the count moved 328 to 334 when the settlement layer joined with its own six tests, 334 to 332 when `olcek`'s callerless report surface left with the two tests that were its only assertions, and 332 to 328 when operator's registry rules - bond, single-hash sync, the transition window - left with their four fixtures and the gate's name-list shrank to the one rule with a caller, measured on the applied tree, not retyped.
++331 tests, `clippy -D warnings` clean, `unwrap`/`expect` denied outside tests. 39 gates, each with its own self-test; the ratchet holds (331 tests, 39 gates, 0 pedantic warnings, 793 corpus records) - the count moved 328 to 334 when the settlement layer joined with its own six tests, 334 to 332 when `olcek`'s callerless report surface left with the two tests that were its only assertions, and 332 to 328 when operator's registry rules - bond, single-hash sync, the transition window - left with their four fixtures and the gate's name-list shrank to the one rule with a caller, and 0028 moved it to 331 with three `usl` refusal tests written against a forger who can recompute the seal, measured on the applied tree, not retyped.
+ 
+ ## Permission is an admission decision
+ 
+diff --git a/crates/cli/src/main.rs b/crates/cli/src/main.rs
+index 9e3271b..b472fa7 100644
+--- a/crates/cli/src/main.rs
++++ b/crates/cli/src/main.rs
+@@ -1167,13 +1167,10 @@ fn cmd_usl(args: &[String]) -> Result<(), String> {
+                 Err(e) => return Err(format!("usl: {e}")),
+             };
+             let dir = one(&found, "--out").unwrap_or_else(|| "media".to_string());
+-            if let Err(e) = std::fs::create_dir_all(&dir) {
+-                return Err(format!("usl: {e}"));
+-            }
+-            let path = std::path::Path::new(&dir).join(lubot_usl::media_file_name(seq));
+-            if let Err(e) = std::fs::write(&path, media) {
+-                return Err(format!("usl: {e}"));
+-            }
++            let path = match lubot_usl::write_media(&std::path::PathBuf::from(&dir), seq, &media) {
++                Ok(p) => p,
++                Err(e) => return Err(format!("usl: {e}")),
++            };
+             let (major, minor) = manifest.total();
+             println!(
+                 "usl: {} sealed, {} payout(s), total {major}.{minor:02}",
+diff --git a/crates/usl/src/lib.rs b/crates/usl/src/lib.rs
+index 3cc30d9..d24c51f 100644
+--- a/crates/usl/src/lib.rs
++++ b/crates/usl/src/lib.rs
+@@ -38,7 +38,10 @@
+ //! 2. `from_media` rebuilds the whole chain from the file's own entries and
+ //!    compares the seal; an accepted media satisfies `check` by construction,
+ //!    because every payout is parsed back through the same validating
+-//!    constructors that built it.
++//!    constructors that built it, and its lines are re-rendered and compared
++//!    to the file - so a read media writes back byte for byte, and a file
++//!    that only *sort of* parses ("SEQ 007", a swapped line order) is refused
++//!    as media text, not normalized into a different one.
+ //! 3. No line contains tab, quote, backslash, or control characters, so the
+ //!    one-space-per-token grammar of the media cannot be escaped out of.
+ //!
+@@ -114,6 +117,9 @@ pub fn parse_amount(text: &str) -> Result<(u64, u64), UslError> {
+         return Err(bad());
+     }
+     let major: u64 = major.parse().map_err(|_| bad())?;
++    if (major.len() > 1 && major.starts_with('0')) || major.is_empty() {
++        return Err(bad());
++    }
+     let minor: u64 = minor.parse().map_err(|_| bad())?;
+     if minor >= MINOR_PER_MAJOR {
+         return Err(bad());
+@@ -121,6 +127,21 @@ pub fn parse_amount(text: &str) -> Result<(u64, u64), UslError> {
+     Ok((major, minor))
+ }
+ 
++/// Parses a decimal integer written the only way the media spells numbers:
++/// no leading zero, no sign, no spaces. A line that says `007` and a line
++/// that says `7` would seal the same manifest and print a different file -
++/// and byte stability is the whole promise a sealed media makes to the audit
++/// that re-reads it.
++fn parse_canonical_u64(text: &str) -> Result<u64, UslError> {
++    let value: u64 = text
++        .parse()
++        .map_err(|_| UslError::Media(format!("`{text}` is not a canonical number")))?;
++    if format!("{value}") != text {
++        return Err(UslError::Media(format!("`{text}` is not canonical (`{value}` is)")));
++    }
++    Ok(value)
++}
++
+ fn reject_hostile(name: &str, value: &str, spaces_allowed: bool) -> Result<(), UslError> {
+     let bad = |why: &str| UslError::BadField(format!("{name}: {why}"));
+     if value.is_empty() {
+@@ -237,6 +258,7 @@ impl Manifest {
+     ///
+     /// [`UslError::Window`] if `not_before` is zero or `not_after` is not
+     /// strictly later than it.
++    #[must_use = "an unset window makes the envelope unsealable; handle the error"]
+     pub fn with_maturity(&mut self, not_before: u64, not_after: u64) -> Result<(), UslError> {
+         if not_before < 1 {
+             return Err(UslError::Window(
+@@ -354,6 +376,31 @@ impl Manifest {
+             .not_after
+             .ok_or_else(|| UslError::Window("the media must carry a NOT-AFTER line".to_string()))?;
+         self.fee.ok_or_else(|| UslError::BadField("the media must carry a FEE line".to_string()))?;
++        for (index, line) in self.payouts.iter().enumerate() {
++            if self.payouts[..index].iter().any(|earlier| {
++                earlier.to == line.to
++                    && earlier.memo == line.memo
++                    && earlier.major == line.major
++                    && earlier.minor == line.minor
++            }) {
++                return Err(UslError::BadField(format!(
++                    "payout to {} x{} `{}` appears twice",
++                    line.to,
++                    line.amount(),
++                    if line.memo.is_empty() { "no memo" } else { &line.memo }
++                )));
++            }
++        }
++        let minors: u128 = self
++            .payouts
++            .iter()
++            .map(|p| u128::from(p.major) * u128::from(MINOR_PER_MAJOR) + u128::from(p.minor))
++            .sum();
++        if minors > u128::from(u64::MAX) {
++            return Err(UslError::BadField(format!(
++                "the batch totals {minors} minor units, past the addressable u64 range"
++            )));
++        }
+         Ok(())
+     }
+ 
+@@ -446,37 +493,94 @@ impl Manifest {
+             fee: None,
+             payouts: Vec::new(),
+         };
++        let mut seen_seq = false;
++        let mut seen_chain = false;
++        let mut seen_maturity = [false, false];
++        let mut seen_fee = false;
+         for line in entries {
+             if let Some(rest) = line.strip_prefix("SEQ ") {
+-                manifest.seq = rest.parse().map_err(|_| UslError::Media(format!("`{line}`")))?;
++                if seen_seq {
++                    return Err(UslError::Media("the SEQ line appears twice".to_string()));
++                }
++                seen_seq = true;
++                manifest.seq = parse_canonical_u64(rest)?;
+             } else if let Some(rest) = line.strip_prefix("CHAIN ") {
++                if seen_chain {
++                    return Err(UslError::Media("the CHAIN line appears twice".to_string()));
++                }
++                seen_chain = true;
+                 reject_hostile("chain label", rest, false)?;
+                 if rest != replay_actor {
+                     return Err(UslError::Media("two CHAIN lines".to_string()));
+                 }
+             } else if let Some(rest) = line.strip_prefix("NOT-BEFORE ") {
+-                manifest.not_before = Some(rest.parse().map_err(|_| UslError::Media(format!("`{line}`")))?);
++                if seen_maturity[0] {
++                    return Err(UslError::Media("the NOT-BEFORE line appears twice".to_string()));
++                }
++                seen_maturity[0] = true;
++                manifest.not_before = Some(parse_canonical_u64(rest)?);
+             } else if let Some(rest) = line.strip_prefix("NOT-AFTER ") {
+-                manifest.not_after = Some(rest.parse().map_err(|_| UslError::Media(format!("`{line}`")))?);
++                if seen_maturity[1] {
++                    return Err(UslError::Media("the NOT-AFTER line appears twice".to_string()));
++                }
++                seen_maturity[1] = true;
++                manifest.not_after = Some(parse_canonical_u64(rest)?);
+             } else if let Some(rest) = line.strip_prefix("FEE ") {
+-                let (major, minor) = parse_amount(rest)
+-                    .map_err(|_| UslError::Media(format!("`{line}`")))?;
++                if seen_fee {
++                    return Err(UslError::Media("the FEE line appears twice".to_string()));
++                }
++                seen_fee = true;
++                let (major, minor) =
++                    parse_amount(rest).map_err(|_| UslError::Media(format!("`{line}`")))?;
+                 manifest.fee = Some((major, minor));
+             } else if let Some(rest) = line.strip_prefix("PAY ") {
+                 let mut parts = rest.splitn(3, ' ');
+                 let to = parts.next().unwrap_or_default();
+                 let amount = parts.next().unwrap_or_default();
+                 let memo = parts.next().unwrap_or("");
+-                manifest.payouts.push(Payout::new(to, amount, memo)?);
++                manifest.add_payout(Payout::new(to, amount, memo)?)?;
+             } else {
+                 return Err(UslError::Media(format!("unknown line `{line}`")));
+             }
+         }
++        if !seen_seq {
++            return Err(UslError::Media("no SEQ line".to_string()));
++        }
+         manifest.check()?;
++        if manifest.entry_lines().iter().map(String::as_str).ne(entries.iter().copied()) {
++            return Err(UslError::Media(
++                "the lines parse, but they are not the lines this manifest would write".to_string(),
++            ));
++        }
+         Ok(manifest)
+     }
+ }
+ 
++/// Writes the sealed media text into `dir` under [`media_file_name`],
++/// creating the directory if needed and REFUSING an existing file: media are
++/// append-only records at the wallet, and rewriting #7 under the number 7 is
++/// indistinguishable from editing what the last reader saw - so the second
++/// write fails instead of replacing the first. A new batch gets a new seq;
++/// there is no overwrite path to reach by mistake.
++///
++/// # Errors
++///
++/// The IO error itself - an existing file reports it as "already exists",
++/// which is the refusal, not an accident.
++pub fn write_media(dir: &std::path::Path, seq: u64, text: &str) -> Result<std::path::PathBuf, UslError> {
++    std::fs::create_dir_all(dir).map_err(|e| UslError::Media(format!("{}: {e}", dir.display())))?;
++    let path = dir.join(media_file_name(seq));
++    let mut file = std::fs::OpenOptions::new()
++        .write(true)
++        .create_new(true)
++        .open(&path)
++        .map_err(|e| UslError::Media(format!("{}: {e}", path.display())))?;
++    use std::io::Write;
++    file.write_all(text.as_bytes())
++        .map_err(|e| UslError::Media(format!("{}: {e}", path.display())))?;
++    Ok(path)
++}
++
+ /// The file a media is written to, for a given envelope. The name carries
+ /// only the sequence number - no caller-supplied string reaches it, so no
+ /// media path can escape the directory it is written into.
+@@ -560,6 +664,74 @@ mod tests {
+         assert!(m.add_payout(other).is_ok());
+     }
+ 
++    /// The entries a sealed text carries, header and tail stripped - what an
++    /// editor would rewrite and re-tail.
++    fn entries_of(text: &str) -> Vec<String> {
++        let all: Vec<&str> = text.lines().collect();
++        assert!(all[0] == KIND && all[1].starts_with("GEN "));
++        assert!(all[all.len() - 1].starts_with("SEALED "));
++        all[2..all.len() - 1].iter().map(|l| (*l).to_string()).collect()
++    }
++
++    #[test]
++    fn a_resealed_media_cannot_smuggle_a_duplicate_line() {
++        // The forger here is competent: they recompute the tail (the digest
++        // is public arithmetic, not a key), so what must stop them is that
++        // the reader runs the WRITER's rules over what it parsed.
++        let text = built().to_media().unwrap();
++        let mut mid = entries_of(&text);
++        let pay = mid.iter().find(|l| l.starts_with("PAY ")).unwrap().clone();
++        mid.push(pay);
++        let err = Manifest::from_media(&resealed(&mid)).unwrap_err();
++        assert!(matches!(err, UslError::BadField(_)), "{err:?}");
++    }
++
++    #[test]
++    fn media_that_only_sort_of_parses_is_refused_not_rewritten() {
++        let text = built().to_media().unwrap();
++        let mut mid = entries_of(&text);
++        for line in &mut mid {
++            *line = line.replace("SEQ 7", "SEQ 007");
++        }
++        let err = Manifest::from_media(&resealed(&mid)).unwrap_err();
++        assert!(matches!(err, UslError::Media(_)), "{err:?}");
++    }
++
++    #[test]
++    fn a_media_is_never_written_over_another() {
++        let mut dir = std::env::temp_dir();
++        dir.push(format!("usl-test-{}-{}", std::process::id(), file!().len()));
++        let m = built();
++        let media = m.to_media().unwrap();
++        let first = write_media(&dir, 7, &media).unwrap();
++        let again = write_media(&dir, 7, &media);
++        assert!(again.is_err(), "seq 7 exists; overwrite must fail");
++        let next = write_media(&dir, 8, &media).unwrap();
++        assert_ne!(first, next);
++        let read = std::fs::read_to_string(&first).unwrap();
++        assert_eq!(read, media, "what was sealed is what is on the stick");
++        let _ = std::fs::remove_dir_all(&dir);
++    }
++
++    /// Re-runs the seal step over edited entries, the way anyone with the
++    /// public digest arithmetic could; the tests prove refusal does not rest
++    /// on the seal alone.
++    fn resealed(lines: &[String]) -> String {
++        use lubot_muhur::{Chain, Indexed};
++        let mut ix = Indexed::new(Chain::new(GENESIS));
++        for line in lines {
++            ix.append("mainnet", line).unwrap();
++        }
++        let seal = ix.finalize().hex();
++        let mut out = format!("{KIND}\nGEN {GENESIS}\n");
++        for line in lines {
++            out.push_str(line);
++            out.push('\n');
++        }
++        out.push_str(&format!("SEALED {seal}\n"));
++        out
++    }
++
+     #[test]
+     fn media_names_pad_and_carry_nothing_the_caller_controls() {
+         assert_eq!(media_file_name(42), "USL-000042.uslj");
+-- 
+2.39.5
+

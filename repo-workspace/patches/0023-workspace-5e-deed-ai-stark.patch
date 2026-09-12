@@ -1,0 +1,61 @@
+From 8aee29c97484175125d10035d0069bfbe4f66850 Mon Sep 17 00:00:00 2001
+From: ayazkussan <149924814+ayazkussan@users.noreply.github.com>
+Date: Wed, 9 Sep 2026 19:37:42 +0000
+Subject: [PATCH] denetim-2026-09-09N 5e: DeEd + AI inference/execution STARK
+ yolu onaylandi
+
+---
+ ...A4-KONSENSUS-FINALITY-DOMAIN-COMMITMENT.md | 34 +++++++++++++++++--
+ 1 file changed, 32 insertions(+), 2 deletions(-)
+
+diff --git a/DENETIM-2026-09-09N-DALGA4-KONSENSUS-FINALITY-DOMAIN-COMMITMENT.md b/DENETIM-2026-09-09N-DALGA4-KONSENSUS-FINALITY-DOMAIN-COMMITMENT.md
+index 1832e2e..889ccce 100644
+--- a/DENETIM-2026-09-09N-DALGA4-KONSENSUS-FINALITY-DOMAIN-COMMITMENT.md
++++ b/DENETIM-2026-09-09N-DALGA4-KONSENSUS-FINALITY-DOMAIN-COMMITMENT.md
+@@ -192,11 +192,41 @@ dokümante değil.
+ | 4 | `expired_relays()` slashing consumer | üretim çağıranı yok | 09K notu |
+ | 5 | Model kaynağı kararı | kullanıcı kararı AÇIK | hafiza |
+ 
++## 5e. DeEd + AI inference/execution — clean
++
++- **DeEd (195)**: manifest primitive (zero-field doğrulama, tagged id);
++  scope açıkça dokümante (consensus/RPC/rewards/bridge ayrı follow-up) —
++  bilinçli eksik, kayda değer değil.
++- **ai_inference/verify.rs**: scaffold/helper — **üretim yolu değil**;
++  "helper'ın üretim çağıranı yok" testi var (`stark_verification_helpers_
++  have_no_production_callers`); iki yolun **değiştirilemezliği** dokümante
++  (bincode vs postcard, iki farklı program_hash türevi, build_public_inputs
++  konsensüs için güvenli değil); chain_id hard-code (1) fix'i dokümante
++  (Aleo/snarkVM transaction-forgery sınıfı referanslı).
++- **Üretim STARK yolu ONAYLANDI (executor ~2020-2130)**:
++  `require_execution_proof` modelde: public_inputs zorunlu,
++  **program_hash = registration program_hash**, exit_code==0,
++  **chain_id = tx.chain_id** (imza-bağlı → cross-chain proof transferi yok),
++  program model spec'ten re-build (`guest_program_for_model`),
++  `verify_execution_proof_full` (structural + plonky3 STARK); her eksik
++  öge adlı fail-closed hata (`ai_exec_no_public_inputs`,
++  `ai_exec_program_hash`, `ai_exec_chain_id`, `ai_exec_stark`...);
++  `proof_bytes` boyutu **deserialization'dan önce** sınırı (DoS notu).
++
+ ## 6. Döngü durumu
+ 
+ - W1 ✅ (F-1 e4f472b) · W2 ✅ (E-7 fe5461e, E-1 a8b45e1) · W3 ✅ (F-3 8ba7eab)
+ - **W4**: konsensüs çekirdeği ✅ clean · finality/reorg ✅ · network örneklem ✅ ·
+   **F-4 açıldı (MEDIUM, tasarım kararı bekliyor)**
+ - 09M (E-7 on-chain relay tasarımı) yazıldı — uygulama bu tasarım onayını bekler.
+-- Sonraki alanlar: light_client, gateway, crypto (BLS/ZK/PQ), storage_deal (6734 satır),
+-  settlement/proof_verifier, CI log detayları (EOF tekrar denemeli).
++- Kapatılan (bu rapor): konsensüs(7), finality, light_client, network(örneklem),
++  domain, crypto, bridge, settlement, registry-slashing, executor, gateway,
++  governance, constitution, BNS, AI registry/inference, DeEd.
++- Sonraki alanlar: storage_deal (6734), network/node.rs derin (3352),
++  budlumxyz, core/money + account_abstraction, bin/cli, storage/db,
++  CI log detayları (EOF + GitHub auth kopması — reconnect bekleniyor).
++- **Bekleyen kullanıcı aksiyonları**: (1) GitHub bağlantısını Arena'dan
++  yeniden kur (git push auth kayboldu: API okuyor, git işlemleri
++  reddediyor; 2 commit local'de: 1478017 + 3dae858); (2) model kaynağı
++  kararı; (3) F-4 dispozisyon kararı (A: pipeline wire + root anchoring,
++  B: dekoratif kapı notu).
+-- 
+2.39.5
+

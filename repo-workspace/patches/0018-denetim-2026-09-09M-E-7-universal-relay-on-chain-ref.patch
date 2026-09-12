@@ -1,0 +1,141 @@
+From ed0bcc1a5e8c87b366c29a906ae36122407d8f88 Mon Sep 17 00:00:00 2001
+From: ayazkussan <149924814+ayazkussan@users.noreply.github.com>
+Date: Wed, 9 Sep 2026 19:05:10 +0000
+Subject: [PATCH] denetim-2026-09-09M: E-7 universal relay on-chain refactor
+ tasarimi (tx tipi, executor yolu, degismezler, test listesi)
+
+---
+ ...09M-E7-UNIVERSAL-RELAY-ONCHAIN-REFAKTOR.md | 121 ++++++++++++++++++
+ 1 file changed, 121 insertions(+)
+ create mode 100644 DENETIM-2026-09-09M-E7-UNIVERSAL-RELAY-ONCHAIN-REFAKTOR.md
+
+diff --git a/DENETIM-2026-09-09M-E7-UNIVERSAL-RELAY-ONCHAIN-REFAKTOR.md b/DENETIM-2026-09-09M-E7-UNIVERSAL-RELAY-ONCHAIN-REFAKTOR.md
+new file mode 100644
+index 0000000..cc9977c
+--- /dev/null
++++ b/DENETIM-2026-09-09M-E7-UNIVERSAL-RELAY-ONCHAIN-REFAKTOR.md
+@@ -0,0 +1,121 @@
++# DENETIM-2026-09-09M — E-7 Kalıntı: Universal Relay Tamamlanmasını Blok-içine Taşıma (Tasarım)
++
++Giriş: audit dalgası 2 bulgusu E-7, `bud_submitRelayProof` RPC'sinin operator gate eksikliğini
++kapattı (fe5461e). Bu rapor, kalan yeniden yapılandırmanın tasarımını tanımlar: relay
++tamamlanmasının *etkisinin* blok dışından (RPC → `Blockchain::submit_relay_proof`) blok
++içine (executor) taşınması.
++
++## 1. Mevcut durum (SHA 90de01d)
++
++- `rpc/server.rs::bud_submitRelayProof` → `require_operator` (fe5461e'den beri) →
++  `chain.submit_relay_proof(message_id, relayer, proof, source_domain)`.
++- `blockchain.rs:2788 submit_relay_proof`:
++  1. `registry.ensure_active_relayer(&relayer)` — stakeli RELAYER rolü.
++  2. `pending_relay` kaydı → `source_event.domain_height`.
++  3. `domain_commitment_registry.find_by_height(source_domain, height).event_root` —
++     kaynak alanın taahhüt ettiği event root (tek güven kökü; relay-ledger root'u
++     asla kimlik doğrulama için kullanılamaz — kendi kendini dolduran veri).
++  4. `universal_relayer.process_relay(message_id, relayer, proof, source_domain,
++     event_tree_root, current_height)` → mesaj state değişikliği + ödüller.
++  5. `storage.save_universal_relayer(...)`.
++
++  **Sorun**: 1–4 adımları blokların dışında çalışır. Node, RPC çağrısı anındaki
++  yerel state ile karar verir; aynı proof'u iki node farklı anlarda iletirse sonuçlar
++  farklılaşabilir (racing relayer'lar, farklı commitment registry snapshot'ları).
++  Konsensüs doğrulaması bu geçişi *yeniden* üretemez — geçiş zaten olmuş demektir.
++
++- `TransactionType::RelayerResult(RelayerExternalResult)` ayrı bir mekanizmadır
++  (dış zincir → Budlum, receipt proof + external_state_root); universal relay
++  tamamlanması için executor yolunu yoktur.
++
++## 2. Hedef
++
++Relay tamamlanması bir **transaction** olur:
++
++- İletici (relayer) imzalı tx üretir, mempool'a atar.
++- Proposer tx'i bloğa alır; her node `apply_transaction` içinde aynı geçişi
++  deterministik olarak yeniden üretir.
++- RPC `bud_submitRelayProof` geçiş süresinde korunur (operator gate'li) ama
++  yalnızca *tx + mempool* yolunu kullanır; doğrudan `submit_relay_proof` çağrısı
++  aşamalı olarak sökülür.
++
++## 3. Transaction tasarımı
++
++Yeni varyant (transaction.rs):
++
++```rust
++RelayCompletion {
++    message_id: [u8; 32],
++    source_domain: u16,
++    proof: MerkleProof,          // mevcut tip, JSON-safe formu ile
++    // relayer adresi = tx.from (imza ile bağlı); ayrı alan taşıma
++}
++```
++
++- **Denetim alanı**: `total_cost()` — gaz (mevcut tablodaki 16 birimi RelayResult
++  ile aynı seviye; mesaj + proof boyutu için `validate_block_size` zaten üst sınırı
++  tutar).
++- **Nonce sırası**: relayer'ın kendi nonce alanı; spam koruması otomatik.
++- **Başarısızlık semantiği**: tx, `apply` içinde hata verir → tx revert olur
++  (state değişmez), block geçerli kalır. `submit_relay_proof`'ün mevcut String
++  hataları executor `TransactionError`'larına birebir eşlenir.
++
++## 4. Executor yolu
++
++`apply_transaction` içinde (mesaj + state üzeri saf fonksiyon):
++
++```
++1. tx.from için ensure_active_relayer
++2. universal_relayer.pending_relay(message_id) → yoksa ERR_NO_PENDING_RELAY
++3. source_height = pending.source_event.domain_height
++4. event_root = domain_commitment_registry.find_by_height(source_domain,
++      source_height).event_root → yoksa ERR_NO_COMMITTED_ROOT
++5. universal_relayer.process_relay(message_id, tx.from, proof, source_domain,
++      event_root, block.index)
++```
++
++- `submit_relay_proof`'ün 1–4 mantığı **aynı yardımcılara** taşınır; RPC metodu bu
++  yardımcılarla inceleme amaçlı bırakılır (yeni tx tipi yaygınlaşana kadar), sonra
++  kaldırılır. İki yol aynı helper'ı paylaştığı sürece drift oluşamaz.
++- **Tekrar edilemezlik**: `process_relay`, mesajı tamamlandı işaretler; ikinci tx
++  `ERR_NO_PENDING_RELAY` alır (revert). Yarış bloğa alma sırasıyla çözülür —
++  standart PoS semantiği, proposer'ın tercih ettiği relayer kazanır.
++- **Kalıcılık**: `save_universal_relayer` zaten block commit'inde çalışır;
++  ayrı bir persistence çağrısı eklenmez.
++
++## 5. Korunan değişmezler
++
++| Değişmez | Nerede korunur |
++|---|---|
++| Proof, yalnızca kaynak alanın commitment registry event_root'una karşı doğrulanır | executor ad.4 — güven kökü değişmez |
++| Relay-ledger root'u kimlik doğrulama kökü değil (F-2, 09L) | dokunulmaz |
++| Aktif relayer kontrolü *çalışma* anında, iletim anında değil | executor ad.1 — eski state'li iletim etkisiz |
++| Operator gate (fe5461e) geçiş süresinde canlı kalır | RPC unchanged |
++| Block boyu/tx sınırı (consensus::MAX_BLOCK_SIZE) | mevcut kapılar; proof boyutu JSON ölçümüne girer |
++
++## 6. Test listesi
++
++1. Geçerli relayCompletion tx → block → her node aynı mesaj state'ini üretir;
++   ödül relayer'a bloğa yansır.
++2. İkinci tx aynı message_id → revert, block geçerli.
++3. `source_domain` commitment kaydı yok → revert.
++4. Pasif/stakeleri çekilmiş relayer → revert (tx.from kontrolü).
++5. Proof sahte → revert.
++6. Yarış: iki relayer aynı mesaj → proposer'ın sıraladığı kazanır, diğeri revert.
++7. RPC→tx geçişi: `bud_submitRelayProof` mempool'a tx basar, sonuç block ile geri
++   döner (geçiş modu E2E).
++
++## 7. Riskler ve sıra
++
++- **Konsensüs uyumluluğu**: yeni tx tipi, tipi tanımayan düğümlerde validateBlock'te
++  red olur → deployment, tüm düğüm sürümlerinin tip'i bilmesini gerektirir. Pre-mainnet
++  durum: tüm node'lar tek PR'dan → tek sürüm geçişi yeterli; test ad.1–2 bunu kilitler.
++- `MerkleProof`'un tx payload JSON'u: boyut profili `validate_block_size` ile
++  ölçülür (test ad.1'de büyük proof vektörü).
++- Sıra: (a) tx tipi + validate; (b) executor yolu + helper paylaşımı; (c) testler;
++  (d) RPC→mempool köprüsü; (e) doğrudan yolun kaldırılması (ayrı commit).
++
++## 8. Karar
++
++Bu tasarım onaylanırsa uygulanır; uygulama bağımsız, küçük commit'ler halinde
++tek PR'a girer. Mevcut fe5461e gate'i bu sürece dokunulmaz kalır.
+-- 
+2.39.5
+

@@ -1,0 +1,98 @@
+From 7a97626875cbb2cfcd90d27e88527dee46b83a2c Mon Sep 17 00:00:00 2001
+From: Lubo's Ruler <ayazkussann@gmail.com>
+Date: Wed, 9 Sep 2026 15:58:48 +0000
+Subject: [PATCH 05/21] lubot kapi: denetim crate'in ledger kurallari (38 kapi,
+ canary'li)
+
+---
+ README.md             |  2 +-
+ gates/check.py        | 45 +++++++++++++++++++++++++++++++++++++++++++
+ training/ratchet.json |  2 +-
+ 3 files changed, 47 insertions(+), 2 deletions(-)
+
+diff --git a/README.md b/README.md
+index 15ec1ab..463a94a 100644
+--- a/README.md
++++ b/README.md
+@@ -33,7 +33,7 @@ nothing to check a generation against.
+ | the security review as an evidenced ledger (scan, validate, fix): every finding ends in a disposition, a fix closes only with the check that proves it plus the commit that is it, no waiver at the attestation floor without an attester, and a finding that changes on re-scan voids its stale closure | `crates/denetim` | 9 tests |
+ | the runnable binary: corpus load, `ask`, grant book, output audit, closed-loop handoff; `ceilings`; multi-question `batch`; the uninterrupted-work queue (resume, budget, per-job gate check, loud halt); measured baselines that may only rise (`ratchet`); repository `envanter`; restricted `it` (only the listed paths are committed and pushed); the four-step `olc` verification chain; `durum`; the manifest map `graf`; the credential scan `guvenlik`; the file-kind router `dosya`; the ask_user-shaped decision battery `soru` (list/get/cevapla/durum); content search `ara`, measured `indeks`, the ordered reading plan `mufredat`, effort comparison `karsilastir`; context compression `sikistir` (--path/--geri-getir: typed routing, pinned lines, reversible CCR store, measured ledger) and failure mining `ogren` (pattern grouping, two-tier promotion); the queue operator (`queue ls`, `queue iptal` - a cancelled job never runs); batch writes the same audit and closed-loop trace as `ask` | `crates/cli` | 37 tests |
+ 
+-191 tests, `clippy -D warnings` clean, `unwrap`/`expect` denied outside tests. 37 gates, each with its own self-test; the ratchet holds (191 tests, 37 gates, 0 pedantic warnings, 793 corpus records).
++191 tests, `clippy -D warnings` clean, `unwrap`/`expect` denied outside tests. 38 gates, each with its own self-test; the ratchet holds (191 tests, 38 gates, 0 pedantic warnings, 793 corpus records).
+ 
+ ## Permission is an admission decision
+ 
+diff --git a/gates/check.py b/gates/check.py
+index bc5c0ff..46cba7a 100644
+--- a/gates/check.py
++++ b/gates/check.py
+@@ -1597,8 +1597,53 @@ def selftest_eval_runs_are_mechanical() -> None:
+     assert _eval_run_finding(unmeasured) is not None, "a run without duration accounting passed"
+ 
+ 
++# --------------------------------------------------------------------------
++# gate: the review crate holds the ledger rules; a closure without evidence
++# --------------------------------------------------------------------------
++REVIEW_RULE_MARKERS = [
++    "pub enum Severity",
++    "pub fn record(",
++    "pub fn fix(",
++    "pub fn reject(",
++    "pub fn complete(",
++    "pub fn verify(",
++    "AttesterRequired",
++    "EmptyEvidence",
++    "finding.severity >= Severity::High",
++]
++
++
++def gate_review_crate_holds_ledger_rules() -> str:
++    """The denetim crate is the review-ledger authority: scan, validate and
++    fix live in one ledger, closures are evidence-gated, the attestation
++    floor sits at High, and re-scan invalidation is in force."""
++    src = read("crates/denetim/src/lib.rs")
++    for marker in REVIEW_RULE_MARKERS:
++        if marker not in src:
++            raise SystemExit(f"denetim crate lost a ledger rule: {marker}")
++    if "let voided = self.dispositions.remove(&finding.id);" not in src:
++        raise SystemExit("re-scan no longer voids a stale closure")
++    return "denetim crate is the review-ledger authority"
++
++
++def selftest_review_crate_holds_ledger_rules() -> None:
++    good = "\n".join(REVIEW_RULE_MARKERS) + "\nlet voided = self.dispositions.remove(&finding.id);"
++    thin = "pub fn record(\npub fn fix("
++    assert not run_review_like(good)
++    assert run_review_like(thin)
++
++
++def run_review_like(text: str) -> bool:
++    """True when the text does NOT carry the full rule set."""
++    for marker in [*REVIEW_RULE_MARKERS, "let voided = self.dispositions.remove(&finding.id);"]:
++        if marker not in text:
++            return True
++    return False
++
++
+ GATES_EXTRA = {
+     "system-prompt-is-true": (gate_system_prompt_is_true, selftest_system_prompt_is_true),
++    "review-crate-holds-ledger-rules": (gate_review_crate_holds_ledger_rules, selftest_review_crate_holds_ledger_rules),
+     "operator-sync-rules": (gate_operator_sync_rules, selftest_operator_sync_rules),
+     "output-finalize-closed-loop": (gate_output_finalize_closed_loop, selftest_output_finalize_closed_loop),
+     "cli-asks-and-renders-markdown": (gate_cli_asks_and_renders_markdown, selftest_cli_asks_and_renders_markdown),
+diff --git a/training/ratchet.json b/training/ratchet.json
+index f8ba8a4..08905ea 100644
+--- a/training/ratchet.json
++++ b/training/ratchet.json
+@@ -1,6 +1,6 @@
+ {
+   "tests": 191,
+-  "gates": 37,
++  "gates": 38,
+   "pedantic": 0,
+   "corpus": 793
+ }
+-- 
+2.39.5
+

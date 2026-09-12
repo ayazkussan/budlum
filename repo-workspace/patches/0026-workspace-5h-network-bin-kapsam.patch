@@ -1,0 +1,50 @@
+From cbede8feee0ce516d6ba4f70da4eac3b092f4f42 Mon Sep 17 00:00:00 2001
+From: ayazkussan <149924814+ayazkussan@users.noreply.github.com>
+Date: Wed, 9 Sep 2026 20:27:40 +0000
+Subject: [PATCH] denetim-2026-09-09N 5h: network derin + bin clean; dalga 4
+ kapsam ozei
+
+---
+ ...A4-KONSENSUS-FINALITY-DOMAIN-COMMITMENT.md | 29 +++++++++++++++++++
+ 1 file changed, 29 insertions(+)
+
+diff --git a/DENETIM-2026-09-09N-DALGA4-KONSENSUS-FINALITY-DOMAIN-COMMITMENT.md b/DENETIM-2026-09-09N-DALGA4-KONSENSUS-FINALITY-DOMAIN-COMMITMENT.md
+index 44024ff..514a00d 100644
+--- a/DENETIM-2026-09-09N-DALGA4-KONSENSUS-FINALITY-DOMAIN-COMMITMENT.md
++++ b/DENETIM-2026-09-09N-DALGA4-KONSENSUS-FINALITY-DOMAIN-COMMITMENT.md
+@@ -287,3 +287,32 @@ silinmiş, `/home/user` yalnızca budlum içermiş. Durum değerlendirmesi:
+   recover_interrupted_commit: IN_PROGRESS_HEIGHT marker; **corrupt marker
+   fail-closed** ("0 olarak okunsa genesis rollback + LAST/CANONICAL_HEIGHT/
+   bridge silinirdi" — dokümante); snapshot create/verify/restore.
++
++## 5h. network/node.rs derin + bin/cli — clean (kapsam tamamlandı)
++
++- **node.rs (3352)**: handshake admiss = chain_id + protocol version +
++  **zorunlu BLS RFC9380 scheme** (tümü ban); block gossip = size check →
++  `block_passes_cheap_checks` (chain_id + canonical hash + recompute) →
++  height branch (==+1: tam `validate_and_add_block`; <=our: fork→sync;
++  >our: sync; tek sync `sync_state` atomicsi ile); **tüm block ingestion
++  yolu tek boğazdan** (validate_and_add_block — F-3'ün normalize ettiği
++  yol); QC ingestion = rate limit → parse → **metadata binding**
++  (epoch/height ↔ response envelope) → `import_qc_blob`; her kolda
++  good/bad behavior skorlama.
++- **bin (1776)**: bud.rs (node), budlum-light.rs (operator-verilen trust
++  anchor — CLI arg → TrustedCheckpoint; tasarım ile tutarlı),
++  budlum-relayer.rs (operator aracı, konsensüs bileşeni değil).
++
++### Kapsam özeti (09N tamamı)
++
++Bu dalga 20+ modül kapattı: konsensüs(7 dosya), finality (BLS+QC+reorg),
++light_client, network (protocol+dedup+peer+node derin), domain
++(plugin/commitment/finality_adapter), crypto (BLS/PQ/key_set_preimage),
++cross_domain (bridge/relayer/proof_verifier), settlement (market/verifier),
++registry (slashing/governance/constitution), execution (executor),
++gateway, BNS, AI (registry/inference/execution-STARK), DeEd, storage_deal,
++budlumxyz, money, account_abstraction, storage/db, bin/cli.
++Yeni bulgu: **F-4 (MEDIUM)** yalnız; built-but-unwired kayıt defteri 6 madde.
++Kod tabanı tutarlı bir self-audit kültürü taşıyor (kritik path'lerin çoğu
++geçmiş bulgu + fix + dokümantasyon içeriyor); denetim bu dokümantasyonu
++bağımsız doğruladı, çelişki bulunmadı.
+-- 
+2.39.5
+

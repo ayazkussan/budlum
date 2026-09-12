@@ -1,0 +1,73 @@
+From da2ef0878c8e5fd2c06377ea9fdf60eed40feffa Mon Sep 17 00:00:00 2001
+From: ayazkussan <149924814+ayazkussan@users.noreply.github.com>
+Date: Wed, 9 Sep 2026 20:31:41 +0000
+Subject: [PATCH] denetim-2026-09-09N kapsam ozei guncellendi (30 modul, kalan
+ alanlar)
+
+---
+ ...A4-KONSENSUS-FINALITY-DOMAIN-COMMITMENT.md | 40 +++++++++++--------
+ 1 file changed, 23 insertions(+), 17 deletions(-)
+
+diff --git a/DENETIM-2026-09-09N-DALGA4-KONSENSUS-FINALITY-DOMAIN-COMMITMENT.md b/DENETIM-2026-09-09N-DALGA4-KONSENSUS-FINALITY-DOMAIN-COMMITMENT.md
+index 06ac544..25926c7 100644
+--- a/DENETIM-2026-09-09N-DALGA4-KONSENSUS-FINALITY-DOMAIN-COMMITMENT.md
++++ b/DENETIM-2026-09-09N-DALGA4-KONSENSUS-FINALITY-DOMAIN-COMMITMENT.md
+@@ -243,14 +243,15 @@ dokümante değil.
+ - Kapatılan (bu rapor): konsensüs(7), finality, light_client, network(örneklem),
+   domain, crypto, bridge, settlement, registry-slashing, executor, gateway,
+   governance, constitution, BNS, AI registry/inference, DeEd, storage_deal(örneklem).
+-- Sonraki alanlar: network/node.rs derin (3352), budlumxyz, core/money +
+-  account_abstraction, bin/cli, storage/db,
+-  CI log detayları (EOF + GitHub auth kopması — reconnect bekleniyor).
+-- **Bekleyen kullanıcı aksiyonları**: (1) GitHub bağlantısını Arena'dan
+-  yeniden kur (git push auth kayboldu: API okuyor, git işlemleri
+-  reddediyor; 2 commit local'de: 1478017 + 3dae858); (2) model kaynağı
+-  kararı; (3) F-4 dispozisyon kararı (A: pipeline wire + root anchoring,
+-  B: dekoratif kapı notu).
++- Sonraki alanlar: storage QR/Three toolkit (~30k, off-chain), mobile.rs,
++  developer_os, core/chain_config parametre tablosu; CI sonuçları
++  (64aef56+ setleri) + Dependency Review açığı.
++- **Bekleyen kullanıcı aksiyonları**: (1) ~~GitHub reconnect~~ ÇÖZÜLDÜ
++  (oturum içi geri döndü; reset 4 sonrası tüm mirror'lar yeniden push:
++  tip c24367b); (2) model kaynağı kararı; (3) F-4 artık opsiyonel
++  hardening (§5i) — karar: A uygulanacak mı?; (4) workspace remote
++  güncel değil (18167ee) — local 3ee49a2+ içerik budlum mirror'larında
++  güvende; user push'ı istediğinde hazır.
+ 
+ ## 5g. Reset olayı (4.) + budlumxyz, money, account_abstraction, storage/db
+ 
+@@ -305,17 +306,22 @@ silinmiş, `/home/user` yalnızca budlum içermiş. Durum değerlendirmesi:
+ 
+ ### Kapsam özeti (09N tamamı)
+ 
+-Bu dalga 20+ modül kapattı: konsensüs(7 dosya), finality (BLS+QC+reorg),
++Bu dalga ~30 modül kapattı: konsensüs(7 dosya), finality (BLS+QC+reorg),
+ light_client, network (protocol+dedup+peer+node derin), domain
+-(plugin/commitment/finality_adapter), crypto (BLS/PQ/key_set_preimage),
+-cross_domain (bridge/relayer/proof_verifier), settlement (market/verifier),
+-registry (slashing/governance/constitution), execution (executor),
+-gateway, BNS, AI (registry/inference/execution-STARK), DeEd, storage_deal,
+-budlumxyz, money, account_abstraction, storage/db, bin/cli.
+-Yeni bulgu: **F-4 (MEDIUM)** yalnız; built-but-unwired kayıt defteri 6 madde.
++(plugin/commitment/finality_adapter/genesis-bootstrap), crypto
++(BLS/PQ/key_set_preimage/pkcs11), cross_domain (bridge/relayer/
++proof_verifier), settlement (market/verifier/global_block), registry
++(slashing/governance/constitution), execution (executor), gateway, BNS,
++AI (registry/inference/execution-STARK/guest-re-exec), DeEd, storage_deal,
++budlumxyz, money, account_abstraction, storage/db, bin/cli, prover
++(Zk claim 7 kapısı), RPC kapı sayımı (150 metod).
++Yeni bulgu: **F-4 (MEDIUM → LOW-MEDIUM revize, §5i)** yalnız;
++built-but-unwired kayıt defteri 6 madde.
+ Kod tabanı tutarlı bir self-audit kültürü taşıyor (kritik path'lerin çoğu
+-geçmiş bulgu + fix + dokümantasyon içeriyor); denetim bu dokümantasyonu
+-bağımsız doğruladı, çelişki bulunmadı.
++geçmiş bulgu + fix + dokümantasyon içeriyor); bağımsız denetim bu
++dokümantasyonu doğruladı, çelişki bulunmadı. Kalan okunmamış alan
++ağırlıklı olarak off-chain storage QR/Three toolkit (~30k), mobile.rs ve
++developer_os (düşük konsensüs riski).
+ 
+ ## 5i. F-4 KAPSAM DÜZELTMESİ + RPC kapı sayımı (150 metod)
+ 
+-- 
+2.39.5
+

@@ -9,14 +9,83 @@ on:
 env:
   CARGO_TERM_COLOR: always
 
+# zizmor found this job running on the default token (2026-09-12:
+# `excessive-permissions` + `artipacked` + `unpinned-uses` on the checkout
+# line below). The workflow only builds and tests, so read-only contents is
+# all it needs, and every other workflow in .github/ already says so.
+permissions:
+  contents: read
+
 jobs:
   build:
 
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v4
+    # Same pin as ci.yml's checkouts: hash-pinned, credentials not persisted.
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      with:
+        persist-credentials: false
+    # `budlum-core` has a build script that runs protoc (build.rs). This job had
+    # no protoc: every other workflow that compiles installs it (`Install
+    # protoc` in ci.yml, determinism.yml, miri.yml, rust-quality.yml, ...), and
+    # the build script's own PATH search finds nothing on a bare ubuntu-latest
+    # image. So the panic was not in the sources: the only workflow that reads
+    # "Build = cargo build failed" was failing in codegen, and `Run tests` never
+    # ran. This adds a dependency, not an assertion: nothing here can make a
+    # red check green, it can only let the check reach the point where it has an
+    # opinion of its own.
+    - name: Install protoc
+      run: sudo apt-get update -qq && sudo apt-get install -y -qq protobuf-compiler
     - name: Build
       run: cargo build --verbose
+    # The log host (blob storage) is unreachable from an audit sandbox: the
+    # API answers, the log download returns EOF. Annotations travel on the API
+    # host, so a failing build is still readable where a log is not. This step
+    # only runs when Build already failed and cannot change the verdict: the
+    # failing step stays failing, and the job is red either way.
+    - name: Build error surface (annotations)
+      if: failure()
+      run: |
+        set +o pipefail
+        # A check run keeps ten annotations and drops the earlier ones, so a
+        # tail of sixty lines is a noise burst that loses the cause. Nine
+        # selected lines survive, in order, deduplicated: the first error, not
+        # the last one.
+        cargo build --message-format short 2>&1 | sed -e 's/\x1b\[[0-9;]*m//g' \
+          | grep -E 'error|panicked|Caused by|No such file|Could not find|protoc' \
+          | sed -e 's/^[[:space:]]*//' \
+          | awk '!seen[$0]++' \
+          | head -n 9 \
+          | awk '{print "::error::" $0}'
     - name: Run tests
       run: cargo test --verbose
+    # Measured, not assumed: with protoc installed `Build` goes green, so a red
+    # `Run tests` on this job is one of two different bugs that look identical
+    # from the job title - a test that fails, or a target only `cargo test`
+    # compiles (the test modules import more than the library does). The surface
+    # says which: an `error[E...]` line means the test tree does not compile, a
+    # `failures:` block names the tests that ran and lost. `--no-fail-fast` so a
+    # single pass lists every failing suite; the verdict step above is untouched.
+    # Run 43 measured why the strip is not decoration: the surface answered
+    # "0 failing suites" while the step was red, because CARGO_TERM_COLOR=always
+    # put escape codes in front of every line the patterns were anchored to.
+    - name: Test failure surface (annotations)
+      if: failure()
+      run: |
+        set +o pipefail
+        tmp=$(mktemp)
+        cargo test --no-fail-fast 2>&1 | sed -e 's/\x1b\[[0-9;]*m//g' | tee "$tmp" > /dev/null
+        # A check run keeps ten annotations, so the budget is spent on pairs:
+        # each error line travels with the `--> file:line:col` line under it,
+        # which is the half that says where. Run 49's surface carried three
+        # `error[E...]` lines and no location at all, and two of the three were
+        # found by hand afterwards - a diagnostic that names the symptom and
+        # hides the address is half a diagnostic.
+        {
+          grep -A 1 -E "^error(\[|:)" "$tmp" | grep -v "^--$"
+          grep -E "panicked at|^failures:|^---- |test result: FAILED" "$tmp"
+        } | awk '!seen[$0]++' | head -n 9 | sed -e "s@^@::error::@"
+        printf '::error::%s failing suites reported by cargo test --no-fail-fast; %s lines of output were produced\n' \
+          "$(grep -cE 'test result: FAILED' "$tmp")" "$(grep -c '' "$tmp")"
+        rm -f "$tmp"

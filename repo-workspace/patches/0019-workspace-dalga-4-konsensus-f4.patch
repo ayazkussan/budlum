@@ -1,0 +1,120 @@
+From 88385f65f73a280dcc3428b83237a9de15cbf90b Mon Sep 17 00:00:00 2001
+From: ayazkussan <149924814+ayazkussan@users.noreply.github.com>
+Date: Wed, 9 Sep 2026 19:17:32 +0000
+Subject: [PATCH] denetim-2026-09-09N: dalga 4 - konsensus/finality clean, F-4
+ domain commitment event_root capasi yok (MEDIUM)
+
+---
+ ...A4-KONSENSUS-FINALITY-DOMAIN-COMMITMENT.md | 100 ++++++++++++++++++
+ 1 file changed, 100 insertions(+)
+ create mode 100644 DENETIM-2026-09-09N-DALGA4-KONSENSUS-FINALITY-DOMAIN-COMMITMENT.md
+
+diff --git a/DENETIM-2026-09-09N-DALGA4-KONSENSUS-FINALITY-DOMAIN-COMMITMENT.md b/DENETIM-2026-09-09N-DALGA4-KONSENSUS-FINALITY-DOMAIN-COMMITMENT.md
+new file mode 100644
+index 0000000..bfc4fb4
+--- /dev/null
++++ b/DENETIM-2026-09-09N-DALGA4-KONSENSUS-FINALITY-DOMAIN-COMMITMENT.md
+@@ -0,0 +1,100 @@
++# DENETIM-2026-09-09N — DalgA 4: Konsensüs Çekirdeği, Finality, Network ve Domain Commitment
++
++Kaynak: `ayazkussan/budlum` @ 90de01d (PR #1). Yöntem: her satır hatalı olabilir
++varsayımı; örneklem değil, fonksiyon bazlı okuma.
++
++## 1. Konsensüs modülü — 7/7 dosya, yeni kusur yok
++
++| Dosya | Sonuç |
++|---|---|
++| `mod.rs` | trait disiplini sağlam (validate saf, record post-commit); `can_reorg` suffix underflow + no-ancestor derinliği düzeltilmiş ve testli; MAX_REORG_DEPTH tek tanımlı, chain katmanı re-export (test kilitli); timestamp/boy kapıları dokümante edilmiş |
++| `qc.rs` | `verify_against_snapshot`: epoch/TTL/created_epoch üst sınırı, O(1) entry cap (DoS ölçümleri dokümante: 10k entry 582ms merkle), merkle root, index↔adres eşleşmesi, dup reject, dilithium verify, unique signer set iadesi (quorum dedup fix dokümante) |
++| `pos.rs` | epoch randomnesi zincir-ancored (genesis + lookback-2 epoch VRF transcript, canonicality kontrolü, overflow-safe); epoch 0-1 genesis bootstrap (producer-kontrolsüz alan yok); slot seed epoch/slot canonicality; VRF threshold u128 aritmetik (VRF_BASE_PROB = FIXED_POINT_SCALE → clamp only-in-case); compat `calculate_seed` boş cache'te POISON değeri döndürür (kullanılamaz, bilinçli) |
++| `poa.rs` | lider seçimi (index, prev-hash entropy, sıralı validatör set fingerprint) → prev blok üretilene dek tahmin edilemez; validate tek çağrı `verify_signature_with_pubkey` (drift bug'ı dokümante); otorite yoksa fail-closed |
++| `pow.rs` | fork choice U256 accumulated work (u128 saturasyon bug'ı dokümante: "mature difficulty'de fork choice'u sessizce devre dışı bırakıyordu"); eşit work → split_resolver |
++| `split_resolver.rs` | saf, arrival-order-independent, depolanan hash alanına güvenmez (recompute); 5 kademeli tie-break testli |
++| `merkle_tree.rs` | F-6 shape fix: unpaired tail kendisiyle pair olmaz, tagged promote (`[a,b,c]` ≠ `[a,b,c,c]`); sentinel tasarım; Kani mirror + pinning test |
++
++## 2. Finality ↔ reorg etkileşimi — sağlam
++
++- `try_reorg`: fork_point ≤ finalized_height → reject; aday zincir finalized checkpoint hash'ini
++  birebir içermeli ("omits/conflicts with finalized checkpoint").
++- `validate_and_add_block`: finalized_height'da veya altında, finalized_hash'ten farklı
++  blok → reject (continuity).
++- Reorg sonrası finalized height cert'lardan yeniden kurulur, canonical height persist edilir.
++- `import_qc_blob`: checkpoint interval + block hash match + structural verify **önce**
++  quorum (dedup-inflasyon fix'i dokümante), 2/3 unique signer, persist,
++  `process_pending_finality_certs` (requeue tek sefer, dup fix).
++- Not (terminoloji): QcBlob'da BLS alanı yok; "BLS quorum" comment'leri aslında bireysel
++  Dilithium (PQ) imza quorumu'nu anlatıyor. Kod doğru, isim yanlış — low-priority cleanup.
++
++## 3. Network (örneklem: gossip_dedup, peer_manager, protocol) — üst sınırlar tutarlı
++
++- Dedup ring 10k; skor tablosu 4096 tavan (eviction wired değilken "remove_peer çağrılmıyor"
++  dokümante edilmiş; laundering koruması için skor connection'dan uzun yaşar).
++- QC blob rate limit: token bucket burst 5, refill 0.5/s, cap 10 (peer başına ~1 blob/2s).
++- MAX_MESSAGE_SIZE 10MiB: libp2p transmit + decode ikisi de kapılı; sync batch
++  `(10MiB / 1MiB) - 1` block (derive + test).
++- INVALID blok/tx/oversized → skor cezası + BAN_THRESHOLD; duplicate-flood auto-ban.
++
++## 4. BULGU F-4 — Domain commitment event_root köküne çapa yok (MEDIUM, entegrasyon boşluğu)
++
++**Mekanizma**:
++1. Üretim bridge lock (blok-içi, `blockchain.rs:2145/2226 enqueue_bridge_relay`) →
++   `universal_relayer.pending` kaydı (source_event zincir-içinden, güvenilir).
++2. `submit_relay_proof` (blockchain.rs:2788) → proof,
++   `domain_commitment_registry.find_by_height(source_domain, source_height).event_root`
++   köküne karşı doğrulanır (relayer.rs:320 `proof.verify(event_tree_root)` +
++   leaf ↔ pending source_event eşleşmesi).
++3. Commitment'ler `submit_domain_commitment` → chain actor'dan **operator-asserted**
++   girer (`accept_domain_commitment`: sequency, validator_set_hash, equivocation→freeze;
++   **event_root içeriği hiçbir yere karşı doğrulanmaz**).
++4. Tek gerçek event ağacı `BridgeRelayerPipeline` içinde (`event_trees: BTreeMap<DomainId,
++   DomainEventTree>`, `lock` her event'i push eder) — ama pipeline üretim node'una
++   **wired değil** (yalnızca testler kuruyor); `event_tree_root(domain)` üretimde
++   tüketilmiyor.
++5. `ConsensusDomainPlugin::extract_commitment` override'ı yok; tüm domain plugin'leri
++   `empty_event_root()` = `H(BDLM_EMPTY_DOMAIN_EVENT_ROOT_V1)` sabitini taşıyor.
++
++**Etki (güncel akış)**: Eksploitable delik YOK — pending source_event on-chain bridge
++execution'ından geliyor; proof leaf'i o eventi bağlıyor; operator sahte root assert etse de
++sahte lock event üretemez (lock = on-chain balance+stake kontrolünden geçmiş transfer).
++Merkle proof kapısı bugün **redundant** (operator-asserted root'a karşı do
++ğrulanıyor, root ağacı çapalamıyor).
++
++**Boşluk**: tasarlanan model (domain event ağacı + commitment root anchoring + proof =
++güven kaynağı) yarım: ağaç var ama wired değil, root asserted. Sovereign domain akışında
++(off-L1 event) bu, fraud-proof'suz optimistic trust model — bilinçli mi yoksa eksik mi,
++dokümante değil.
++
++**Dispozisyon** (pre-mainnet, seçenekler):
++- **A (önerilen, kısa vade)**: `BridgeRelayerPipeline`'ı production bridge akışına wire et
++  (lock event push + per-height root log: (domain, height, event_index, root));
++  `accept_domain_commitment` lokal tree barındıran domain'lerde
++  `commitment.event_root == recorded_root(domain, height)` kontrolü yapar.
++- **B (kısa vade, minimal)**: A yapılmadıkça `submit_relay_proof`'ün proof adımı
++  "ancak operator-asserted root'a karşı" olduğu comment ile açıkça işaretlenir ve
++  relayer e2E testi "root çapalanmamışken proof'un güvenlik katkısı yok" senaryosunu
++  dokümante eder.
++- Karar: bu tur A-B arasında **B uygulanmaz** (tasarım onayı gerektirir, consensus
++  davranışı değiştirir); F-4 olarak kayıt, sonraki adımda A tasarımı (09M formatında).
++
++## 5. Bilgi notları (aksiyon yok)
++
++- `submit_relay_proof(message_id, relayer, ...)`: `relayer` parametresi çağrıya bağlı değil
++  (operator O, herhangi bir aktif relayer adresini ödüller için yazdırabilir). Ekonomi
++  etkisi yok: relayer ödemesi fonksiyonu yok, `ledger.record` node-local operasyonel
++  kayıt (F-2 sınıfı). E-7 on-chain refactor (09M) tx.from ile otomatik çözer.
++- QcBlob "BLS" terminolojisi (bkz. §2) — cleanup adayı.
++- Domain plugin engine'ları stateless (`PoSEngine::new(cfg, None)`) — domain chain
++  doğrulaması `full_validate` üzerinden; PoS slot kontrolü domain chain'de
++  epoch_randomness + VRF ile (pos.rs pass'te clean).
++
++## 6. Döngü durumu
++
++- W1 ✅ (F-1 e4f472b) · W2 ✅ (E-7 fe5461e, E-1 a8b45e1) · W3 ✅ (F-3 8ba7eab)
++- **W4**: konsensüs çekirdeği ✅ clean · finality/reorg ✅ · network örneklem ✅ ·
++  **F-4 açıldı (MEDIUM, tasarım kararı bekliyor)**
++- 09M (E-7 on-chain relay tasarımı) yazıldı — uygulama bu tasarım onayını bekler.
++- Sonraki alanlar: light_client, gateway, crypto (BLS/ZK/PQ), storage_deal (6734 satır),
++  settlement/proof_verifier, CI log detayları (EOF tekrar denemeli).
+-- 
+2.39.5
+

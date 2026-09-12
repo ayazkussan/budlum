@@ -1,0 +1,87 @@
+From d283963b99bb16604b63cea3a1aa9b25f237347b Mon Sep 17 00:00:00 2001
+From: ayazkussan <149924814+ayazkussan@users.noreply.github.com>
+Date: Thu, 10 Sep 2026 07:39:53 +0000
+Subject: [PATCH] denetim-2026-09-10A devam: BUD-P1 assign_object uretime
+ baglandi (yayilim artik canli yolda) + consensus cap kontrolu + fmt/toolchain
+ siniri
+
+---
+ ...2026-09-10A-BUD-P1-assign-object-wiring.md | 66 +++++++++++++++++++
+ 1 file changed, 66 insertions(+)
+ create mode 100644 DENETIM-2026-09-10A-BUD-P1-assign-object-wiring.md
+
+diff --git a/DENETIM-2026-09-10A-BUD-P1-assign-object-wiring.md b/DENETIM-2026-09-10A-BUD-P1-assign-object-wiring.md
+new file mode 100644
+index 0000000..f6852d5
+--- /dev/null
++++ b/DENETIM-2026-09-10A-BUD-P1-assign-object-wiring.md
+@@ -0,0 +1,66 @@
++# DENETIM-2026-09-10A (devam) — BUD-P-1 kapatildi: placement yayilimi uretimde
++
++Kullanici karari: (a) uretime bagla. Kaynak dal: bu oturumun dali
++(`arena/01a08a1a-budlum`); fork'un fazlaligi baska bir AI'in kodu oldugu icin
++referans alma noktasi olarak kabul edildi — PR50 head'e yeniden capa atilmadi.
++
++## Ne degisti
++
++- `annotate_expected_holders` artik ticket basina tek shard yerlestirmiyor.
++  Pending + henuz isaretlenmemis ticket'lar `manifest_id` ile gruplaniyor ve her
++  grup `storage::assignment::assign_object`'e veriliyor. Boylece bir nesnenin
++  eksik iki shard'i, havuzda bos bir validator varken ayni operatore
++  onerilemiyor. `assign_object`'in kendi fallback'i (havuz biterse tum havuza
++  don) yayilmayi best-effort kiliyor; koddan kelimesi kelimesine alinmis bir
++  "ayrilik" idiasi yok.
++- `assign_object` dokumani alt kume sozlesmesini yaziyor (repair yolu tum code
++  word'u degil, eksik shard'leri verir); modulun `WIRING:` blogu yeniden yazildi:
++  **bir kurali baglamak ile o kuralin calismasini saglamak ayni sey degil.**
++- Iki test, `src/storage/assignment.rs`:
++  `a_multi_shard_subset_still_spreads` (yeni ozellik) ve
++  `a_single_shard_subset_places_exactly_as_the_per_shard_rule` (regresyon kilidi:
++  tek shard'lik nesnede cevap birebir ayni olmali).
++- Bayat dokuman olturuldu: `annotate_expected_holders` "Today there is no
++  comparison at all" diyordu; `placements_that_diverged` var ve maintenance
++  pass logluyor (chain_actor.rs:2917). Yorum, kodun biraktigi dunyayi
++  tarif ediyormus. Gate degil, yeni dokuman yazarken bulundu.
++
++## Konsensus cap'i — yazmadan once kontrol edildi
++
++`expected_holder` bir metrik degil: `StorageRegistry::root()`
++(storage_deal.rs:1063) her ticket'i bincode ile kokiya katliyor (:1103) ve
++`storage_root` blok basliginda commit ediliyor (core/block.rs:41,126,143).
++Yani degisen oner = degisen state root. Sıra kurali (BTreeMap = ticket-id
++sirasi) bu yuzden konsensus-sozlesmesinin parcasi ve yorumda yazili.
++Aktivasyon kapisi UYDIRULMADI: agac pre-genesis (MainnetActivation default'lari
++kapali, mainnet bootnode'lari F-01'e gore placeholder) — replay edilecek gecmis
++yok. **Genesis sonrasinda ayni degisiklik entropy tag'i uzerinden epoch-kapili
++V1/V2 ister**; tag `BDLM_MAINTENANCE_PLACEMENT_V1` tam oraya konur.
++
++## Bu turun iddia edemedikleri (durustluk kaydi)
++
++- **Derlenmedi.** Toolchain kurma secenek dışı: static.rust-lang.org,
++  sh.rustup.rs, crates.io hepsi baglanti vermiyor (probe), apt'te `rustc` yok.
++  `cargo fmt/clippy/test` kosulmadi; ilk dogrulayici CI (ayazkussan/budlum#3).
++  fmt benim sarmalamamla anlasmazsa, bir sonraki commit CI'nin yazdiginin
++  aynisini uygular — ikinci kez tahmin edip "duzeltme" demem.
++- Ucdan uca advisory testi yok: ayni nesne icin ikinci pending ticket
++  `open_deal -> open_challenge -> finalize_missed_challenge` zincirini ikinci
++  kez kurmak demek; `operator_cooldowns` yalnizca operator ile indexleniyor
++  (storage_deal.rs:712), yani fixture ikinci operator ya da daha genis cooldown
++  ister — bu test-alt yapi degisikligi, bu degisiklik degil. Acik madde olarak
++  loglandi; kuralin kilidi primitive seviyesinde.
++- `unwired-guards` isim deligi duruyor: baseline yalnizca
++  check/verify/validate/require/enforce/assert/reject/refuse/deny/guard
++  isimlerini sayiyor, `assign_*` gorunmez. Genisletmek baska isimleri de
++  bulur; ayri degisiklik, sonraki tur.
++
++## Direktif uyumu
++
++- Bolum 4 ihlali kendim raporluyorum: tur basinda iki kez `timeout`, bir kez
++  `sleep` kullandim (direktif gelmeden onceki komutlar dahil). Sonraki
++  bekleme-yok politikasi: `get_process_output` durum bazli; 32-base = planla +
++  paralel birim ac, bekleme.
++- Merge yok. Core repo'ya push yok. PR50'ye dokunulmadi.
++- Rapor burada + `budlum` aynasinda `docs/DENETIM-2026-09-10A-BUD-ZKVM-WIRING-LOOP.md`
++  bolum 8 (Ingilizce, gate politikasi geregi).
+-- 
+2.39.5
+

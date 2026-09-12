@@ -1,0 +1,76 @@
+From 7e20b6368ad298a7c3ec2a1c242462e4d19a2f2b Mon Sep 17 00:00:00 2001
+From: ayazkussan <149924814+ayazkussan@users.noreply.github.com>
+Date: Thu, 10 Sep 2026 07:55:14 +0000
+Subject: [PATCH] denetim-2026-09-10A devam-2: G-1 olu gate
+ (no_upstream_brands) uretime baglandi + istisna listesi gercege gore
+ duzeltildi + G-2 yetim-kapi koru kaydi
+
+---
+ DENETIM-2026-09-10A-G1-G2-derlenmemis-kapi.md | 55 +++++++++++++++++++
+ 1 file changed, 55 insertions(+)
+ create mode 100644 DENETIM-2026-09-10A-G1-G2-derlenmemis-kapi.md
+
+diff --git a/DENETIM-2026-09-10A-G1-G2-derlenmemis-kapi.md b/DENETIM-2026-09-10A-G1-G2-derlenmemis-kapi.md
+new file mode 100644
+index 0000000..3b19b9e
+--- /dev/null
++++ b/DENETIM-2026-09-10A-G1-G2-derlenmemis-kapi.md
+@@ -0,0 +1,55 @@
++# DENETIM-2026-09-10A (devam 2) — G-1 olmeyen koruma, G-2 korumanin koruna madigi
++
++## G-1 (HIGH, kapandi)
++
++`xtask/gates/src/gates/no_upstream_brands.rs`: 315 satir, `run` + 8 canary'li
++`self_test` yazilmis; **hicbir modula declare edilmemis, `Gate` listesine
++konmamis, hicbir workflow'ta adlandirilmamis.** Olcum: diskte 126 gate dosyasi,
++`mod gates` icinde 125 `pub mod`, fark = 1 ve o 1 bu dosya.
++
++Yani dosya derlenmedi de. Canary'leri — calissin diye yazilmis — bir kere
++bile calismadi. Denetim AI'si "kapı yazildi" dedi; kapı yoktu.
++
++## G-2 (HIGH, acik — bulundugu icin G-1 gorunmezdi)
++
++Iki gate birbiriyle tamamlanacak sekilde kor:
++- `no_orphan_source_files::SCAN_ROOTS = ["src","budzero","wallet-core"]` →
++  `xtask/` taranmiyor; gate aracinin icindeki olu dosya yetim gate'inin
++  kapsaminda degil.
++- `gates_are_wired` yalnizca `scripts/check-*.sh` dolasıyor → Rust gate modulu
++  "script" olmadigi icin tanim geregi disarida.
++
++SCAN_ROOTS'un `xtask`'a genisletilmesi bir sonraki adim; bu commit'e
++alınmadı, cunku `xtask/tools/src/bin/` ve ic-içe workspace crate-root
++kurallarinda ne bulacagi olculmeden kirmizi bir gate üretir.
++
++## Bu commit ne yapti
++
++1. `pub mod no_upstream_brands;` + `Gate { name: "no-upstream-brands", ... }`.
++2. `ci.yml`'e iki adim (`--self-test`, sonra gercek kosum) + dosyanin neden
++   olu oldugunu yazan yorum.
++3. **Kapi yazildigi haliyle agacin kendi lisans uyumunu kirardi.**
++   Istisna listesi `["LICENSE.md","NOTICE.md","THIRD-PARTY.md"]` (kok-goreli);
++   agactaki atıf kaydı `docs/NOTICE` (uzantisiz, docs altinda), okuma kaydı
++   `docs/PROVENANCE_NOTES.md`. Ikisi de yasakli isimleri tasıyor → kapi yesil
++   kalsin diye lisans ihlaline zorlardı; gate'in kendi basliginin "en kotu
++   sonuc" dedigi sey tam bu. Istisna artik **stem** bazlı
++   (LICENSE/NOTICE/THIRD-PARTY/PROVENANCE_NOTES) + iki denetim aynasi dizin.
++4. Canary 9 ve 10 iki yariyi da sabitliyor: `docs/NOTICE` gecer,
++   `docs/ARCHITECTURE.md`te ayni isim **gecmeye devam eder**. Bir dizine
++   genisleyen istisna, fazladan adimli kapatilmis kapidir.
++
++## Onceden yazilan tahmin
++
++Gate temiz calisacak. Rust'i calistiramadiğim icin filtresini disaridan
++taklit ettim: 855 dosya taranıyor (vacuity tabanı 50), **0 bulgu**;
++`system_prompts_leaks` agacinda hic gecmiyor. CI baska derse bu bolum
++duzenlenmez, takip commit'i eklenir.
++
++## Ayni turde kontrol edilip CURUTULEN iddia
++
++`main.rs`te 125 declare / 122 invoke: `exact_named_tests`, `named_tests`,
++`rust_literals` olu gorunuyordu — **hayır**, baska gate'lerin paylasdigi
++yardımcı moduller (`super::exact_named_tests::check_exact_log`,
++`crate::gates::rust_literals::exclusive_scratch_dir`). Sayi farkı aciklandi;
++delik degil. Idia etmeden once olculecekler listesinden cikarildi.
+-- 
+2.39.5
+

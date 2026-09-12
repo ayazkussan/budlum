@@ -1,0 +1,31 @@
+From c1374b92076b3c4b9a54d8a4d1f0dff7e3768688 Mon Sep 17 00:00:00 2001
+From: ayazkussan <149924814+ayazkussan@users.noreply.github.com>
+Date: Thu, 10 Sep 2026 03:47:44 +0000
+Subject: [PATCH] denetim-2026-09-09N 5n: storage toolkit erasure clean
+
+---
+ ...09N-DALGA4-KONSENSUS-FINALITY-DOMAIN-COMMITMENT.md | 11 +++++++++++
+ 1 file changed, 11 insertions(+)
+
+diff --git a/DENETIM-2026-09-09N-DALGA4-KONSENSUS-FINALITY-DOMAIN-COMMITMENT.md b/DENETIM-2026-09-09N-DALGA4-KONSENSUS-FINALITY-DOMAIN-COMMITMENT.md
+index 385bb05..72fc4ea 100644
+--- a/DENETIM-2026-09-09N-DALGA4-KONSENSUS-FINALITY-DOMAIN-COMMITMENT.md
++++ b/DENETIM-2026-09-09N-DALGA4-KONSENSUS-FINALITY-DOMAIN-COMMITMENT.md
+@@ -472,3 +472,14 @@ yok) — içerik kopyası budlum mirror'ında GitHub'da.
+   dokümante).
+ - **mobile (768, örneklem)**: node profile (battery/NAT/self-host
+   B.U.D.), operatör katmanı, validate'li struct'lar.
++
++## 5n. Storage toolkit çekirdeği (erasure) — clean
++
++- **erasure (584)**: ağaç-içi Reed-Solomon GF(2^8) (dependency gerekçesi
++  dokümante: reed-solomon-erasure bakımsız/Solana ayrıldı, -simd unsafe,
++  crate `forbid(unsafe_code)`); `column_is_correctly_encoded` = coding
++  audit'in tümü (symbol-wise XOR-check); **epistemik sınır dürüstçe
++  dokümante**: column pass yalnızca o konudaki ilişkiyi kanıtlar
++  (probabilistik PDP; Ateniese 460/10000 sayısı), "operatör hiçbir şey
++  depolamadan on-demand parity üretebilir — retrieval challenge onu
++  sorar" (iki farklı soru, biri diğerini cevaplamaz).
+-- 
+2.39.5
+

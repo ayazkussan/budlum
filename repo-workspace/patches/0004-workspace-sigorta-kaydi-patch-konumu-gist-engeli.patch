@@ -1,0 +1,24 @@
+From f214ece6dfb663b713154d4c86ae52e0ec6d5cbd Mon Sep 17 00:00:00 2001
+From: Lubo's Ruler <ayazkussann@gmail.com>
+Date: Wed, 9 Sep 2026 16:00:02 +0000
+Subject: [PATCH 04/11] workspace: sigorta kaydi (patch konumu, gist engeli)
+
+---
+ memory/hafiza.md | 4 ++++
+ 1 file changed, 4 insertions(+)
+
+diff --git a/memory/hafiza.md b/memory/hafiza.md
+index 49d5f87..fe4ab93 100644
+--- a/memory/hafiza.md
++++ b/memory/hafiza.md
+@@ -6839,3 +6839,7 @@ Tek commit; CI dogrular. E4 sirada.
+   dogrulandi (larva degil) -> AR-GE-6 dongusu tam (worker -> executor gate ->
+   domain commitment writer -> light client). Fork push'lari CI calistirmaz
+   (ci.yml: main + PR to main) -> CI ancak PR50'ye tasinanlarda gorecek.
++- SIGHORTA: gist olusturmak engelli (bot token'i integration, gist access yok).
++  8 patch /home/user/arena-backup/ altinda (lubot 5 + workspace 3; base sha'lar
++  patch basliklarinda). Tur-sonu dosya kalici; riziko yalniz sandbox yenileme.
++  Kalici çözüm: bot'a lubot+workspace push (collaborator) ya da user push.
+-- 
+2.39.5
+

@@ -1,0 +1,71 @@
+From ddba8c708c81ceb7a5d6490ea0d832d4766440cc Mon Sep 17 00:00:00 2001
+From: ayazkussan <149924814+ayazkussan@users.noreply.github.com>
+Date: Thu, 10 Sep 2026 09:04:18 +0000
+Subject: [PATCH] denetim-2026-09-10A devam-6: olcumun sessizligi (bes yuzey
+ ANSI yuzunden hicbir sey gormuyordu)
+
+Kendi ekledigim teshis adimlarinin hatasi: satir-basindan desen + CARGO_TERM_COLOR
+= "sifir bulgu", kirmizi kosulda. Strip eklendi, yerelde kanitlandi. Run 44 icin
+tahmin onceden baglandi.
+---
+ ...-2026-09-10A-devam-6-olcumin-sessizligi.md | 48 +++++++++++++++++++
+ 1 file changed, 48 insertions(+)
+ create mode 100644 DENETIM-2026-09-10A-devam-6-olcumin-sessizligi.md
+
+diff --git a/DENETIM-2026-09-10A-devam-6-olcumin-sessizligi.md b/DENETIM-2026-09-10A-devam-6-olcumin-sessizligi.md
+new file mode 100644
+index 0000000..a7aa95b
+--- /dev/null
++++ b/DENETIM-2026-09-10A-devam-6-olcumin-sessizligi.md
+@@ -0,0 +1,48 @@
++# DENETIM-2026-09-10A (devam 6) — Ölçümün sessizliği: ANSI yüzünden "temiz" görünen beş teşhis adımı
++
++## Durum (ölçüldü, tahmin değil)
++
++Run 43 (`81c3b01`): `Install protoc` ✓, `Build` ✓, `Run tests` ✗ (101), ve bu
++turda eklediğim `Test failure surface` adımı **başarıyla koştu** ve şunu yazdı:
++
++    0 failing suites reported by `cargo test --no-fail-fast`; 36 lines of output were produced
++
++Yani: kırmızı bir adım, 36 satır çıktı, benim yüzeyimde "sıfır". Sebep workflow
++dosyasının üç satır üstünde: `env: CARGO_TERM_COLOR: always`. Cargo her satıra
++ESC kodu koyduğu için satır-başından deselen tüm kalıplar (`^error[`,
++`^failures:`, `^Diff in`, `test result: FAILED`) hiçbir şeyle eşleşmiyordu.
++Kanıt burnumuzun dibindeydi: run 37'nin annotation'larından biri
++`^[[1m^[[91merror^[[0m: failed to run custom build command` şeklinde geçmişte kalmıştı
++— o adım hiçbir şey filtrelemeden bastığı için kaçırılmamıştı.
++
++Bes yüzeyin besinde de aynı kusur vardı (build, fmt, typos, miri, asan). Hepsine
++seçimden önce kaçış-kodları silen bir `sed` katmanı kondu ve katman commit'ten
++ÖNCE yerelde doğrulandı:
++
++    strip yokken: eşleşmiyor
++    strip varken: ^error( → eşleşiyor
++
++Ayrıca: `Miri`/`ASan` yüzeyleri *önceki* adımların yazdığı dosyaları okuduğu
++için orada strip okuma tarafına kondu (dosya zaten renkli).
++
++## Neden bu bir "bulgu" değil de bir kayıt
++
++Kimse kodu kırmızıya çevirmedi; hiçbir hüküm adımı değişmedi; eklenen tek şey
++bir `sed`. Ama kaydın asıl sebebi hatanın **biçimi**:
++
++> ne zaman temizse hiçbir şey basmayan, ne zaman kırmızıysa hiçbir şey
++> basmayan bir ölçüm, temiz bir koşuyla ayırt edilemez.
++
++Bu, direktifin dokuzuncu bölümündeki "sessiz atlama" hastalığının CI
++tarafındaki hali ve kendi eklediğim aletlerde bulundu. Onun için buraya
++yazılıyor: bir teşhis adımı, kendi boş çıktısını "temiz" diye
++yorumlamamalı; ne gördüğünü sayarak söylemeli (`%s lines of output were
++produced` satırı bu yüzden eklendi ve bu sayede 36 satırla 0 eşleşmenin
++çelişkisi görülebildi).
++
++## Run 44 için önceden bağlanan tahmin
++
++Build yeşil kalır ve yüzey yine hiçbir şey basmazsa, hipotez "strip
++çalışmadı" değil: **36 satır, cargo'nun dev-dependency çözümlemesinin hatasıdır**
++ve top kaynakta değil `Cargo.lock`'tadır. Şart bu; koşulmazsa okuma
++"beklenmedik" satırıyla kayda geçer, düzeltilmez.
+-- 
+2.39.5
+

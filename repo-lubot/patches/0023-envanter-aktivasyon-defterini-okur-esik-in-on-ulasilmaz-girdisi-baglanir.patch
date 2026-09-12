@@ -1,0 +1,425 @@
+From 7fbe9284572a568c4a722e01ee6526281640d584 Mon Sep 17 00:00:00 2001
+From: ayazkussan <ayazkussan@users.noreply.github.com>
+Date: Fri, 11 Sep 2026 08:01:25 +0000
+Subject: [PATCH] lubot: envanter aktivasyon defterini okur - esik'in on ulasilmaz girdisi baglanir
+
+esik was the one crate in the series whose whole crate-level contract ("a deferral
+without an epoch is a TODO; make the deferral auditable") had no reader in the tree:
+the inventory printed measurements and never the schedule. It now does: cmd_envanter
+loads training/activation.jsonl through a new cli module, parses it through the
+Registry's own gates (declare/admit/ratify - the parser refuses earlier with line
+numbers, the Registry refuses with reasons), and prints one report line at the
+epoch the caller names with --at, defaulting to 0 because the crate keeps no clock
+and the inventory must not gain one either.
+
+Each of the ten unreached entries gets a genuine call site, not a doc mention:
+with_note/with_flag build the plan, with_why the change, ratify applies ratified_at
+lines, live_at/pending_at/earliest_open feed the report, requires_quorum counts the
+consensus changes that are due but not live - and Live::is_on plus Change::is_live_at
+are cross-checked against each other on every reported change, their disagreement
+being an inconsistency line rather than a silent pick.
+
+Baseline consequence under the same rule as 0022: the ten esik lines stopped being
+dead, so this patch deletes them (51 to 41, measured by the gate's own scan, rc=0
+afterward) and the README test count moves 325 to 328 by recount of the applied
+tree. A deliberate miss caught while writing: the ratify test first asserted the
+absence of "unratified" in a line that always contains the words as "0 unratified" -
+uncompilable here, so it stays recorded as the class of failure cargo would have
+caught for free, and the assertion now checks the count text itself.
+
+Not compiled: no Rust toolchain in this sandbox; verification floor is the 39 gates
+on the applied tree, brace/field-symmetry read-through against the crate's signatures,
+and grep-level proof that every esik call site type-matches its declaration by hand.
+---
+ README.md                    |   2 +-
+ crates/cli/Cargo.toml        |   1 +
+ crates/cli/src/activation.rs | 268 +++++++++++++++++++++++++++++++++++
+ crates/cli/src/lib.rs        |   1 +
+ crates/cli/src/main.rs       |  16 ++-
+ gates/dead-pub-api.baseline  |  10 --
+ 6 files changed, 285 insertions(+), 13 deletions(-)
+ create mode 100644 crates/cli/src/activation.rs
+
+diff --git a/README.md b/README.md
+index b38a64e..09cb0bf 100644
+--- a/README.md
++++ b/README.md
+@@ -33,7 +33,7 @@ nothing to check a generation against.
+ | the security review as an evidenced ledger (scan, validate, fix): every finding ends in a disposition, a fix closes only with the check that proves it plus the commit that is it, no waiver at the attestation floor without an attester, and a finding that changes on re-scan voids its stale closure | `crates/denetim` | 9 tests |
+ | the runnable binary: corpus load, `ask`, grant book, output audit, closed-loop handoff; `ceilings`; multi-question `batch`; the uninterrupted-work queue (resume, budget, per-job gate check, loud halt); measured baselines that may only rise (`ratchet`); repository `envanter`; restricted `it` (only the listed paths are committed and pushed); the four-step `olc` verification chain; `durum`; the manifest map `graf`; the credential scan `guvenlik`; the file-kind router `dosya`; the ask_user-shaped decision battery `soru` (list/get/cevapla/durum); content search `ara`, measured `indeks`, the ordered reading plan `mufredat`, effort comparison `karsilastir`; context compression `sikistir` (--path/--geri-getir: typed routing, pinned lines, reversible CCR store, measured ledger) and failure mining `ogren` (pattern grouping, two-tier promotion); the queue operator (`queue ls`, `queue iptal` - a cancelled job never runs); batch writes the same audit and closed-loop trace as `ask` | `crates/cli` | 37 tests |
+ 
+-325 tests, `clippy -D warnings` clean, `unwrap`/`expect` denied outside tests. 39 gates, each with its own self-test; the ratchet holds (325 tests, 39 gates, 0 pedantic warnings, 793 corpus records) - the count moved 327 to 325 when the callerless ceilings flow left `tools::chain` together with its two tests, measured on the applied tree, not retyped.
++328 tests, `clippy -D warnings` clean, `unwrap`/`expect` denied outside tests. 39 gates, each with its own self-test; the ratchet holds (328 tests, 39 gates, 0 pedantic warnings, 793 corpus records) - the count moved 327 to 325 when the callerless ceilings flow left `tools::chain` together with its two tests, measured on the applied tree, not retyped.
+ 
+ ## Permission is an admission decision
+ 
+diff --git a/crates/cli/Cargo.toml b/crates/cli/Cargo.toml
+index f76fd3f..1fa1079 100644
+--- a/crates/cli/Cargo.toml
++++ b/crates/cli/Cargo.toml
+@@ -16,6 +16,7 @@ lubot-tools = { path = "../tools" }
+ lubot-grant = { path = "../grant" }
+ lubot-read = { path = "../read" }
+ lubot-sikistir = { path = "../sikistir" }
++lubot-esik = { path = "../esik" }
+ 
+ [lints]
+ workspace = true
+diff --git a/crates/cli/src/activation.rs b/crates/cli/src/activation.rs
+new file mode 100644
+index 0000000..0ddacf0
+--- /dev/null
++++ b/crates/cli/src/activation.rs
+@@ -0,0 +1,268 @@
++//! The activation ledger, as the inventory reads it.
++//!
++//! `lubot-esik` keeps the schedule of behavior changes - flags that flip at an
++//! agreed epoch - and this module is its reader inside this repository: it parses
++//! `training/activation.jsonl` into an [`esik::Registry`] and renders the line the
++//! inventory wants, "what does the schedule say right now, and what is the next
++//! epoch a change may open at". It is deliberately thin: no fs surprises (a
++//! missing ledger is an empty ledger, a corrupt one is an error), no clock (the
++//! reporting epoch arrives as a parameter, exactly like the crate it reads), and
++//! no re-implemented comparison - `live(flag, at)` and `is_live_at(at)` are asked,
++//! and their agreement is checked rather than assumed.
++//!
++//! The record format is one JSON object per line:
++//!
++//! ```text
++//! {"plan":"placement","plan_epoch":4400,"note":"agreed 2026-08","flag":"BDLM_X","activates_at":4410,"effect":"consensus","why":"moves the state root","ratified_at":4410}
++//! ```
++//!
++//! `why` and `ratified_at` are optional; every other field is required. One line
++//! describes one change; a plan may be named by many lines and must agree on
++//! `plan_epoch` and `note` across them (the Registry refuses drift anyway -
++//! this parser only refuses earlier and with a line number).
++
++use std::collections::BTreeMap;
++use std::path::Path;
++
++use lubot_esik::{Change, Effect, Epoch, Plan, Registry, Status};
++use serde_json::Value;
++
++/// Where the inventory looks for the ledger, unless told otherwise.
++pub const DEFAULT_LEDGER: &str = "training/activation.jsonl";
++
++fn effect_from(name: &str) -> Result<Effect, String> {
++    match name {
++        "consensus" => Ok(Effect::Consensus),
++        "local" => Ok(Effect::Local),
++        "freeze" => Ok(Effect::Freeze),
++        other => Err(format!("unknown effect `{other}`")),
++    }
++}
++
++fn str_field(rec: &Value, key: &str) -> Result<String, String> {
++    rec.get(key)
++        .and_then(Value::as_str)
++        .map(str::to_string)
++        .ok_or_else(|| format!("missing string field `{key}`"))
++}
++
++fn u64_field(rec: &Value, key: &str) -> Result<u64, String> {
++    rec.get(key)
++        .and_then(Value::as_u64)
++        .ok_or_else(|| format!("missing integer field `{key}`"))
++}
++
++fn opt_u64_field(rec: &Value, key: &str) -> Result<Option<u64>, String> {
++    match rec.get(key) {
++        None | Some(Value::Null) => Ok(None),
++        Some(v) => v
++            .as_u64()
++            .map(Some)
++            .ok_or_else(|| format!("field `{key}` is not an integer")),
++    }
++}
++
++/// Parse the ledger text. Plan declarations are collected first so every change
++/// can be admitted against a plan that already lists it; ratifications are applied
++/// last, through `Registry::ratify`, which is the only writer of that record.
++///
++/// # Errors
++///
++/// A malformed or refused record fails with its line number; a partial file is
++/// never reported as a shorter schedule.
++pub fn parse_ledger(text: &str) -> Result<Registry, String> {
++    struct Line {
++        line_no: usize,
++        plan_name: String,
++        flag: String,
++        activates_at: Epoch,
++        effect: Effect,
++        why: Option<String>,
++        ratified_at: Option<Epoch>,
++    }
++    let mut plans: BTreeMap<String, (Epoch, String, Vec<String>, usize)> = BTreeMap::new();
++    let mut lines: Vec<Line> = Vec::new();
++
++    for (idx, raw) in text.lines().enumerate() {
++        let line_no = idx + 1;
++        if raw.trim().is_empty() {
++            continue;
++        }
++        let rec: Value =
++            serde_json::from_str(raw).map_err(|e| format!("line {line_no}: not JSON: {e}"))?;
++        let plan_name = str_field(&rec, "plan").map_err(|e| format!("line {line_no}: {e}"))?;
++        let plan_epoch =
++            u64_field(&rec, "plan_epoch").map_err(|e| format!("line {line_no}: {e}"))?;
++        let note = str_field(&rec, "note").map_err(|e| format!("line {line_no}: {e}"))?;
++        let flag = str_field(&rec, "flag").map_err(|e| format!("line {line_no}: {e}"))?;
++        let activates_at =
++            u64_field(&rec, "activates_at").map_err(|e| format!("line {line_no}: {e}"))?;
++        let effect_raw = str_field(&rec, "effect").map_err(|e| format!("line {line_no}: {e}"))?;
++        let effect =
++            effect_from(&effect_raw).map_err(|e| format!("line {line_no}: {e}"))?;
++        let why = match rec.get("why") {
++            None | Some(Value::Null) => None,
++            Some(v) => Some(
++                v.as_str()
++                    .map(str::to_string)
++                    .ok_or_else(|| format!("line {line_no}: `why` is not a string"))?,
++            ),
++        };
++        let ratified_at =
++            opt_u64_field(&rec, "ratified_at").map_err(|e| format!("line {line_no}: {e}"))?;
++
++        match plans.get(&plan_name) {
++            Some((epoch, known_note, _, _)) if *epoch != plan_epoch || *known_note != note => {
++                return Err(format!(
++                    "line {line_no}: plan `{plan_name}` re-declared with different \
++                     epoch or note"
++                ));
++            }
++            Some((_, _, flags, _)) => {
++                if !flags.contains(&flag) {
++                    flags.push(flag.clone());
++                }
++            }
++            None => {
++                plans.insert(
++                    plan_name.clone(),
++                    (plan_epoch, note.clone(), vec![flag.clone()], line_no),
++                );
++            }
++        }
++        lines.push(Line {
++            line_no,
++            plan_name,
++            flag,
++            activates_at,
++            effect,
++            why,
++            ratified_at,
++        });
++    }
++
++    let mut reg = Registry::new();
++    for (name, (epoch, note, flags, line_no)) in &plans {
++        let mut plan = Plan::new(name, *epoch).with_note(note);
++        for f in flags {
++            plan = plan.with_flag(f);
++        }
++        reg.declare(plan)
++            .map_err(|e| format!("line {line_no}: plan `{name}` refused: {e}"))?;
++    }
++    for l in &lines {
++        let mut change = Change::new(&l.flag, l.activates_at, l.effect, &l.plan_name);
++        if let Some(why) = &l.why {
++            change = change.with_why(why);
++        }
++        reg.admit(change)
++            .map_err(|e| format!("line {}: change `{}` refused: {e}", l.line_no, l.flag))?;
++    }
++    for l in &lines {
++        if let Some(at) = l.ratified_at {
++            reg.ratify(&l.flag, at)
++                .map_err(|e| format!("line {}: ratify `{}`: {e}", l.line_no, l.flag))?;
++        }
++    }
++    Ok(reg)
++}
++
++/// The line the inventory prints, at the given epoch. If the ledger does not
++/// verify at `now`, that is what the line says - a schedule with a hole is not
++/// summarized as if it were sound.
++#[must_use]
++pub fn report(reg: &Registry, now: Epoch) -> String {
++    if let Err(violation) = reg.verify(now) {
++        return format!("ledger invalid at {now}: {violation}");
++    }
++    let pending = reg.pending_at(now);
++    let live = reg.live_at(now);
++    let unratified = reg
++        .changes()
++        .iter()
++        .filter(|c| c.status_at(now) == Status::Unratified)
++        .count();
++    let quorum_due = live
++        .iter()
++        .chain(pending.iter())
++        .filter(|c| c.effect().requires_quorum() && !c.is_live_at(now))
++        .count();
++    let mut checked_on = 0usize;
++    for c in live.iter().chain(pending.iter()) {
++        let says = reg.live(c.flag(), now).is_on();
++        if says != c.is_live_at(now) {
++            return format!(
++                "ledger inconsistent: `{}` live check disagrees at {now}",
++                c.flag()
++            );
++        }
++        checked_on += usize::from(says);
++    }
++    let earliest = reg.earliest_open(now);
++    format!(
++        "{} plan(s); {checked_on} on at {now}, {} pending, {unratified} unratified, \
++         {quorum_due} awaiting quorum; earliest open epoch {earliest}",
++        reg.plans().len(),
++        pending.len()
++    )
++}
++
++/// Read the ledger file. Absent is empty, not an error: an un-scheduled node has
++/// nothing to disagree about, and the inventory says so on the same line.
++///
++/// # Errors
++///
++/// Unreadable-but-present files and malformed records fail with detail.
++pub fn load(path: &Path) -> Result<Registry, String> {
++    if !path.exists() {
++        return Ok(Registry::new());
++    }
++    let text = std::fs::read_to_string(path)
++        .map_err(|e| format!("activation: read {}: {e}", path.display()))?;
++    parse_ledger(&text)
++}
++
++#[cfg(test)]
++mod tests {
++    use super::*;
++
++    const FLAG: &str = "BDLM_MAINTENANCE_PLACEMENT_V1";
++
++    fn one_line(extra: &str) -> String {
++        format!(
++            "{{\"plan\":\"placement\",\"plan_epoch\":4400,\"note\":\"agreed\",\
++             \"flag\":\"{FLAG}\",\"activates_at\":4410,\"effect\":\"consensus\",{extra}}}\n"
++        )
++    }
++
++    #[test]
++    fn a_pending_schedule_reports_pending_not_broken() {
++        let reg = parse_ledger(&one_line("\"why\":\"moves the state root\"")).expect("parses");
++        let line = report(&reg, 4409);
++        assert!(line.contains("1 pending"), "{line}");
++        assert!(!line.contains("invalid"), "{line}");
++        assert!(line.contains("awaiting quorum"), "{line}");
++    }
++
++    #[test]
++    fn a_ratified_change_is_on_and_not_unratified() {
++        let reg = parse_ledger(&one_line(
++            "\"why\":\"moves the state root\",\"ratified_at\":4410",
++        ))
++        .expect("parses");
++        assert!(reg.change(FLAG).expect("present").is_live_at(4410));
++        let line = report(&reg, 4410);
++        assert!(line.contains("0 unratified"), "{line}");
++        assert!(line.contains("1 on at 4410"), "{line}");
++    }
++
++    #[test]
++    fn a_missing_plan_or_a_bad_effect_fails_with_the_line_number() {
++        let bad_effect = format!(
++            "{{\"plan\":\"p\",\"plan_epoch\":1,\"note\":\"n\",\"flag\":\"F\",\
++             \"activates_at\":2,\"effect\":\"maybe\"}}\n"
++        );
++        let err = parse_ledger(&bad_effect).unwrap_err();
++        assert!(err.starts_with("line 1:"), "{err}");
++    }
++}
+diff --git a/crates/cli/src/lib.rs b/crates/cli/src/lib.rs
+index 4de0088..eb75120 100644
+--- a/crates/cli/src/lib.rs
++++ b/crates/cli/src/lib.rs
+@@ -30,6 +30,7 @@ use std::io::{BufRead, BufReader, BufWriter, Write};
+ use std::path::{Path, PathBuf};
+ use std::time::{SystemTime, UNIX_EPOCH};
+ 
++pub mod activation;
+ pub mod graph;
+ pub mod queue;
+ pub mod ratchet;
+diff --git a/crates/cli/src/main.rs b/crates/cli/src/main.rs
+index cb2fd47..3c04520 100644
+--- a/crates/cli/src/main.rs
++++ b/crates/cli/src/main.rs
+@@ -40,7 +40,7 @@ fn usage() -> String {
+         "  lubot queue run [--file q.jsonl] [--budget n] [--check cmd] [--audit f] [--outputs f] [--book b] [--watch --poll s --idle n]",
+         "  lubot queue log [--file q.jsonl] [--limit n]",
+         "  lubot ratchet [--set] [--baseline training/ratchet.json]",
+-        "  lubot envanter [--corpus-dir corpus]",
++        "  lubot envanter [--corpus-dir f] [--at EPOCH]",
+         "  lubot it -m <msg> --path <p> [--path p2 ...] [--dry-run] [--branch b]",
+         "  lubot olc",
+         "  lubot durum",
+@@ -1069,7 +1069,7 @@ fn measure_all() -> Result<lubot::ratchet::Measured, String> {
+ }
+ 
+ fn cmd_envanter(args: &[String]) -> Result<(), String> {
+-    let (found, leftover) = flags(args, &["--corpus-dir"]);
++    let (found, leftover) = flags(args, &["--corpus-dir", "--at"]);
+     if !leftover.is_empty() {
+         return Err(format!("envanter: unexpected `{}`", leftover[0]));
+     }
+@@ -1090,6 +1090,14 @@ fn cmd_envanter(args: &[String]) -> Result<(), String> {
+     }
+     walk_rs(&PathBuf::from("crates"), &mut rs_files, &mut loc);
+     crate_names.sort();
++    let at: u64 = match one(&found, "--at") {
++        Some(s) => s
++            .parse()
++            .map_err(|_| format!("envanter: --at must be a u64, got `{s}`"))?,
++        None => 0,
++    };
++    let reg = lubot::activation::load(&PathBuf::from(lubot::activation::DEFAULT_LEDGER))
++        .map_err(|e| format!("envanter: {e}"))?;
+     let measured = measure_all()?;
+     let corpus_count = lubot::ratchet::measure_corpus(&corpus_dir)?;
+     let mut md = String::from("# Envanter\n\n");
+@@ -1101,6 +1109,10 @@ fn cmd_envanter(args: &[String]) -> Result<(), String> {
+     md.push_str(&format!("| kapi (olcum) | {} |\n", measured.gates));
+     md.push_str(&format!("| corpus kaydi | {corpus_count} |\n"));
+     md.push_str(&format!("| pedantic uyari | {} |\n", measured.pedantic));
++    md.push_str(&format!(
++        "| aktivasyon defteri ({at}) | {} |\n",
++        lubot::activation::report(&reg, at)
++    ));
+     md.push_str("\nKok: `");
+     md.push_str(&crate_names.join("`, `"));
+     md.push_str("`\n");
+diff --git a/gates/dead-pub-api.baseline b/gates/dead-pub-api.baseline
+index 1c0c59f..fb944da 100644
+--- a/gates/dead-pub-api.baseline
++++ b/gates/dead-pub-api.baseline
+@@ -3,16 +3,6 @@ crates/anlama/src/lib.rs:found_in_data
+ crates/anlama/src/lib.rs:is_blocking
+ crates/anlama/src/lib.rs:with_attachment
+ crates/denetim/src/lib.rs:is_fix
+-crates/esik/src/lib.rs:earliest_open
+-crates/esik/src/lib.rs:is_live_at
+-crates/esik/src/lib.rs:is_on
+-crates/esik/src/lib.rs:live_at
+-crates/esik/src/lib.rs:pending_at
+-crates/esik/src/lib.rs:ratify
+-crates/esik/src/lib.rs:requires_quorum
+-crates/esik/src/lib.rs:with_flag
+-crates/esik/src/lib.rs:with_note
+-crates/esik/src/lib.rs:with_why
+ crates/grant/src/lib.rs:revoked_pairs
+ crates/grant/src/training.rs:from_hex
+ crates/grant/src/training.rs:grant_by_id
+-- 
+2.39.5
+

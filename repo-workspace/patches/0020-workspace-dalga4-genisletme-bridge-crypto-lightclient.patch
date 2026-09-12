@@ -1,0 +1,56 @@
+From 347cf1459c5c912ab0810eb3c0609165b8c17fa6 Mon Sep 17 00:00:00 2001
+From: ayazkussan <149924814+ayazkussan@users.noreply.github.com>
+Date: Wed, 9 Sep 2026 19:26:07 +0000
+Subject: [PATCH] denetim-2026-09-09N genisletme: light
+ client/BLS/crypto/bridge clean
+
+---
+ ...A4-KONSENSUS-FINALITY-DOMAIN-COMMITMENT.md | 32 +++++++++++++++++++
+ 1 file changed, 32 insertions(+)
+
+diff --git a/DENETIM-2026-09-09N-DALGA4-KONSENSUS-FINALITY-DOMAIN-COMMITMENT.md b/DENETIM-2026-09-09N-DALGA4-KONSENSUS-FINALITY-DOMAIN-COMMITMENT.md
+index bfc4fb4..aa627a0 100644
+--- a/DENETIM-2026-09-09N-DALGA4-KONSENSUS-FINALITY-DOMAIN-COMMITMENT.md
++++ b/DENETIM-2026-09-09N-DALGA4-KONSENSUS-FINALITY-DOMAIN-COMMITMENT.md
+@@ -90,6 +90,38 @@ dokümante değil.
+   doğrulaması `full_validate` üzerinden; PoS slot kontrolü domain chain'de
+   epoch_randomness + VRF ile (pos.rs pass'te clean).
+ 
++## 5b. Light client + BLS finality + crypto + bridge — clean (aynı tur, genişletilmiş kapsam)
++
++- **light_client (926 satır)**: trust anchor (height, hash, set_hash) sabit;
++  `verify_checkpoint`: header self-consistency (recompute) + cert↔header +
++  cert↔trusted-set + snapshot↔cert binding zinciri eksiksiz; devamlılık BFT safety'den
++  (sabit set + 2/3+1 overlap), `verify_header_chain` ayrı header-level kontrol.
++  `verify_pq_checkpoint` aynı binding zinciri + PQ quorum.
++- **BLS cert verify (finality.rs:789)**: activation epoch gate, canonical bitmap
++  (uzunluk + out-of-range trailing bit → byte-distinct cert), per-signer G2
++  subgroup (is_torsion_free, §5 small-subgroup dokümante) + identity guard,
++  stake+count quorum, `e(sig,-G2)·e(H(msg),agg_pk)=1` pairing — textbook doğru.
++- **crypto**: `key_set_preimage` = kritik geçmiş fix (length-prefix'siz key
++  concatenation → state-root collision → silent partition; 4 production site
++  kanonik fonksiyonda, eski desen yalnızca doküman+regresyon testte);
++  BLS PoP (chain_id+address binding, R11 replay); PQ scheme ID genesis-pin +
++  startup check (dilithium5 2592B vs ml-dsa-65 1952B split riski dokümante);
++  `pq_signing_message` domain-tagged → ML-DSA empty context kabul edilebilir.
++- **bridge (lock/mint/burn)**: lock = asset-status + replay nonce + transfer kaydı;
++  mint = verify_id + transfer varlığı + **payload_hash binding** (B2 fund-inflation
++  vektörü) + replay + Locked→Minted geçişi. Üretim mint kapıları:
++  **expected_block_hash zorunlu** (§9 forgery gate — stale/equivocated commitment
++  ile mint yok), PoW mint yalnız bounded header-chain adapter ile, supply ceiling
++  (`ensure_mint_headroom`) recipient+fee çifti aynı gate'e bağlı (dokümante),
++  BridgeBurn correlation_id zorunlu.
++- **Permissionless relay yolu** (`submit_relay_proof`) aynı mint gate'lerinden
++  geçiyor; reorg'da pending'in hayatta kalması bile güvenli (mint gate, rolled-back
++  bridge_state transfer'ını yeniden kontrol eder → "Unknown bridge transfer").
++- Not: `submit_relay_proof`'de §9 `expected_block_hash` binding'i yok (commitment,
++  (domain,height) ile aranıyor) — equivocation rejection (accept_domain_commitment)
++  (domain,height)→tekil commitment garantilediği için bugünkü registry semantiğinde
++  ambigüite yok; F-4'ün bir alt notu olarak izleniyor.
++
+ ## 6. Döngü durumu
+ 
+ - W1 ✅ (F-1 e4f472b) · W2 ✅ (E-7 fe5461e, E-1 a8b45e1) · W3 ✅ (F-3 8ba7eab)
+-- 
+2.39.5
+

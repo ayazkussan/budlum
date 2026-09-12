@@ -1,0 +1,43 @@
+From 45f83539e18821d2e635ab6554ec99ed5e07aad6 Mon Sep 17 00:00:00 2001
+From: Lubo's Ruler <ayazkussann@gmail.com>
+Date: Wed, 9 Sep 2026 16:57:13 +0000
+Subject: [PATCH 10/11] =?UTF-8?q?workspace:=20BAGLANTILIK-LOG=20Lubot=20bo?=
+ =?UTF-8?q?lumu=20=E2=80=94=204=20zincir=20BA=C4=9ELI=20(SHA'li=20kanit)?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+---
+ BAGLANTILIK-LOG.md | 13 +++++++++----
+ 1 file changed, 9 insertions(+), 4 deletions(-)
+
+diff --git a/BAGLANTILIK-LOG.md b/BAGLANTILIK-LOG.md
+index 4c653dd..39a2385 100644
+--- a/BAGLANTILIK-LOG.md
++++ b/BAGLANTILIK-LOG.md
+@@ -43,13 +43,18 @@ doğrulayıcı (run numaraları PR #1 check-runs'da).
+ 
+ | madde | durum | kanıt | SHA |
+ |---|---|---|---|
+-| AiRegistry çağrı zinciri | **DENETLENMEDİ** (açık) | — | — |
+-| Pollen AccessGrant çağrı zinciri | **DENETLENMEDİ** (açık) | — | — |
+-| BNS çağrı zinciri | **DENETLENMEDİ** (açık) | — | — |
+-| B.U.D. ↔ Lubot çağrı zinciri | **DENETLENMEDİ** (açık) | — | — |
++| AiRegistry çağrı zinciri | **BAĞLI** (mock değil): `ai_registry` AccountState'te; `TransactionType::AiInferenceRequest` arm'ı: perception admission (fail-closed) → `submit_request` → fee/max_fee çekimi; `AiInferenceResult`: bonded AI_OPERATOR (RoleId=8) → `submit_result` | `core/account.rs:247`, `execution/executor.rs:1306-1395`, `ai/registry.rs` | f455ba4 |
++| Pollen AccessGrant çağrı zinciri | **BAĞLI** (closed-circuit): aynı arm içinde `marketplace.validate_ai_read_ref(input_ref)` → `consume_ai_read_grant`; admission input_ref asset'ini beyanla eşleştirir (decode edemeyen ref REDDEDİLİR, atlanmaz) | `execution/executor.rs:1333-1346`, `ai_inference/mod.rs:112-155`, `pollen::data_rights::AiDataInputRef` | f455ba4 |
++| BNS çağrı zinciri | **BAĞLI**: `bns_registry` AccountState'te; 4 transaction (BnsRegister/BnsSetContent/BnsRegisterSubdomain/BnsSetStorage) + executor arm'ları + chain_actor RPC (resolve dahil); README var | `core/account.rs:247`, `execution/executor.rs:608-696`, `chain/chain_actor.rs:4400-4460` | f455ba4 |
++| B.U.D. ↔ Lubot(AI) çağrı zinciri | **BAĞLI (on-chain bağ)**: perception beyanı B.U.D. `content_id` + Pollen asset'i request-id V3'e bağlıyor — operatör ödendiği read'den farklı read'e yanıtlayamaz; byte zincir dışı (veri on-chain, byte off-chain), teslimi retrieval challenge uygulatır | `ai_inference/perception.rs:284,336`, `ai_inference/mod.rs:112` | f455ba4 |
+ | model kaynağı kararı (fine-tune / sıfırdan) | AÇIK NOKTA (direktif: işaretlenmeye devam) | workspace hafiza | — |
+ | yetenek crate'leri (index/sikistir/izolasyon/denetim) | BAĞLI (lubot repo, 191 test, 38 kapi) | repo-lubot aynası (tek PR #1) | db7dec9 (ayna), 12bc9ac..ddf0ac8 (lubot) |
+ 
++Not: direktifin "ürün modülü (src/lubot)" yolu canlı repoda YOK (ne core ne lubot
++repo'sunda `src/lubot`); Lubot ürün yüzeyi core'da AI katmanı (src/ai +
++src/ai_inference) olarak yürüyor — dört zincir orada doğrulandı. `src/lubot`
++ya planlanan bir yol ya da kavramsal etiket; sapma olarak loglandı.
++
+ ## Ekosistem
+ 
+ | modül | durum | not |
+-- 
+2.39.5
+

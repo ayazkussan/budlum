@@ -1,0 +1,64 @@
+From 660efab7b37dd3dd4d655d52a02ca4215aeb2588 Mon Sep 17 00:00:00 2001
+From: ayazkussan <149924814+ayazkussan@users.noreply.github.com>
+Date: Wed, 9 Sep 2026 19:44:14 +0000
+Subject: [PATCH] denetim-2026-09-09N 5f: storage_deal clean + kayit defteri 6
+
+---
+ ...A4-KONSENSUS-FINALITY-DOMAIN-COMMITMENT.md | 27 ++++++++++++++++---
+ 1 file changed, 24 insertions(+), 3 deletions(-)
+
+diff --git a/DENETIM-2026-09-09N-DALGA4-KONSENSUS-FINALITY-DOMAIN-COMMITMENT.md b/DENETIM-2026-09-09N-DALGA4-KONSENSUS-FINALITY-DOMAIN-COMMITMENT.md
+index 889ccce..20b2e08 100644
+--- a/DENETIM-2026-09-09N-DALGA4-KONSENSUS-FINALITY-DOMAIN-COMMITMENT.md
++++ b/DENETIM-2026-09-09N-DALGA4-KONSENSUS-FINALITY-DOMAIN-COMMITMENT.md
+@@ -191,6 +191,7 @@ dokümante değil.
+ | 3 | BNS renew/transfer | tx type yok, yalnız test çağırıyor | §5d |
+ | 4 | `expired_relays()` slashing consumer | üretim çağıranı yok | 09K notu |
+ | 5 | Model kaynağı kararı | kullanıcı kararı AÇIK | hafiza |
++| 6 | `declare_self_host_policy` | check placement yolunda wired, declaration tx'siz (canlı zincirde policy boş) | §5f |
+ 
+ ## 5e. DeEd + AI inference/execution — clean
+ 
+@@ -213,6 +214,26 @@ dokümante değil.
+   `ai_exec_program_hash`, `ai_exec_chain_id`, `ai_exec_stark`...);
+   `proof_bytes` boyutu **deserialization'dan önce** sınırı (DoS notu).
+ 
++## 5f. storage_deal (6734, örneklem: open_deal + challenge sistemi) — clean
++
++- **open_deal**: Merkle envelope zorunlu (mainnet fail-closed, VerifyMerkle
++  64-depth gate bekleniyor; devnet'te de envelope+root + format validasyonu),
++  bond >= min, **mobil operator primary replika tutamaz** (self-reported
++  class, chain declared'e bağlar — dokümante), **self-host policy check
++  placement yoluna wired** ama `declare_self_host_policy` hâlâ tx'siz
++  (dostça dokümante: "check bugün Ok(()) döner; wiring günü geldiğinde
++  check zaten okunuyor"), **manifest k/n forgery fix'i** (yazar k=1,n=3
++  sans-parity false redundancy idare edebilir; validate_untrusted =
++  data_shards==k, parity==n-k; ikinci entry-point drift'i dokümante —
++  deal-open yolu RegisterStorageManifest'in check'ini kaçırıyordu),
++  Three=recipe-only (body economics bypass engeli).
++- **Challenge sistemi**: retrieval challenge = "bu byte'lar hâlâ sende mi"
++  (entropy-derived range, opener seçemez); **coding audit** = "parity
++  shard'ın gerçekten parity mi" (arbitrary-bytes-alt-ContentId trick'i
++  repair'de yakalanırdı — coding audit bunu fiili olarak kapatır);
++  opener bond, ZK proof yolu (verify_answer_challenge_zk_proof),
++  missed challenge → finalize (slashing).
++
+ ## 6. Döngü durumu
+ 
+ - W1 ✅ (F-1 e4f472b) · W2 ✅ (E-7 fe5461e, E-1 a8b45e1) · W3 ✅ (F-3 8ba7eab)
+@@ -221,9 +242,9 @@ dokümante değil.
+ - 09M (E-7 on-chain relay tasarımı) yazıldı — uygulama bu tasarım onayını bekler.
+ - Kapatılan (bu rapor): konsensüs(7), finality, light_client, network(örneklem),
+   domain, crypto, bridge, settlement, registry-slashing, executor, gateway,
+-  governance, constitution, BNS, AI registry/inference, DeEd.
+-- Sonraki alanlar: storage_deal (6734), network/node.rs derin (3352),
+-  budlumxyz, core/money + account_abstraction, bin/cli, storage/db,
++  governance, constitution, BNS, AI registry/inference, DeEd, storage_deal(örneklem).
++- Sonraki alanlar: network/node.rs derin (3352), budlumxyz, core/money +
++  account_abstraction, bin/cli, storage/db,
+   CI log detayları (EOF + GitHub auth kopması — reconnect bekleniyor).
+ - **Bekleyen kullanıcı aksiyonları**: (1) GitHub bağlantısını Arena'dan
+   yeniden kur (git push auth kayboldu: API okuyor, git işlemleri
+-- 
+2.39.5
+
