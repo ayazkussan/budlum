@@ -1,0 +1,18 @@
+[package]
+name = "budfly"
+version = "0.1.0"
+edition = "2021"
+license = "LicenseRef-PolyForm-Shield-1.0.0"
+description = "Connectome-native spiking execution and a many-core neuromorphic fabric model; every simulation tick commits to a hash-chained anchor a settlement layer can record as a fact."
+
+# No dependencies, on purpose. Same rule as `budlum-note-packing`: this crate is
+# meant to be reachable from the node, the zkVM tooling and audit scripts, so it
+# cannot drag a dependency tree into three different workspaces. Everything it
+# needs (SHA-256, RNG, fixed-point LIF dynamics) is small and lives in-tree.
+[dependencies]
+
+# The repository panic gate: `unwrap`/`expect` are forbidden on production paths.
+# Test targets re-enable them locally (repository convention).
+[lints.clippy]
+unwrap_used = "deny"
+expect_used = "deny"
