@@ -39,6 +39,12 @@ extend-ignore-re = [
 ]
 
 [default.extend-words]
+# -- BudFly (fly neuromorphic) domain terms -------------------------------------
+AER = "AER"
+Inh = "Inh"
+inh = "inh"
+INH = "INH"
+EB = "EB"
 # -- Turkish words (false positives), removed as the migration proceeds --------
 # Each maps to itself = "this spelling is correct, do not suggest a fix".
 blok = "blok"
