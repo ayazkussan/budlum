@@ -53,7 +53,7 @@ jobs:
             echo "already formatted"
           else
             git commit -m "chore(budfly): cargo fmt applied in CI" 2>&1 | tail -2
-            git push 2>&1 | tail -2
+            git push
           fi
 
   gate:
@@ -76,7 +76,8 @@ jobs:
       - name: fmt
         run: |
           out=$(cargo fmt --manifest-path crates/budfly/Cargo.toml --all -- --check 2>&1) || {
-            echo "${out}" | head -30 | while IFS= read -r l; do echo "::error::[fmt] ${l}"; done
+            { echo '### fmt diff (rustfmt --check)'; echo '```diff'; echo "${out}"; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+            echo "${out}" | tail -30 | while IFS= read -r l; do echo "::error::[fmt] ${l}"; done
             exit 1
           }
       # House panic gate: clippy with the crate-level lint table
@@ -85,12 +86,14 @@ jobs:
       - name: clippy
         run: |
           out=$(cargo clippy --manifest-path crates/budfly/Cargo.toml --all-targets -- -D warnings 2>&1) || {
-            echo "${out}" | head -40 | while IFS= read -r l; do echo "::error::[clippy] ${l}"; done
+            { echo '### clippy -D warnings'; echo '```'; echo "${out}"; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+            echo "${out}" | tail -40 | while IFS= read -r l; do echo "::error::[clippy] ${l}"; done
             exit 1
           }
       - name: tests (goldens + scenarios + unit)
         run: |
           out=$(cargo test --manifest-path crates/budfly/Cargo.toml 2>&1) || {
+            { echo '### cargo test'; echo '```'; echo "${out}"; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
             echo "${out}" | tail -40 | while IFS= read -r l; do echo "::error::[tests] ${l}"; done
             exit 1
           }
