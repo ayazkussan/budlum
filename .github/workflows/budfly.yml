@@ -55,10 +55,17 @@ jobs:
           set -uo pipefail
           report_failure() {
             local name="$1" out="$2"
+            # Channel A: PR comment (best effort).
             if [ -n "${PR_NUMBER}" ]; then
-              printf '**BudFly gate `%s` FAILED**\n\n```\n%.60000s\n```\n' "${name}" "${out}" \
-                | gh pr comment "${PR_NUMBER}" --repo "${REPO}" --body-file - || true
+              if ! printf '**BudFly gate `%s` FAILED**\n\n```\n%.60000s\n```\n' "${name}" "${out}" \
+                | gh pr comment "${PR_NUMBER}" --repo "${REPO}" --body-file -; then
+                echo "::warning::PR comment channel failed for ${name}"
+              fi
             fi
+            # Channel B: checks annotations (readable via the Checks API).
+            echo "${out}" | head -40 | while IFS= read -r line; do
+              echo "::error::[${name}] ${line}"
+            done
             printf '%s\n' "${out}" | tail -60
             echo "::error::${name} failed"
           }
