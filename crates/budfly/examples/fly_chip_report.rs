@@ -16,7 +16,10 @@ fn main() {
 
     println!("-- BudFly-N1 sketch --");
     println!("  neurons/core cap      : {}", chip.neuron_cap);
-    println!("  synaptic SRAM/core    : {} KiB", chip.syn_sram_bytes / 1024);
+    println!(
+        "  synaptic SRAM/core    : {} KiB",
+        chip.syn_sram_bytes / 1024
+    );
     println!("  SOPs/core/cycle       : {}", chip.sop_per_cycle);
     println!();
 
@@ -30,9 +33,16 @@ fn main() {
             "  cores                 : {} ({}x{} mesh)",
             p.cores, p.mesh_x, p.mesh_y
         );
-        println!("  syn/core max          : {} (cap {})", p.syn_per_core_max, chip.syn_cap());
+        println!(
+            "  syn/core max          : {} (cap {})",
+            p.syn_per_core_max,
+            chip.syn_cap()
+        );
         println!("  SRAM overflow cores   : {}", p.sram_overflow_cores);
-        println!("  avg XY hops/edge      : {:.2}", p.avg_hops_e2_x100 as f64 / 100.0);
+        println!(
+            "  avg XY hops/edge      : {:.2}",
+            p.avg_hops_e2_x100 as f64 / 100.0
+        );
         println!(
             "  dest cores/spike      : {:.1}",
             p.avg_dest_cores_per_spike_x10 as f64 / 10.0
@@ -43,14 +53,25 @@ fn main() {
     let r = real_scale_report(&chip);
     println!("-- analytic: published MaleCNS scale (166,700 neurons / 25,582,938 connections) --");
     println!("  cores by neuron cap   : {}", r.cores_by_neurons);
-    println!("  cores by synapse SRAM : {}  <- binding", r.cores_by_synapses);
-    println!("  mesh                  : {}x{} ({} slots)", r.mesh_x, r.mesh_y, r.mesh_x * r.mesh_y);
+    println!(
+        "  cores by synapse SRAM : {}  <- binding",
+        r.cores_by_synapses
+    );
+    println!(
+        "  mesh                  : {}x{} ({} slots)",
+        r.mesh_x,
+        r.mesh_y,
+        r.mesh_x * r.mesh_y
+    );
     println!(
         "  activity model        : {} spiking/tick ({}%), fan-out {}",
         r.active_per_tick, 2, r.avg_fan_out
     );
     println!("  SOPs/tick             : {}", r.sops_per_tick);
-    println!("  fabric cycles/tick    : {}  (@64 SOP/core/cycle)", r.cycles_per_tick);
+    println!(
+        "  fabric cycles/tick    : {}  (@64 SOP/core/cycle)",
+        r.cycles_per_tick
+    );
     println!(
         "  ticks/second @1GHz    : {}   (fly biology runs at ~10-1000 equivalent ticks/s)",
         r.ticks_per_second
@@ -67,11 +88,17 @@ fn main() {
     let s = sentinel_verdict(&c, &digest);
     println!("-- sentinel demo: sha256(\"budlum-genesis\") --");
     println!("  stim neurons          : {}", s.stim_neurons);
-    println!("  DN_L / DN_R / MDN     : {} / {} / {}", s.dn_l, s.dn_r, s.mdn);
+    println!(
+        "  DN_L / DN_R / MDN     : {} / {} / {}",
+        s.dn_l, s.dn_r, s.mdn
+    );
     println!("  verdict               : {:?}", s.verdict);
     println!("  anchor                : {}", hex32(&s.anchor));
     println!();
     let eb = Region::CxEb;
     println!("note: the verdict is an exploratory readout; the anchor is the settlement-");
-    println!("      grade artifact. EB ring size is {} at this scale.", c.size(eb));
+    println!(
+        "      grade artifact. EB ring size is {} at this scale.",
+        c.size(eb)
+    );
 }

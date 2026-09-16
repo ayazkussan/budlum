@@ -238,7 +238,9 @@ struct Gen<'a> {
 impl Gen<'_> {
     /// Appends one directed edge; generation order is golden-relevant.
     fn add(&mut self, pre: Region, i: usize, post: Region, j: usize, count: u32, inhibitory: bool) {
-        let mut w = i32::try_from(count.max(1)).unwrap_or(1).saturating_mul(W_SYN);
+        let mut w = i32::try_from(count.max(1))
+            .unwrap_or(1)
+            .saturating_mul(W_SYN);
         if inhibitory {
             w = -w;
         }
@@ -413,7 +415,11 @@ pub fn generate(scale_num: u32, scale_den: u32, seed: u64) -> Connectome {
     let n_lh = sizes[Region::Lh.idx()];
     let (n_dl, n_dr) = (sizes[Region::DnL.idx()], sizes[Region::DnR.idx()]);
     for i in 0..n_lh {
-        let (tgt, n_t) = if i % 2 == 0 { (Region::DnL, n_dl) } else { (Region::DnR, n_dr) };
+        let (tgt, n_t) = if i % 2 == 0 {
+            (Region::DnL, n_dl)
+        } else {
+            (Region::DnR, n_dr)
+        };
         let j = ro.below(n_t as u32) as usize;
         gen.add(Region::Lh, i, tgt, j, 3 + ro.below(6), false);
     }

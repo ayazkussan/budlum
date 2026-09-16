@@ -96,7 +96,10 @@ pub fn place(conn: &Connectome, chip: &Chip) -> Placement {
     let mut local = vec![0usize; cores];
     let mut hops_sum = 0usize;
     for e in &conn.edges {
-        let (a, b) = (e.pre as usize / chip.neuron_cap, e.post as usize / chip.neuron_cap);
+        let (a, b) = (
+            e.pre as usize / chip.neuron_cap,
+            e.post as usize / chip.neuron_cap,
+        );
         local[b] += 1;
         let (ax, ay) = (a % mx, a / mx);
         let (bx, by) = (b % mx, b / mx);
@@ -128,7 +131,10 @@ fn dest_core_degree_avg_x10(conn: &Connectome, chip: &Chip, cores: usize) -> usi
     }
     let mut pairs = std::collections::HashSet::new();
     for e in &conn.edges {
-        pairs.insert((e.pre as usize / chip.neuron_cap, e.post as usize / chip.neuron_cap));
+        pairs.insert((
+            e.pre as usize / chip.neuron_cap,
+            e.post as usize / chip.neuron_cap,
+        ));
     }
     pairs.len() * 10 / cores
 }
@@ -173,7 +179,11 @@ pub fn real_scale_report(chip: &Chip) -> RealScaleReport {
     let sops = active * fan_out;
     let per_core = sops.div_ceil(cores);
     let cycles = per_core.div_ceil(chip.sop_per_cycle);
-    let ticks_per_second = if cycles == 0 { u64::MAX } else { 1_000_000_000u64 / cycles as u64 };
+    let ticks_per_second = if cycles == 0 {
+        u64::MAX
+    } else {
+        1_000_000_000u64 / cycles as u64
+    };
     let energy = active as u64 * E_SOP_PJ
         + active as u64 * 4 * E_HOP_PJ
         + MALE_CNS_NEURONS as u64 * E_NEURON_UPDATE_PJ / 1000;

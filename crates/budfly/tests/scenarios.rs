@@ -31,7 +31,10 @@ fn ring_attractor_bump_emerges() {
     // floats; the execution itself never does).
     let mut counts = vec![0u64; n];
     for (i, cnt) in counts.iter_mut().enumerate() {
-        *cnt = rows[off + i][32..].iter().map(|row| u64::from(row.spike)).sum();
+        *cnt = rows[off + i][32..]
+            .iter()
+            .map(|row| u64::from(row.spike))
+            .sum();
     }
     let total: u64 = counts.iter().sum();
     assert!(total > 0, "bump must fire");
@@ -44,7 +47,10 @@ fn ring_attractor_bump_emerges() {
     }
     let ang = sy.atan2(sx).to_degrees().rem_euclid(360.0);
     let target = 360.0 * (n as f64 / 8.0) / n as f64;
-    let err = (ang - target).abs().min((target - ang).abs()).min(360.0 - (ang - target).abs());
+    let err = (ang - target)
+        .abs()
+        .min((target - ang).abs())
+        .min(360.0 - (ang - target).abs());
     assert!(
         err < 45.0,
         "bump at {ang:.1} deg, target {target:.1} deg, circular error {err:.1} deg"
@@ -102,7 +108,10 @@ fn placement_fits_n1() {
 fn real_scale_is_runnable_and_fast() {
     let r = real_scale_report(&Chip::n1());
     assert!(r.mesh_x * r.mesh_y >= r.cores);
-    assert!(r.cycles_per_tick <= 8, "tick cost stays single-digit cycles");
+    assert!(
+        r.cycles_per_tick <= 8,
+        "tick cost stays single-digit cycles"
+    );
     let tps = r.ticks_per_second;
     assert!(
         tps >= 1_000_000,
