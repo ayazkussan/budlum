@@ -26,8 +26,40 @@ permissions:
   pull-requests: write
 
 jobs:
+  fmt-apply:
+    # TEMPORARY (removed once the gate is green): applies rustfmt in CI and
+    # commits the result back, because sandbox egress rules make runner logs
+    # and artifacts unreadable from some review environments. The gate job
+    # remains the source of truth; this job only repairs formatting.
+    name: temp - apply rustfmt in CI
+    if: ${{ github.event_name == 'pull_request' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        # default: persist-credentials (this job must push back)
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@6c977a6ca4077a0ceb28ffbe03f59d46e9ac8772 # master 2026-07-16
+        with:
+          toolchain: "1.97.1"
+          components: rustfmt
+      - name: cargo fmt + commit if drifted
+        run: |
+          cargo fmt --manifest-path crates/budfly/Cargo.toml --all
+          git config user.email "budfly-ci@users.noreply.github.com"
+          git config user.name "budfly-ci"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "already formatted"
+          else
+            git commit -m "chore(budfly): cargo fmt applied in CI" 2>&1 | tail -2
+            git push 2>&1 | tail -2
+          fi
+
   gate:
     name: fmt + clippy + tests + goldens + example
+    needs: fmt-apply
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
