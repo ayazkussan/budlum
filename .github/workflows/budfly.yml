@@ -5,7 +5,11 @@ name: BudFly
 # purpose: the crate is zero-dependency and standalone, so its gate is small,
 # fast (~2 min) and fails loudly on its own page instead of being lost in a
 # 2,000-line matrix. Same conventions as the other workflows: pinned action
-# SHAs, dtolnay toolchain, rust-cache, contents:read only.
+# SHAs, dtolnay toolchain, rust-cache, least-privilege permissions.
+#
+# Diagnostics discipline: when a gate step fails on a pull_request, its full
+# output is posted back to the PR as a comment (pull-requests: write exists
+# ONLY for that), so the failure is actionable from the PR itself.
 
 on:
   push:
@@ -19,6 +23,7 @@ concurrency:
 
 permissions:
   contents: read
+  pull-requests: write
 
 jobs:
   gate:
@@ -40,19 +45,42 @@ jobs:
       # House panic gate: clippy with the crate-level lint table
       # (unwrap_used/expect_used = deny) under the same -D warnings flag the
       # root crate lives under.
-      - name: fmt
-        run: cargo fmt --manifest-path crates/budfly/Cargo.toml --all -- --check
-      - name: clippy
-        run: cargo clippy --manifest-path crates/budfly/Cargo.toml --all-targets -- -D warnings
-      - name: tests (goldens + scenarios + unit)
-        run: cargo test --manifest-path crates/budfly/Cargo.toml
-      - name: chip report example runs
-        run: cargo run --manifest-path crates/budfly/Cargo.toml --example fly_chip_report
-      # The Python reference is the provenance oracle: it recomputed every
-      # golden anchor committed in tests/goldens.rs. If this passes while the
-      # Rust tests pass, the two implementations agree bit-for-bit.
-      - name: python reference check
-        run: python3 crates/budfly/scripts/reference_check.py
+      - name: gate steps (fmt, clippy, tests, example, python reference)
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -uo pipefail
+          report_failure() {
+            local name="$1" out="$2"
+            if [ -n "${PR_NUMBER}" ]; then
+              printf '**BudFly gate `%s` FAILED**\n\n```\n%.60000s\n```\n' "${name}" "${out}" \
+                | gh pr comment "${PR_NUMBER}" --repo "${REPO}" --body-file - || true
+            fi
+            printf '%s\n' "${out}" | tail -60
+            echo "::error::${name} failed"
+          }
+          run_step() {
+            local name="$1"; shift
+            local out
+            out=$("$@" 2>&1)
+            local code=$?
+            if [ ${code} -ne 0 ]; then
+              report_failure "${name}" "${out}"
+              exit 1
+            fi
+            echo "[gate] ${name}: OK"
+          }
+          run_step "fmt"      cargo fmt --manifest-path crates/budfly/Cargo.toml --all -- --check
+          run_step "clippy"   cargo clippy --manifest-path crates/budfly/Cargo.toml --all-targets -- -D warnings
+          run_step "tests"    cargo test --manifest-path crates/budfly/Cargo.toml
+          run_step "example"  cargo run --manifest-path crates/budfly/Cargo.toml --example fly_chip_report
+          # The Python reference is the provenance oracle: it recomputed every
+          # golden anchor committed in tests/goldens.rs. If this passes while the
+          # Rust tests pass, the two implementations agree bit-for-bit.
+          run_step "python-reference" python3 crates/budfly/scripts/reference_check.py
 
   determinism-smoke:
     # Determinism is not just a unit property here, it is the product: compile
