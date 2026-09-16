@@ -228,25 +228,26 @@ const TAG_OUTPUT: u64 = 0xF00D;
 /// Default generator seed (frozen).
 pub const DEFAULT_SEED: u64 = 0xB0DF17;
 
-fn push_edge(
-    edges: &mut Vec<Edge>,
-    offsets: &[usize; N_REGIONS],
-    pre: Region,
-    i: usize,
-    post: Region,
-    j: usize,
-    count: u32,
-    inhibitory: bool,
-) {
-    let mut w = i32::try_from(count.max(1)).unwrap_or(1).saturating_mul(W_SYN);
-    if inhibitory {
-        w = -w;
+/// Generator state: region layout (read-only) plus the growing edge list.
+/// Bundled so the hot `add` stays within the arg-count lint budget.
+struct Gen<'a> {
+    offsets: &'a [usize; N_REGIONS],
+    edges: Vec<Edge>,
+}
+
+impl Gen<'_> {
+    /// Appends one directed edge; generation order is golden-relevant.
+    fn add(&mut self, pre: Region, i: usize, post: Region, j: usize, count: u32, inhibitory: bool) {
+        let mut w = i32::try_from(count.max(1)).unwrap_or(1).saturating_mul(W_SYN);
+        if inhibitory {
+            w = -w;
+        }
+        self.edges.push(Edge {
+            pre: (self.offsets[pre.idx()] + i) as u32,
+            post: (self.offsets[post.idx()] + j) as u32,
+            w,
+        });
     }
-    edges.push(Edge {
-        pre: (offsets[pre.idx()] + i) as u32,
-        post: (offsets[post.idx()] + j) as u32,
-        w,
-    });
 }
 
 /// Generates the frozen v1.0 connectome at `scale_num / scale_den`.
@@ -270,7 +271,10 @@ pub fn generate(scale_num: u32, scale_den: u32, seed: u64) -> Connectome {
         offsets[r.idx()] = total;
         total += n;
     }
-    let mut edges: Vec<Edge> = Vec::new();
+    let mut gen = Gen {
+        offsets: &offsets,
+        edges: Vec::new(),
+    };
 
     // --- visual pathway: lamina -> medulla -> lobula, per side ----------------
     for (lam, med, lob) in [
@@ -282,11 +286,11 @@ pub fn generate(scale_num: u32, scale_den: u32, seed: u64) -> Connectome {
             // lamina -> medulla: 2:1 column mapping + occasional lateral jitter
             for t in 0..2usize {
                 let j = (i * 2 + t) % nm;
-                push_edge(&mut edges, &offsets, lam, i, med, j, 3 + rv.below(8), false);
+                gen.add(lam, i, med, j, 3 + rv.below(8), false);
             }
             if rv.below(4) == 0 {
                 let j = (i * 2 + 2 + rv.below(7) as usize) % nm;
-                push_edge(&mut edges, &offsets, lam, i, med, j, 1 + rv.below(3), false);
+                gen.add(lam, i, med, j, 1 + rv.below(3), false);
             }
         }
         for jm in 0..nm {
@@ -294,10 +298,10 @@ pub fn generate(scale_num: u32, scale_den: u32, seed: u64) -> Connectome {
             for _ in 0..2 {
                 let src = rv.below(nm as u32) as usize;
                 let dst = (jm * nb / nm) % nb;
-                push_edge(&mut edges, &offsets, med, src, lob, dst, 2 + rv.below(6), false);
+                gen.add(med, src, lob, dst, 2 + rv.below(6), false);
                 if rv.below(10) == 0 {
                     let dst2 = rv.below(nb as u32) as usize;
-                    push_edge(&mut edges, &offsets, med, src, lob, dst2, 1 + rv.below(3), false);
+                    gen.add(med, src, lob, dst2, 1 + rv.below(3), false);
                 }
             }
         }
@@ -314,27 +318,18 @@ pub fn generate(scale_num: u32, scale_den: u32, seed: u64) -> Connectome {
         for i in 0..n_lob {
             // interleaved indexed coverage: every LH and FB neuron is reached
             let lh_idx = (i * n_lh / n_lob + side) % n_lh;
-            push_edge(&mut edges, &offsets, lob, i, Region::Lh, lh_idx, 2 + ro.below(5), false);
+            gen.add(lob, i, Region::Lh, lh_idx, 2 + ro.below(5), false);
             let lh_rnd = ro.below(n_lh as u32) as usize;
-            push_edge(&mut edges, &offsets, lob, i, Region::Lh, lh_rnd, 1 + ro.below(4), false);
+            gen.add(lob, i, Region::Lh, lh_rnd, 1 + ro.below(4), false);
             let fb_idx = (i * n_fb / n_lob + side) % n_fb;
-            push_edge(&mut edges, &offsets, lob, i, Region::CxFb, fb_idx, 1 + rc.below(4), false);
+            gen.add(lob, i, Region::CxFb, fb_idx, 1 + rc.below(4), false);
             let fb_rnd = rc.below(n_fb as u32) as usize;
-            push_edge(&mut edges, &offsets, lob, i, Region::CxFb, fb_rnd, 1 + rc.below(3), false);
+            gen.add(lob, i, Region::CxFb, fb_rnd, 1 + rc.below(3), false);
             if rm.below(4) < 1 {
                 // ~25% of lobula neurons act as projection neurons (PNs)
                 for _ in 0..(1 + rm.below(3)) {
                     let kc = rm.below(n_kc as u32) as usize;
-                    push_edge(
-                        &mut edges,
-                        &offsets,
-                        lob,
-                        i,
-                        Region::MbKc,
-                        kc,
-                        1 + rm.below(4),
-                        false,
-                    );
+                    gen.add(lob, i, Region::MbKc, kc, 1 + rm.below(4), false);
                 }
             }
         }
@@ -351,7 +346,7 @@ pub fn generate(scale_num: u32, scale_den: u32, seed: u64) -> Connectome {
             } else {
                 (Region::LobR, pick - n_ll)
             };
-            push_edge(&mut edges, &offsets, lr, local, Region::MbKc, k, 1 + rm.below(3), false);
+            gen.add(lr, local, Region::MbKc, k, 1 + rm.below(3), false);
         }
     }
 
@@ -365,48 +360,30 @@ pub fn generate(scale_num: u32, scale_den: u32, seed: u64) -> Connectome {
     for k in 0..n_fb {
         for _ in 0..2 {
             let j = rc.below(n_eb as u32) as usize;
-            push_edge(
-                &mut edges,
-                &offsets,
-                Region::CxFb,
-                k,
-                Region::CxEb,
-                j,
-                3 + rc.below(5),
-                false,
-            );
+            gen.add(Region::CxFb, k, Region::CxEb, j, 3 + rc.below(5), false);
         }
     }
     for i in 0..n_eb {
         // ring: excite neighbours, weighted by proximity (bump recurrence)
         for (d, c) in [(1usize, 10u32), (2, 8), (3, 5), (4, 3)] {
             let jf = (i + d) % n_eb;
-            push_edge(&mut edges, &offsets, Region::CxEb, i, Region::CxEb, jf, c, false);
+            gen.add(Region::CxEb, i, Region::CxEb, jf, c, false);
             let jb = (i + n_eb - d) % n_eb;
-            push_edge(&mut edges, &offsets, Region::CxEb, i, Region::CxEb, jb, c, false);
+            gen.add(Region::CxEb, i, Region::CxEb, jb, c, false);
         }
         let ci = i % n_ci;
-        push_edge(&mut edges, &offsets, Region::CxEb, i, Region::CxInh, ci, 4, false);
+        gen.add(Region::CxEb, i, Region::CxInh, ci, 4, false);
     }
     for i in 0..n_ci {
         for j in 0..n_eb {
-            push_edge(&mut edges, &offsets, Region::CxInh, i, Region::CxEb, j, 3, true);
+            gen.add(Region::CxInh, i, Region::CxEb, j, 3, true);
         }
     }
     // EB -> FB recurrence keeps the bump alive across ticks
     for i in 0..n_eb {
         if rc.below(2) == 0 {
             let k = rc.below(n_fb as u32) as usize;
-            push_edge(
-                &mut edges,
-                &offsets,
-                Region::CxEb,
-                i,
-                Region::CxFb,
-                k,
-                2 + rc.below(4),
-                false,
-            );
+            gen.add(Region::CxEb, i, Region::CxFb, k, 2 + rc.below(4), false);
         }
     }
 
@@ -414,16 +391,7 @@ pub fn generate(scale_num: u32, scale_den: u32, seed: u64) -> Connectome {
     for k in 0..n_fb {
         if rc.below(3) == 0 {
             let j = ro.below(n_mdn as u32) as usize;
-            push_edge(
-                &mut edges,
-                &offsets,
-                Region::CxFb,
-                k,
-                Region::Mdn,
-                j,
-                2 + ro.below(3),
-                false,
-            );
+            gen.add(Region::CxFb, k, Region::Mdn, j, 2 + ro.below(3), false);
         }
     }
 
@@ -432,13 +400,13 @@ pub fn generate(scale_num: u32, scale_den: u32, seed: u64) -> Connectome {
     let n_mbon = sizes[Region::MbMbon.idx()];
     for k in 0..n_kc {
         let j = rm.below(n_mbon as u32) as usize;
-        push_edge(&mut edges, &offsets, Region::MbKc, k, Region::MbMbon, j, 1 + rm.below(2), false);
+        gen.add(Region::MbKc, k, Region::MbMbon, j, 1 + rm.below(2), false);
         if rm.below(3) == 0 {
-            push_edge(&mut edges, &offsets, Region::MbKc, k, Region::MbApl, 0, 2, false);
+            gen.add(Region::MbKc, k, Region::MbApl, 0, 2, false);
         }
     }
     for k in (0..n_kc).step_by(4) {
-        push_edge(&mut edges, &offsets, Region::MbApl, 0, Region::MbKc, k, 1, true);
+        gen.add(Region::MbApl, 0, Region::MbKc, k, 1, true);
     }
 
     // --- action selection: LH + MBON -> descending pools; L/R mutual veto -----
@@ -447,29 +415,30 @@ pub fn generate(scale_num: u32, scale_den: u32, seed: u64) -> Connectome {
     for i in 0..n_lh {
         let (tgt, n_t) = if i % 2 == 0 { (Region::DnL, n_dl) } else { (Region::DnR, n_dr) };
         let j = ro.below(n_t as u32) as usize;
-        push_edge(&mut edges, &offsets, Region::Lh, i, tgt, j, 3 + ro.below(6), false);
+        gen.add(Region::Lh, i, tgt, j, 3 + ro.below(6), false);
     }
     for i in 0..n_mbon {
         let jl = ro.below(n_dl as u32) as usize;
-        push_edge(&mut edges, &offsets, Region::MbMbon, i, Region::DnL, jl, 2 + ro.below(4), false);
+        gen.add(Region::MbMbon, i, Region::DnL, jl, 2 + ro.below(4), false);
         let jr = ro.below(n_dr as u32) as usize;
-        push_edge(&mut edges, &offsets, Region::MbMbon, i, Region::DnR, jr, 2 + ro.below(4), false);
+        gen.add(Region::MbMbon, i, Region::DnR, jr, 2 + ro.below(4), false);
     }
     for i in 0..n_dl {
         let j = ro.below(n_dr as u32) as usize;
-        push_edge(&mut edges, &offsets, Region::DnL, i, Region::DnR, j, 2, true);
+        gen.add(Region::DnL, i, Region::DnR, j, 2, true);
     }
     for i in 0..n_dr {
         let j = ro.below(n_dl as u32) as usize;
-        push_edge(&mut edges, &offsets, Region::DnR, i, Region::DnL, j, 2, true);
+        gen.add(Region::DnR, i, Region::DnL, j, 2, true);
     }
     for i in 0..n_mdn {
         let jl = ro.below(n_dl as u32) as usize;
-        push_edge(&mut edges, &offsets, Region::Mdn, i, Region::DnL, jl, 2, true);
+        gen.add(Region::Mdn, i, Region::DnL, jl, 2, true);
         let jr = ro.below(n_dr as u32) as usize;
-        push_edge(&mut edges, &offsets, Region::Mdn, i, Region::DnR, jr, 2, true);
+        gen.add(Region::Mdn, i, Region::DnR, jr, 2, true);
     }
 
+    let edges = gen.edges;
     // Stable adjacency: iterate edges in generation order, append per pre row.
     let mut adj: Vec<Vec<Edge>> = vec![Vec::new(); total];
     for e in &edges {
@@ -505,7 +474,10 @@ mod tests {
                 Region::LamL | Region::LamR => {
                     assert_eq!(zeros[r.idx()], c.size(r), "lamina is the sensory surface");
                 }
-                _ => assert_eq!(zeros[r.idx()], 0, "{} must be reachable", r.name()),
+                _ => {
+                    let region = r.name();
+                    assert_eq!(zeros[r.idx()], 0, "{region} must be reachable");
+                }
             }
         }
     }

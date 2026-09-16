@@ -45,6 +45,7 @@ pub const LEAK_SHIFT: u32 = 4;
 pub const FAN_IN_MAX: i32 = SCALE * 64;
 
 /// External stimulus: per-neuron `[start, end)` tick windows at [`I_STIM`].
+#[derive(Default)]
 pub struct Stimuli {
     windows: HashMap<u32, (u32, u32)>,
 }
@@ -75,6 +76,12 @@ impl Stimuli {
         self.windows.len()
     }
 
+    /// True when no neuron carries a window.
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.windows.is_empty()
+    }
+
     /// Injected current for `gid` at tick `t` (0 or [`I_STIM`]).
     #[must_use]
     pub fn current(&self, gid: u32, t: u32) -> i32 {
@@ -82,12 +89,6 @@ impl Stimuli {
             Some(&(s, e)) if s <= t && t < e => I_STIM,
             _ => 0,
         }
-    }
-}
-
-impl Default for Stimuli {
-    fn default() -> Self {
-        Self::new()
     }
 }
 

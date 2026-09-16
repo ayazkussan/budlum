@@ -207,10 +207,10 @@ mod tests {
         assert_eq!(p.syn_per_core_max, 1617);
         // XY-hop average is an order check (reference: 0.32 hops/edge), not a
         // brittle one: placement keeps the graph tightly local.
+        let hops = p.avg_hops_e2_x100;
         assert!(
-            (20..=45).contains(&p.avg_hops_e2_x100),
-            "locality lost: {} x100 hops/edge",
-            p.avg_hops_e2_x100
+            (20..=45).contains(&hops),
+            "locality lost: {hops} x100 hops/edge"
         );
         assert_eq!(p.avg_dest_cores_per_spike_x10, 20);
     }

@@ -103,10 +103,10 @@ fn real_scale_is_runnable_and_fast() {
     let r = real_scale_report(&Chip::n1());
     assert!(r.mesh_x * r.mesh_y >= r.cores);
     assert!(r.cycles_per_tick <= 8, "tick cost stays single-digit cycles");
+    let tps = r.ticks_per_second;
     assert!(
-        r.ticks_per_second >= 1_000_000,
-        "fabric must crush biological real-time, got {} ticks/s",
-        r.ticks_per_second
+        tps >= 1_000_000,
+        "fabric must crush biological real-time, got {tps} ticks/s"
     );
     // Energy sanity: microjoule-scale per tick, not watts of GPU.
     assert!(r.energy_per_tick_pj < 10_000_000);
