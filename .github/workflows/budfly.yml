@@ -36,8 +36,11 @@ jobs:
     permissions:
       contents: write
     steps:
+      # Checkout the PR head BRANCH (not the detached merge ref): the repair
+      # commit must land on the branch itself.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        # default: persist-credentials (this job must push back)
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
       - name: Install Rust
         uses: dtolnay/rust-toolchain@6c977a6ca4077a0ceb28ffbe03f59d46e9ac8772 # master 2026-07-16
         with:
