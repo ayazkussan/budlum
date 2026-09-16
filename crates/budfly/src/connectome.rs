@@ -306,7 +306,11 @@ pub fn generate(scale_num: u32, scale_den: u32, seed: u64) -> Connectome {
     // --- lobula outputs: LH, compass FB, and mushroom-body projection neurons -
     for (side, lob) in [(0usize, Region::LobL), (1usize, Region::LobR)] {
         let n_lob = sizes[lob.idx()];
-        let (n_lh, n_fb, n_kc) = (sizes[Region::Lh.idx()], sizes[Region::CxFb.idx()], sizes[Region::MbKc.idx()]);
+        let (n_lh, n_fb, n_kc) = (
+            sizes[Region::Lh.idx()],
+            sizes[Region::CxFb.idx()],
+            sizes[Region::MbKc.idx()],
+        );
         for i in 0..n_lob {
             // interleaved indexed coverage: every LH and FB neuron is reached
             let lh_idx = (i * n_lh / n_lob + side) % n_lh;
@@ -321,7 +325,16 @@ pub fn generate(scale_num: u32, scale_den: u32, seed: u64) -> Connectome {
                 // ~25% of lobula neurons act as projection neurons (PNs)
                 for _ in 0..(1 + rm.below(3)) {
                     let kc = rm.below(n_kc as u32) as usize;
-                    push_edge(&mut edges, &offsets, lob, i, Region::MbKc, kc, 1 + rm.below(4), false);
+                    push_edge(
+                        &mut edges,
+                        &offsets,
+                        lob,
+                        i,
+                        Region::MbKc,
+                        kc,
+                        1 + rm.below(4),
+                        false,
+                    );
                 }
             }
         }
@@ -352,7 +365,16 @@ pub fn generate(scale_num: u32, scale_den: u32, seed: u64) -> Connectome {
     for k in 0..n_fb {
         for _ in 0..2 {
             let j = rc.below(n_eb as u32) as usize;
-            push_edge(&mut edges, &offsets, Region::CxFb, k, Region::CxEb, j, 3 + rc.below(5), false);
+            push_edge(
+                &mut edges,
+                &offsets,
+                Region::CxFb,
+                k,
+                Region::CxEb,
+                j,
+                3 + rc.below(5),
+                false,
+            );
         }
     }
     for i in 0..n_eb {
@@ -375,7 +397,16 @@ pub fn generate(scale_num: u32, scale_den: u32, seed: u64) -> Connectome {
     for i in 0..n_eb {
         if rc.below(2) == 0 {
             let k = rc.below(n_fb as u32) as usize;
-            push_edge(&mut edges, &offsets, Region::CxEb, i, Region::CxFb, k, 2 + rc.below(4), false);
+            push_edge(
+                &mut edges,
+                &offsets,
+                Region::CxEb,
+                i,
+                Region::CxFb,
+                k,
+                2 + rc.below(4),
+                false,
+            );
         }
     }
 
@@ -383,7 +414,16 @@ pub fn generate(scale_num: u32, scale_den: u32, seed: u64) -> Connectome {
     for k in 0..n_fb {
         if rc.below(3) == 0 {
             let j = ro.below(n_mdn as u32) as usize;
-            push_edge(&mut edges, &offsets, Region::CxFb, k, Region::Mdn, j, 2 + ro.below(3), false);
+            push_edge(
+                &mut edges,
+                &offsets,
+                Region::CxFb,
+                k,
+                Region::Mdn,
+                j,
+                2 + ro.below(3),
+                false,
+            );
         }
     }
 
