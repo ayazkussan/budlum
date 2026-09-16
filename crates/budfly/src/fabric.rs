@@ -115,7 +115,7 @@ pub fn place(conn: &Connectome, chip: &Chip) -> Placement {
         syn_per_core_max,
         syn_per_core_avg: syn / cores.max(1),
         sram_overflow_cores: overflow,
-        avg_hops_e2_x100: if syn == 0 { 0 } else { hops_sum * 100 / syn },
+        avg_hops_e2_x100: (hops_sum * 100).checked_div(syn).unwrap_or(0),
         avg_dest_cores_per_spike_x10: dest_core_degree_avg_x10(conn, chip, cores),
     }
 }
@@ -179,11 +179,9 @@ pub fn real_scale_report(chip: &Chip) -> RealScaleReport {
     let sops = active * fan_out;
     let per_core = sops.div_ceil(cores);
     let cycles = per_core.div_ceil(chip.sop_per_cycle);
-    let ticks_per_second = if cycles == 0 {
-        u64::MAX
-    } else {
-        1_000_000_000u64 / cycles as u64
-    };
+    let ticks_per_second = 1_000_000_000u64
+        .checked_div(cycles as u64)
+        .unwrap_or(u64::MAX);
     let energy = active as u64 * E_SOP_PJ
         + active as u64 * 4 * E_HOP_PJ
         + MALE_CNS_NEURONS as u64 * E_NEURON_UPDATE_PJ / 1000;
