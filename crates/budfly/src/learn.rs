@@ -184,7 +184,6 @@ pub fn conditioned_run(conn: &Connectome) -> LearnReport {
 mod tests {
     use super::*;
     use crate::connectome::{generate, DEFAULT_SEED};
-    use crate::sha256::hex32;
 
     #[test]
     fn conditioned_suppression_is_frozen() {
