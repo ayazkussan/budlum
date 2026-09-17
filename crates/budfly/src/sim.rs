@@ -93,7 +93,7 @@ impl Stimuli {
 }
 
 /// One audited transition row for one neuron at one tick.
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct TraceRow {
     /// Tick index.
     pub tick: u32,
