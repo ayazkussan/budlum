@@ -746,6 +746,38 @@ pin("act.violations_forged", forg_viol)
 pin("act.fold_forged_still_ok", forg_fold == ff_log[T])
 pin("act.sha256_forged", hashlib.sha256(tapeF).hexdigest())
 
+
+# ---------------------------------------------------------------- [attest]
+# Neural identity handshake: proof-of-exact-build. A peer proves it runs
+# THIS frozen connectome through THIS frozen code path by answering a
+# (peer, epoch, nonce)-bound challenge. Three rungs of confidence:
+#   L1 = 1-tick canary      (~32 B, heartbeat)
+#   L2 = 48-tick chain end  (full dynamics)
+#   L3 = court envelope     (verdict + anchor lineage)
+# Honest scope: a behavioral build-fingerprint for closed validator sets —
+# anyone holding the pinned map can replay it; that map IS the asset being
+# attested. Not a TEE, not a VDF (see docs/BUDFLY_APPLICATIONS.md).
+def att_digest(peer, epoch, nonce):
+    return hashlib.sha256(b"BUDFLY-ATTEST1\x00" + peer +
+                          epoch.to_bytes(8, "big") + nonce).digest()
+peer = b"fly-peer-01"
+ap_ch = att_digest(peer, 7, bytes([0xA5] * 32))
+l1 = anchor_log_generic(1, sentinel_stim(ap_ch))[0]
+l2log = anchor_log_generic(48, sentinel_stim(ap_ch))
+l2 = l2log[-1]
+av, adl, adr, amdn, ach = sentinel(sizes, off, edges, ap_ch)
+pin("attest.peer", peer.decode())
+pin("attest.epoch", 7)
+pin("attest.challenge", ap_ch.hex())
+pin("attest.l1_canary", l1)
+pin("attest.l1_prefix_of_l2", l2log[0] == l1)
+pin("attest.l2_chain_end", l2)
+pin("attest.l3_verdict", av)
+pin("attest.l3_counters", f"{adl},{adr},{amdn}")
+# freshness proof: epoch 8 must move every rung
+ap_ch8 = att_digest(peer, 8, bytes([0xA5] * 32))
+pin("attest.epoch_moves_l2", anchor_log_generic(48, sentinel_stim(ap_ch8))[-1] != l2)
+
 # ---------------------------------------------- manifest cross-validation
 man = tomllib.loads((Path(__file__).resolve().parents[1] / "goldens.anchor.toml").read_text())
 exp = man.get("expansion", {})

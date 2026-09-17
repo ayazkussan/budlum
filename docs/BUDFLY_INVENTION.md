@@ -42,6 +42,9 @@ zarfta** mühürlenir.
 | C14 | Tek-tick dolandırıcılık kanıtı connectome'suz yargılanır (ACT-1 bant, ~24,7 KB) | `tape.rs`, pinli byte-uzunluk 24708 + sha256 |
 | C15 | Çift bağımsız kilit: kısıt katili (C1–C7, 192 ihlal) + zincir katili (fold uyumsuz) | iki pin, ikisi de bağımsız ateşler |
 | C16 | Genesis tick-anahtarlıdır; trace PENCERELERİ genesis'a takılmaz | `air.rs` C7 tick==0 refaktörü, mevcut testler değişmeden yeşil |
+| C17 | (peer, epoch, nonce)-bağlı davranışsal build-parmakizi el sıkışması | `attest.rs`, frozen challenge + L1/L2 pin'leri |
+| C18 | Merdiven iç tutarlılığı: L1 her zaman L2 zincirinin ilk başı | `attest.l1_prefix_of_l2=True`, `ladder_consistent` |
+| C19 | Epoch-freshness: eski epoch cevabı taze challenge'da geçmez | `attest.epoch_moves_l2=True` |
 
 ## Varyantlar (yedek iddialar)
 
