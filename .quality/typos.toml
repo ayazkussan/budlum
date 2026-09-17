@@ -27,6 +27,10 @@ extend-exclude = [
                           # hand-edited here. A typo inside it is fixed upstream in
                           # the crate, never by editing the mirror and calling it
                           # an export.
+  "01a08674-f696-72cd-b135-24e6cc8e1539 (2).patch", # archived export artifact at
+                          # repo root: diff context lines and quoted crate names
+                          # (`flate2`, `tha`, `Objec`) are verbatim records, not
+                          # hand-edited prose. Same policy as repo-lubot/patches/.
 ]
 
 [default]

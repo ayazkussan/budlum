@@ -23,7 +23,7 @@ kısa ve ucuz kanıtlaması zordur. **Çözüm:** sineğin donmuş dinamikleri z
 deterministik bir referans — 1 tick'lik bir challenge-response zincir
 yeter.
 
-- Girdi: 32 B `digest` (zincirden gelen challange) → `sentinel_stimulus`.
+- Girdi: 32 B `digest` (zincirden gelen challenge) → `sentinel_stimulus`.
 - Çıktı: 1 tick katlanmış `anchor = log[0]` (`canary.rs::challenge_canary`).
 - Pin: all-ones digest için `6c221c70…`; **uç nokta otomatik doğrulanır**:
   aynı log yolu 48 tickte sentinel golden `398e126a…`'a oturuyor
