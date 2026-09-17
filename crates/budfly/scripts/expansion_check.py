@@ -303,6 +303,88 @@ def fault_table():
 
 fault_table()
 
+# ---------------------------------------------------------------- [dispute]
+# Anchor-bisection dispute game: an executor submits per-tick chain heads;
+# the validator reruns honestly, locates the FIRST divergent tick, and the
+# C1-C7 transition constraints arbitrate that single tick. The dishonest
+# fixture (frozen recipe): at tick 23 the liar flips the spike bit of
+# (CxEb offset 3) and, being lazy, reports all-zero membrane bytes at that
+# tick; the chain is folded onwards normally.
+def anchor_log_run(ticks, stim, tamper=None):
+    adj = [[] for _ in range(total)]
+    for p, q, w in edges:
+        adj[p].append((q, w))
+    v = [0] * total
+    refr = [0] * total
+    pend = [0] * total
+    anchor = b"\x00" * 32
+    log = []
+    for t in range(ticks):
+        spiking = []
+        sbytes = bytearray(total)
+        for gid in range(total):
+            i_ext = I_STIM if (gid in stim and stim[gid][0] <= t < stim[gid][1]) else 0
+            i_syn = pend[gid] if t > 0 else 0
+            vb, rb = v[gid], refr[gid]
+            if rb > 0:
+                refr[gid] = rb - 1
+                v[gid] = 0
+            else:
+                raw = max(V_MIN, min(V_MAX, vb - (vb >> LEAK_SHIFT) + i_ext + i_syn))
+                if raw >= V_TH:
+                    v[gid] = 0
+                    refr[gid] = REFRAC
+                    spiking.append(gid)
+                    sbytes[gid] = 1
+                else:
+                    v[gid] = raw
+        nxt = [0] * total
+        for p in spiking:
+            for q, w in adj[p]:
+                nxt[q] = max(-FAN_IN_MAX, min(FAN_IN_MAX, nxt[q] + w))
+        pend = nxt
+        if tamper and t == tamper:
+            gid = off[CX_EB] + 3
+            sbytes[gid] = 1 - sbytes[gid]
+            vh = hashlib.sha256(b"\x00" * (total * 4)).digest()
+        else:
+            vh = hashlib.sha256(b"".join(x.to_bytes(4, "little", signed=True) for x in v)).digest()
+        sh = hashlib.sha256(bytes(sbytes)).digest()
+        anchor = hashlib.sha256(anchor + t.to_bytes(8, "big") + sh + vh).digest()
+        log.append(anchor.hex())
+    return log
+
+def odor_stim_local():
+    st = {}
+    for i in range(sizes[LAM_L] // 4):
+        st[off[LAM_L] + i] = (0, 8)
+    for i in range(sizes[MB_KC] // 2):
+        st[off[MB_KC] + i * 2] = (8, 16)
+    return st
+
+H = anchor_log_run(48, odor_stim_local())
+F = anchor_log_run(48, odor_stim_local(), tamper=23)
+div = next((t for t in range(48) if H[t] != F[t]), None)
+pin("dispute.honest_final", H[-1])
+pin("dispute.dishonest_final", F[-1])
+pin("dispute.divergence_tick", div)
+import math
+pin("dispute.bisect_queries_max", math.ceil(math.log2(48)))
+
+# ---------------------------------------------------------------- [reflex]
+stim_l = {off[LAM_L] + i: (0, 8) for i in range(sizes[LAM_L] // 4)}
+_a, _s, rows_l = run_masked(48, stim_l, dead_none, audit_rows=True)
+RN = ["LamL", "LamR", "MedL", "MedR", "LobL", "LobR", "CxEb", "CxFb",
+      "CxInh", "MbKc", "MbMbon", "MbApl", "Lh", "DnL", "DnR", "Mdn"]
+first = {}
+for r in range(16):
+    ts = [rr[0] for g in range(off[r], off[r] + sizes[r]) for rr in rows_l[g] if rr[5] == 1]
+    first[r] = min(ts) if ts else -1
+pin("reflex.first_spike_tick", ",".join(f"{RN[r]}:{first[r]}" for r in range(16)))
+pin("reflex.latency_dnl", first[DN_L])
+pin("reflex.latency_mdn", first[MDN])
+pin("reflex.dnr_silent", first[DN_R] == -1 and first[MB_MBON] == -1)
+
 # ---------------------------------------------- manifest cross-validation
 man = tomllib.loads((Path(__file__).resolve().parents[1] / "goldens.anchor.toml").read_text())
 exp = man.get("expansion", {})

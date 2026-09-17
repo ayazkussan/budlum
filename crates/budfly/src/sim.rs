@@ -119,6 +119,10 @@ pub struct RunResult {
     pub region_spikes: [u64; 16],
     /// Audited rows per neuron (only when `audit` was requested).
     pub rows: Option<Vec<Vec<TraceRow>>>,
+    /// Per-tick anchor chain heads (only when `collect_log` was requested).
+    /// `log[t]` is the chain head after folding tick `t` — exactly what a
+    /// dispute game bisects.
+    pub log: Option<Vec<[u8; 32]>>,
 }
 
 /// Runs `ticks` LIF ticks over `conn` under `stim`.
@@ -126,7 +130,7 @@ pub struct RunResult {
 /// The transition order — gid-ascending neuron updates, then fan-in delivery
 /// in (pre ascending, generation) order — is frozen and golden-pinned.
 pub fn run(conn: &Connectome, ticks: u32, stim: &Stimuli, audit: bool) -> RunResult {
-    run_core(conn, ticks, stim, audit, None)
+    run_core(conn, ticks, stim, audit, None, false)
 }
 
 /// Lesion harness: `dead` gids never update nor fire, and no current flows
@@ -135,15 +139,24 @@ pub fn run(conn: &Connectome, ticks: u32, stim: &Stimuli, audit: bool) -> RunRes
 /// Bit-exact mirror of `run_masked` in `scripts/expansion_check.py`.
 #[must_use]
 pub fn run_masked(conn: &Connectome, ticks: u32, stim: &Stimuli, dead: &[bool]) -> RunResult {
-    run_core(conn, ticks, stim, true, Some(dead))
+    run_core(conn, ticks, stim, true, Some(dead), false)
 }
 
+/// Honest per-tick anchor log ([`run`] semantics, chain heads collected).
+/// The verifier side of the dispute game lives on this vector.
+#[must_use]
+pub fn run_log(conn: &Connectome, ticks: u32, stim: &Stimuli) -> Vec<[u8; 32]> {
+    run_core(conn, ticks, stim, false, None, true).log.unwrap_or_default()
+}
+
+#[allow(clippy::too_many_arguments)]
 fn run_core(
     conn: &Connectome,
     ticks: u32,
     stim: &Stimuli,
     audit: bool,
     dead: Option<&[bool]>,
+    collect_log: bool,
 ) -> RunResult {
     let total = conn.total;
     let mut v = vec![0i32; total];
@@ -154,6 +167,11 @@ fn run_core(
     let spike_bytes_len = total;
     let mut rows: Option<Vec<Vec<TraceRow>>> = if audit {
         Some(vec![Vec::new(); total])
+    } else {
+        None
+    };
+    let mut log: Option<Vec<[u8; 32]>> = if collect_log {
+        Some(Vec::with_capacity(ticks as usize))
     } else {
         None
     };
@@ -235,12 +253,16 @@ fn run_core(
         msg.extend_from_slice(&spike_hash);
         msg.extend_from_slice(&v_hash);
         anchor = sha256(&msg);
+        if let Some(l) = log.as_mut() {
+            l.push(anchor);
+        }
     }
 
     RunResult {
         anchor,
         region_spikes,
         rows,
+        log,
     }
 }
 
