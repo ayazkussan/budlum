@@ -50,7 +50,53 @@ kumaşa sığar; mesele kapasite değil, **yürütmenin kanıtlanabilirliği**.
   spike, r) bu düşüş için bilinçli olarak lokal tutuldu (1-tick gecikme
   kararının asıl sebebi budur).
 
+## Genişleme probları (v2): sineğin yapısını sömürmek
+
+Beş prob, hepsi `goldens.anchor.toml` `[expansion]` bloğunda donmuş (35 pin)
+ve `scripts/expansion_check.py` + Rust testleriyle iki dilde denetleniyor.
+Kültür kuralı bu turda da aynı: **naif iddia refüte edildiyse refütasyon
+pinleniyor, silinmiyor.**
+
+### Graf sayımı (`analysis.rs`) — haritanın iskeleti
+Tamsayı, sıfır dinamik: derece toplamları + duyu→komut BFS jeodezikleri.
+Sol lamina **413/588** nörona iner (tek gözden komut katmanına), DNa02
+havuzlarına uzaklık **4 sinaps** (DnR max 5). Derece toplam parmak izi:
+`dd38f2c5…`.
+
+### Lezyon bataryası (`lesion.rs`) — nöroetoloji + arıza davranışı
+Kanık koku probunda (lamina bump + PN paterni, 48 tick) üç ablasyon:
+- `no_eb`: pusula zinciri çöküyor — EB 517→0 spike, FB 98→4, INH 103→0,
+  MDN 5→0 (kaskad, anchor: `80ed2517…`).
+- `no_mdn`: veto havuzu sönüyor, geri kalan sayaçlar aynı (anchor: `56a0e023…`).
+- `no_apl`: **ölçülemez** — prob v1'de APL sessizliği MBON sayacını
+  değiştirmiyor (delta 0 pinlenmiş). Dürüst negatif: bu prob APL'nin rolüne
+  duyarlı değil; zayıflığı saklamıyoruz, istersen v2 odağı budur.
+
+### Pusula wander (`compass.rs`) — attractor iddiasının hakiki sınavı
+6-geniş bump 0..8 tick, sonra 64 tick sessizlik: **bump sektöründe
+KALMIYOR** (test: hold_sector0 = 0/64, t=40 histogramı 9 kova). Toplu-dönü
+istatistiği (ring golden, 4.6°) hâlâ geçiyor ama tick-tick kilit yok —
+dondurulmuş parametrelerle ring ancak kayan/difüze bir bump üretiyor.
+Donanım notu: kazm için CX_INH kazanı (veya PEN-tarzı ofset sürüş) gerekiyor;
+yol haritası, iddia değil.
+
+### Koşullu baskılama (`learn.rs`) — mantar cisim öğreniyor
+CS (çift KC, 8..24) × US (MDN, 12..20), iz-kapı (MDN spike t veya t−1,
+pre t−1, post t) → KC→MBON ağırlıkları -128/128 tabanıyla baskılanıyor.
+Sonuç: **63 kenar değişti** ve MBON yanıtı 8→8→5→6→4→6→3'te çöküyor —
+davranışsal US-eşleşme baskısı, tick-tick anchor'lı. İleride gözcü'nün
+öğrenilmiş-ağırlık manifesti pinlemesine hazır `learn = cb0b8470…`.
+Tuzak notu: katı eş-tick kural bu delay-1 mimaride **imkânsız** (MBON, KC
+ateşinden bir tick sonra, KC refraktör haldeyken çaktırır → parity kesişimi
+∅). İz-kapı bu yüzden doğrudur.
+
+### Çekirdek-arıza tablosu (`fabric.rs::fault_row`) — donanım dayanıklılığı
+3123 çekirdek SRAM/neuron boyutlamalı, throughput değil: **%33 kayba kadar
+hız düşmüyor** (k≤512: 3 çevrim/tick, 333M tps), 1024 ölüde 4 çevrim /
+250M tps, enerji sabit. Kaybın tümü yoksa None (kuma ölür).
+
 ## Gerçek-connectome içe aktarımı
+
 
 Jeneratör stilizedir. Gerçek kenarlar için format: FlyWire/MaleCNS ihracından
 `pre_root_id,post_root_id,syn_count` CSV → `w = syn_count × W_SYN`, ve ata

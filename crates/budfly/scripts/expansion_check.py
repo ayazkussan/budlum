@@ -1,0 +1,307 @@
+#!/usr/bin/env python3
+"""BudFly expansion probes — Python reference that FREEZES the numbers the
+Rust expansion modules (analysis/lesion/compass/learn/fault) must reproduce.
+
+Same discipline as reference_check.py: every PIN line below is recomputed
+here from the frozen dynamics AND cross-checked against goldens.anchor.toml
+(one table, twice). Run from crates/budfly/scripts:
+
+    python3 expansion_check.py
+
+Five probes over connectome v1.0:
+  [census]  graph census: degree sums + BFS geodesics sensory->command
+  [lesion]  ablation battery: silence a region, pin the behavioral deficit
+  [compass] bump wander: the ring's bump does NOT lock (pinned negative)
+  [learn]   mushroom-body trace-gated conditioned suppression (works)
+  [fault]   analytic many-core fault table at MaleCNS scale
+"""
+import hashlib
+from collections import defaultdict, deque
+from pathlib import Path
+import tomllib
+
+from reference_check import (
+    SCALE, V_TH, V_MAX, V_MIN, REFRAC, W_SYN, I_STIM, LEAK_SHIFT,
+    LAM_L, LAM_R, CX_EB, CX_FB, MB_KC, MB_MBON, MB_APL, DN_L, DN_R, MDN,
+    build_connectome, run,
+)
+
+# Mirrors Rust sim.rs (per-add progressive clamp during delivery). The
+# reference runner omits the clamp because exercised workloads never reach
+# it; the expansion runners clamp exactly like Rust so new probes that
+# raise fan-in stay bit-identical across languages.
+FAN_IN_MAX = SCALE * 64
+
+RESULTS = {}
+def pin(tag, *vals):
+    RESULTS[tag] = " ".join(str(v) for v in vals)
+    print(f"PIN[{tag}] {RESULTS[tag]}")
+
+sizes, off, total, edges = build_connectome(1, 16)
+assert (total, len(edges)) == (588, 2283)
+region_of = [0] * total
+for r in range(16):
+    for g in range(off[r], off[r] + sizes[r]):
+        region_of[g] = r
+
+# --------------------------------------------------------------- [census]
+adj_out = [[] for _ in range(total)]
+for p, q, _w in edges:
+    adj_out[p].append(q)
+out_deg = {r: 0 for r in range(16)}
+in_deg = {r: 0 for r in range(16)}
+for p, q, _w in edges:
+    out_deg[region_of[p]] += 1
+    in_deg[region_of[q]] += 1
+
+def bfs_dist(src):
+    d = [-1] * total
+    dq = deque()
+    for g in range(off[src], off[src] + sizes[src]):
+        d[g] = 0
+        dq.append(g)
+    while dq:
+        g = dq.popleft()
+        for q in adj_out[g]:
+            if d[q] < 0:
+                d[q] = d[g] + 1
+                dq.append(q)
+    return d
+
+def pool_stats(d, region):
+    ds = [d[g] for g in range(off[region], off[region] + sizes[region]) if d[g] >= 0]
+    return (len(ds), min(ds), sum(ds) * 10 // len(ds), max(ds))
+
+dL = bfs_dist(LAM_L)
+census_str = "|".join(f"{r}:{out_deg[r]}:{in_deg[r]}" for r in range(16))
+pin("census.reached_from_laml", sum(1 for x in dL if x >= 0))
+pin("census.dnl", *pool_stats(dL, DN_L))
+pin("census.dnr", *pool_stats(dL, DN_R))
+pin("census.mdn", *pool_stats(dL, MDN))
+pin("census.degsum_sha256", hashlib.sha256(census_str.encode()).hexdigest())
+
+# --------------------------------------------------------------- [lesion]
+def run_masked(ticks, stimuli, dead, audit_rows=False):
+    """Identical dynamics to reference run(); `dead` gids never update nor
+    fire, and no current flows in or out of them. Anchor shape unchanged."""
+    adj = [[] for _ in range(total)]
+    for p, q, w in edges:
+        if not dead[p] and not dead[q]:
+            adj[p].append((q, w))
+    v = [0] * total
+    refr = [0] * total
+    pend = [0] * total
+    anchor = b"\x00" * 32
+    region_spikes = defaultdict(int)
+    rows = defaultdict(list) if audit_rows else None
+    for t in range(ticks):
+        spiking = []
+        sbytes = bytearray(total)
+        for gid in range(total):
+            if dead[gid]:
+                continue
+            i_ext = I_STIM if (gid in stimuli and stimuli[gid][0] <= t < stimuli[gid][1]) else 0
+            i_syn = pend[gid] if t > 0 else 0
+            vb, rb = v[gid], refr[gid]
+            spike = 0
+            if rb > 0:
+                refr[gid] = rb - 1
+                v[gid] = 0
+            else:
+                raw = max(V_MIN, min(V_MAX, vb - (vb >> LEAK_SHIFT) + i_ext + i_syn))
+                if raw >= V_TH:
+                    v[gid] = 0
+                    refr[gid] = REFRAC
+                    spike = 1
+                    spiking.append(gid)
+                    sbytes[gid] = 1
+                else:
+                    v[gid] = raw
+            if audit_rows:
+                rows[gid].append((t, vb, i_ext, i_syn, v[gid], spike, rb))
+        nxt = [0] * total
+        for p in spiking:
+            for q, w in adj[p]:
+                nxt[q] = max(-FAN_IN_MAX, min(FAN_IN_MAX, nxt[q] + w))
+        for g in spiking:
+            region_spikes[region_of[g]] += 1
+        pend = nxt
+        sh = hashlib.sha256(bytes(sbytes)).digest()
+        vh = hashlib.sha256(b"".join(x.to_bytes(4, "little", signed=True) for x in v)).digest()
+        anchor = hashlib.sha256(anchor + t.to_bytes(8, "big") + sh + vh).digest()
+    return anchor.hex(), region_spikes, rows
+
+def odor_stim():
+    """Canonical odor probe: left lamina bump ticks 0..8, fixed PN pattern
+    into every other KC ticks 8..16 (the 'smell')."""
+    st = {}
+    for i in range(sizes[LAM_L] // 4):
+        st[off[LAM_L] + i] = (0, 8)
+    for i in range(sizes[MB_KC] // 2):
+        st[off[MB_KC] + i * 2] = (8, 16)
+    return st
+
+def dead_region(r):
+    dm = [False] * total
+    for g in range(off[r], off[r] + sizes[r]):
+        dm[g] = True
+    return dm
+
+def spk_row(spk):
+    return ",".join(str(spk.get(r, 0)) for r in range(16))
+
+dead_none = [False] * total
+ba, bs, _ = run_masked(48, odor_stim(), dead_none)
+pin("lesion.base.anchor", ba)
+pin("lesion.base.spikes", spk_row(bs))
+for name, r in (("no_apl", MB_APL), ("no_eb", CX_EB), ("no_mdn", MDN)):
+    a, s, _ = run_masked(48, odor_stim(), dead_region(r))
+    pin(f"lesion.{name}.spikes", spk_row(s))
+    pin(f"lesion.{name}.anchor", a)
+    pin(f"lesion.{name}.mbon_delta", s.get(MB_MBON, 0) - bs.get(MB_MBON, 0))
+
+# --------------------------------------------------------------- [compass]
+# v4 FROZEN PROTOCOL (honest negative pinned): 6-wide bump at sector 0 for
+# ticks 0..8, then 64 ticks of silence. Question: does the bump hold its
+# sector per tick? Measured answer: NO (drift/wander), pinned quantitatively,
+# matching the live histogram dump; the summed-angle golden (reference_check)
+# remains the coarse statistic that historically concentrated.
+def compass_wander(bump_width=6, ticks=72):
+    stim = {off[CX_EB] + i: (0, 8) for i in range(bump_width)}
+    anchor, spk, rows = run_masked(ticks, stim, dead_none, audit_rows=True)
+    ne = sizes[CX_EB]
+    sw = ne // 16
+    per = defaultdict(lambda: defaultdict(int))
+    for g, rs in rows.items():
+        if off[CX_EB] <= g < off[CX_EB] + ne:
+            for r in rs:
+                if r[5] == 1:
+                    per[r[0]][(g - off[CX_EB]) // sw] += 1
+    dec = []
+    for t in range(ticks):
+        bk = per.get(t)
+        if bk and max(bk.values()) > 0:
+            # ties -> lowest sector index (mirrors python max with (count, -b))
+            best_c = max(bk.values())
+            dec.append(min(b for b, c in bk.items() if c == best_c))
+        else:
+            dec.append(-1)
+    after = range(8, ticks)
+    hold0 = sum(1 for t in after if dec[t] == 0)
+    anysp = sum(1 for t in after if dec[t] >= 0)
+    t40 = sorted(per[40].items())
+    hist = ",".join(f"{b}:{c}" for b, c in t40)
+    pin("compass.v4.anchor", anchor)
+    pin("compass.v4.hold_sector0_of64", hold0)
+    pin("compass.v4.any_spike_of64", anysp)
+    pin("compass.v4.t40_histogram", hist)
+    pin("compass.v4.verdict", "bump wanders; single-sector lock absent")
+
+compass_wander()
+
+# ----------------------------------------------------------------- [learn]
+# v3 FROZEN PROTOCOL (works): CS = every even KC, ticks 8..24; US = MDN pool,
+# ticks 12..20. Three-factor trace gate: MDN spiked at t or t-1 (1-tick US
+# trace), pre spiked at t-1, post spiked at t; KC->MBON decremented
+# delta=128 down to floor=128, edge order = generation order, delivery for
+# t+1 uses UPDATED weights.
+def cond_run(cs_ticks=(8, 24), us_ticks=(12, 20), ticks=32, delta=SCALE // 32,
+             floor_w=W_SYN // 4):
+    stim = {off[MB_KC] + i: cs_ticks for i in range(0, sizes[MB_KC], 2)}
+    for i in range(sizes[MDN]):
+        stim[off[MDN] + i] = us_ticks
+    adj_idx = [[] for _ in range(total)]
+    W = [w for (_p, _q, w) in edges]
+    for i, (p, q, _w) in enumerate(edges):
+        adj_idx[p].append((q, i))
+    v = [0] * total
+    refr = [0] * total
+    pend = [0] * total
+    anchor = b"\x00" * 32
+    mbon = []
+    prev = set()
+    for t in range(ticks):
+        spiking = []
+        sbytes = bytearray(total)
+        for gid in range(total):
+            i_ext = I_STIM if (gid in stim and stim[gid][0] <= t < stim[gid][1]) else 0
+            i_syn = pend[gid] if t > 0 else 0
+            vb, rb = v[gid], refr[gid]
+            if rb > 0:
+                refr[gid] = rb - 1
+                v[gid] = 0
+            else:
+                raw = max(V_MIN, min(V_MAX, vb - (vb >> LEAK_SHIFT) + i_ext + i_syn))
+                if raw >= V_TH:
+                    v[gid] = 0
+                    refr[gid] = REFRAC
+                    spiking.append(gid)
+                    sbytes[gid] = 1
+                else:
+                    v[gid] = raw
+        ss = set(spiking)
+        mbon.append(sum(1 for g in spiking if region_of[g] == MB_MBON))
+        gate = any(region_of[g] == MDN for g in ss) or any(region_of[g] == MDN for g in prev)
+        if gate:
+            for i, (p, q, _w) in enumerate(edges):
+                if region_of[p] == MB_KC and region_of[q] == MB_MBON \
+                        and p in prev and q in ss:
+                    W[i] = max(floor_w, W[i] - delta)
+        nxt = [0] * total
+        for p in spiking:
+            for q, i in adj_idx[p]:
+                nxt[q] = max(-FAN_IN_MAX, min(FAN_IN_MAX, nxt[q] + W[i]))
+        pend = nxt
+        prev = ss
+        sh = hashlib.sha256(bytes(sbytes)).digest()
+        vh = hashlib.sha256(b"".join(x.to_bytes(4, "little", signed=True) for x in v)).digest()
+        anchor = hashlib.sha256(anchor + t.to_bytes(8, "big") + sh + vh).digest()
+    learn_anchor = hashlib.sha256(
+        b"learn-v1" + b"".join(w.to_bytes(4, "little", signed=True) for w in W)).hexdigest()
+    wc = [W[i] for i, (p, q, _w) in enumerate(edges)
+          if region_of[p] == MB_KC and region_of[q] == MB_MBON]
+    changed = sum(1 for i, (p, q, w) in enumerate(edges)
+                  if region_of[p] == MB_KC and region_of[q] == MB_MBON and W[i] != w)
+    pin("learn.v3.mbon_per_tick", ",".join(map(str, mbon)))
+    pin("learn.v3.changed", changed)
+    pin("learn.v3.floor_min", min(wc))
+    pin("learn.v3.ceil_max", max(wc))
+    pin("learn.v3.pre_mbon_8_12", sum(mbon[8:12]))
+    pin("learn.v3.post_mbon_20_24", sum(mbon[20:24]))
+    pin("learn.v3.run_anchor", anchor.hex())
+    pin("learn.v3.learn_anchor", learn_anchor)
+
+cond_run()
+
+# ----------------------------------------------------------------- [fault]
+def fault_table():
+    MALE_N, MALE_C, ACTIVE_PCT = 166_700, 25_582_938, 2
+    N_CAP, SRAM, SOP_CYC, CLK = 256, 64 * 1024, 64, 1_000_000_000
+    E_SOP, E_HOP, E_UPD = 24, 26, 900
+    cores_by_n = -(-MALE_N // N_CAP)
+    cores_by_s = -(-(MALE_C * 8) // SRAM)
+    cores = max(cores_by_n, cores_by_s)
+    active = MALE_N * ACTIVE_PCT // 100
+    fan = MALE_C // MALE_N
+    sops = active * fan
+    energy = active * E_SOP + active * 4 * E_HOP + MALE_N * E_UPD // 1000
+    for k in (0, 1, 8, 64, 256, 1024):
+        ok = cores - k
+        per_core = -(-sops // ok)
+        cyc = -(-per_core // SOP_CYC)
+        tps = CLK // cyc if cyc else 0
+        pin(f"fault.k{k}", k, ok, cyc, tps, energy)
+
+fault_table()
+
+# ---------------------------------------------- manifest cross-validation
+man = tomllib.loads((Path(__file__).resolve().parents[1] / "goldens.anchor.toml").read_text())
+exp = man.get("expansion", {})
+n_ok = 0
+for tag, want in exp.items():
+    got = RESULTS.get(tag)
+    assert got is not None, f"manifest expansion tag without computation: {tag}"
+    assert got == str(want), f"{tag}: manifest pins {want}, recomputed {got}"
+    n_ok += 1
+print(f"[manifest] {n_ok} expansion pins agree (one table, twice)")
+print("EXPANSION CHECK PASS")

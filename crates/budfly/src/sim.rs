@@ -126,6 +126,30 @@ pub struct RunResult {
 /// The transition order — gid-ascending neuron updates, then fan-in delivery
 /// in (pre ascending, generation) order — is frozen and golden-pinned.
 pub fn run(conn: &Connectome, ticks: u32, stim: &Stimuli, audit: bool) -> RunResult {
+    run_core(conn, ticks, stim, audit, None)
+}
+
+/// Lesion harness: `dead` gids never update nor fire, and no current flows
+/// in or out of them. Identical dynamics to [`run`] otherwise; the anchor
+/// shape is unchanged (dead neurons contribute zero rows and zero bits).
+/// Bit-exact mirror of `run_masked` in `scripts/expansion_check.py`.
+#[must_use]
+pub fn run_masked(
+    conn: &Connectome,
+    ticks: u32,
+    stim: &Stimuli,
+    dead: &[bool],
+) -> RunResult {
+    run_core(conn, ticks, stim, true, Some(dead))
+}
+
+fn run_core(
+    conn: &Connectome,
+    ticks: u32,
+    stim: &Stimuli,
+    audit: bool,
+    dead: Option<&[bool]>,
+) -> RunResult {
     let total = conn.total;
     let mut v = vec![0i32; total];
     let mut refr = vec![0u32; total];
@@ -144,6 +168,11 @@ pub fn run(conn: &Connectome, ticks: u32, stim: &Stimuli, audit: bool) -> RunRes
         let mut spiking: Vec<u32> = Vec::new();
 
         for gid in 0..total {
+            if let Some(dm) = dead {
+                if dm[gid] {
+                    continue;
+                }
+            }
             let i_ext = stim.current(gid as u32, t);
             let i_syn = pend[gid];
             let vb = v[gid];
@@ -185,6 +214,11 @@ pub fn run(conn: &Connectome, ticks: u32, stim: &Stimuli, audit: bool) -> RunRes
         for &pre in &spiking {
             for e in &conn.adj[pre as usize] {
                 let q = e.post as usize;
+                if let Some(dm) = dead {
+                    if dm[q] {
+                        continue;
+                    }
+                }
                 next[q] = (next[q] + e.w).clamp(-FAN_IN_MAX, FAN_IN_MAX);
             }
         }

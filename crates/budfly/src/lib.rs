@@ -27,8 +27,12 @@
 #![forbid(unsafe_code)]
 
 pub mod air;
+pub mod analysis;
+pub mod compass;
 pub mod connectome;
 pub mod fabric;
+pub mod learn;
+pub mod lesion;
 pub mod oracle;
 pub mod rng;
 pub mod sha256;

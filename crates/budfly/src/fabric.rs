@@ -200,6 +200,28 @@ pub fn real_scale_report(chip: &Chip) -> RealScaleReport {
     }
 }
 
+/// Fault-tolerance row: recompute the real-scale sizing with `failed` cores
+/// dead (sited anywhere — cycles depend only on how many SOPs remain per
+/// live core). Energy is placement-slack independent at `ACTIVE_PERCENT`,
+/// so it is constant across the table; the interesting columns are cycles
+/// and ticks/second. Bit-exact mirror of `expansion_check.py` [fault].
+/// Returns `(cores_ok, cycles_per_tick, ticks_per_second, energy_per_tick_pj)`
+/// or `None` when the failure kills the fabric.
+#[must_use]
+pub fn fault_row(chip: &Chip, failed: usize) -> Option<(usize, usize, u64, u64)> {
+    let r = real_scale_report(chip);
+    let ok = r.cores.checked_sub(failed)?;
+    if ok == 0 {
+        return None; // total loss: no cycles, fabric dead
+    }
+    let per_core = r.sops_per_tick.div_ceil(ok);
+    let cycles = per_core.div_ceil(chip.sop_per_cycle);
+    let ticks_per_second = 1_000_000_000u64
+        .checked_div(cycles as u64)
+        .unwrap_or(u64::MAX);
+    Some((ok, cycles, ticks_per_second, r.energy_per_tick_pj))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -238,5 +260,26 @@ mod tests {
         assert_eq!(r.energy_per_tick_pj, 576_782);
         // The sanity claim: three+ orders of magnitude above fly-real-time.
         assert!(r.ticks_per_second > 1_000_000);
+    }
+
+    /// Pinned by goldens.anchor.toml [expansion] fault rows and validated by
+    /// expansion_check.py: placement slack means throughput holds until a
+    /// third of the fabric is gone.
+    #[test]
+    fn fault_table_is_frozen() {
+        let chip = Chip::n1();
+        let table = [
+            (0, 3123, 3, 333_333_333),
+            (1, 3122, 3, 333_333_333),
+            (8, 3115, 3, 333_333_333),
+            (64, 3059, 3, 333_333_333),
+            (256, 2867, 3, 333_333_333),
+            (1024, 2099, 4, 250_000_000),
+        ];
+        for (k, ok, cyc, tps) in table {
+            let rowv = fault_row(&chip, k).unwrap_or_default();
+            assert_eq!(rowv, (ok, cyc, tps, 576_782), "fault row k={k}");
+        }
+        assert!(fault_row(&chip, 3123).is_none(), "total loss kills the fabric");
     }
 }

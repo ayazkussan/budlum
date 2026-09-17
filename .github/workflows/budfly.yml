@@ -111,10 +111,15 @@ jobs:
       # The Python reference is the provenance oracle: it recomputed every
       # golden anchor committed in tests/goldens.rs. If this passes while the
       # Rust tests pass, the two implementations agree bit-for-bit.
-      - name: python reference check
+      - name: python reference + expansion checks
         run: |
           out=$(python3 crates/budfly/scripts/reference_check.py 2>&1) || {
             echo "${out}" | tail -20 | while IFS= read -r l; do echo "::error::[python] ${l}"; done
+            exit 1
+          }
+          echo "${out}"
+          out=$(python3 crates/budfly/scripts/expansion_check.py 2>&1) || {
+            echo "${out}" | tail -30 | while IFS= read -r l; do echo "::error::[expansion] ${l}"; done
             exit 1
           }
           echo "${out}"
