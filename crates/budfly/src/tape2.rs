@@ -28,7 +28,7 @@
 use crate::connectome::Connectome;
 use crate::sha256::sha256;
 use crate::sim::TraceRow;
-use crate::tape::{constraint_violations, ActTape, HEADER_BYTES, ROW_BYTES};
+use crate::tape::{constraint_violations, ActTape, HEADER_BYTES};
 
 /// Magic prefix of the v2 tape (frozen).
 pub const MAGIC2: [u8; 4] = *b"ACT2";
