@@ -12,7 +12,7 @@
 
 use crate::connectome::{Connectome, Region};
 use crate::sha256::sha256;
-use crate::sim::{run_log, Stimuli, FAN_IN_MAX, LEAK_SHIFT, REFRAC, V_MAX, V_MIN, V_TH};
+use crate::sim::{Stimuli, FAN_IN_MAX, LEAK_SHIFT, REFRAC, V_MAX, V_MIN, V_TH};
 
 /// First tick where two anchor logs disagree (None if identical).
 /// Full-log scan: with the logs in hand the walk is O(T); the bisection
@@ -109,6 +109,7 @@ mod tests {
     use crate::connectome::{generate, DEFAULT_SEED};
     use crate::lesion::odor_stim;
     use crate::sha256::hex32;
+    use crate::sim::run_log;
 
     #[test]
     fn dispute_game_finds_the_lie_at_tick_23() {
