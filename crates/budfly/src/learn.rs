@@ -46,6 +46,9 @@ pub struct LearnReport {
     pub pre_mbon: u64,
     /// MBON spikes in ticks 20..24 (post-US probe).
     pub post_mbon: u64,
+    /// The first four KC->MBON (pre, post, final_w) triples, generation
+    /// order — forensic ground truth if the anchor ever drifts.
+    pub head_triples: Vec<(u32, u32, i32)>,
 }
 
 /// Frozen conditioning run over the canonical connectome.
@@ -148,19 +151,28 @@ pub fn conditioned_run(conn: &Connectome) -> LearnReport {
         anchor = sha256(&msg);
     }
 
-    let mut w_bytes = b"learn-v1".to_vec();
-    for x in &w {
-        w_bytes.extend_from_slice(&x.to_le_bytes());
-    }
-    let learn_anchor = sha256(&w_bytes);
-
+    // canonical class binding (learn-v2): KC->MBON edges only, generation
+    // order, (pre_offset, post_offset, final_w) LE triples. Mirrors the
+    // hash in expansion_check.py so cross-language equality holds by
+    // construction rather than by list-layout luck.
+    let k_off = conn.offset(Region::MbKc) as u32;
+    let m_off = conn.offset(Region::MbMbon) as u32;
+    let mut w_bytes = b"learn-v2".to_vec();
     let mut changed = 0usize;
     let mut floor_min = i32::MAX;
     let mut ceil_max = i32::MIN;
+    let mut head_triples: Vec<(u32, u32, i32)> = Vec::new();
     for (i, e) in conn.edges.iter().enumerate() {
         if conn.region_of(e.pre as usize) == Region::MbKc
             && conn.region_of(e.post as usize) == Region::MbMbon
         {
+            let trip = (e.pre - k_off, e.post - m_off, w[i]);
+            w_bytes.extend_from_slice(&trip.0.to_le_bytes());
+            w_bytes.extend_from_slice(&trip.1.to_le_bytes());
+            w_bytes.extend_from_slice(&trip.2.to_le_bytes());
+            if head_triples.len() < 4 {
+                head_triples.push(trip);
+            }
             if w[i] != e.w {
                 changed += 1;
             }
@@ -168,6 +180,7 @@ pub fn conditioned_run(conn: &Connectome) -> LearnReport {
             ceil_max = ceil_max.max(w[i]);
         }
     }
+    let learn_anchor = sha256(&w_bytes);
     LearnReport {
         run_anchor: anchor,
         learn_anchor,
@@ -177,6 +190,7 @@ pub fn conditioned_run(conn: &Connectome) -> LearnReport {
         changed,
         floor_min,
         ceil_max,
+        head_triples,
     }
 }
 
@@ -184,27 +198,38 @@ pub fn conditioned_run(conn: &Connectome) -> LearnReport {
 mod tests {
     use super::*;
     use crate::connectome::{generate, DEFAULT_SEED};
+    use crate::sha256::hex32;
 
     #[test]
     fn conditioned_suppression_is_frozen() {
         let c = generate(1, 16, DEFAULT_SEED);
         let r = conditioned_run(&c);
-        eprintln!(
-            "DBG changed={} floor={} ceil={} pre={} post={} mbon={:?} run={} learn={}",
-            r.changed,
-            r.floor_min,
-            r.ceil_max,
-            r.pre_mbon,
-            r.post_mbon,
-            r.mbon_per_tick,
-            crate::sha256::hex32(&r.run_anchor),
-            crate::sha256::hex32(&r.learn_anchor)
-        );
         assert_eq!(r.changed, 63, "changed count");
         assert_eq!(r.floor_min, 128, "floor");
         assert_eq!(r.ceil_max, 1024, "ceil");
         assert_eq!(r.pre_mbon, 16, "pre");
         assert_eq!(r.post_mbon, 9, "post");
+        // forensic ground truth: any drift re-locates itself here first
+        assert_eq!(
+            r.head_triples,
+            vec![(0, 5, 256), (1, 7, 1024), (2, 1, 768), (3, 7, 1024)],
+            "first class triples (generation order)"
+        );
+        assert_eq!(
+            r.mbon_per_tick,
+            vec![
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 8, 0, 8, 0, 8, 0, 5, 0, 6, 0, 4, 0, 6, 0, 3, 0, 0, 0, 0,
+                0, 0, 0, 0
+            ]
+        );
+        assert_eq!(
+            hex32(&r.run_anchor),
+            "4d1fd0233a966f7eba2c3841984e93987f471e98490a6742a86a07024893a79d"
+        );
+        assert_eq!(
+            hex32(&r.learn_anchor),
+            "f3b1581dffc5da17b48ff93569e85aaeaa197455b99cc31505fcdf8ef6df5016"
+        );
         // the behavioral claim: US-paired odor depresses MBON response
         assert!(r.post_mbon < r.pre_mbon);
     }

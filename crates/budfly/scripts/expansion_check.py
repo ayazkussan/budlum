@@ -256,8 +256,17 @@ def cond_run(cs_ticks=(8, 24), us_ticks=(12, 20), ticks=32, delta=SCALE // 32,
         sh = hashlib.sha256(bytes(sbytes)).digest()
         vh = hashlib.sha256(b"".join(x.to_bytes(4, "little", signed=True) for x in v)).digest()
         anchor = hashlib.sha256(anchor + t.to_bytes(8, "big") + sh + vh).digest()
+    # canonical class binding (learn-v2): KC->MBON edges only, generation
+    # order, (pre_offset, post_offset, final_w) LE triples - robust against
+    # whole-list layout questions, still generation-ordered by construction.
+    cw = [(p - off[MB_KC], q - off[MB_MBON], W[i])
+          for i, (p, q, _w) in enumerate(edges)
+          if region_of[p] == MB_KC and region_of[q] == MB_MBON]
     learn_anchor = hashlib.sha256(
-        b"learn-v1" + b"".join(w.to_bytes(4, "little", signed=True) for w in W)).hexdigest()
+        b"learn-v2" + b"".join(
+            p.to_bytes(4, "little") + q.to_bytes(4, "little")
+            + w.to_bytes(4, "little", signed=True)
+            for p, q, w in cw)).hexdigest()
     wc = [W[i] for i, (p, q, _w) in enumerate(edges)
           if region_of[p] == MB_KC and region_of[q] == MB_MBON]
     changed = sum(1 for i, (p, q, w) in enumerate(edges)
