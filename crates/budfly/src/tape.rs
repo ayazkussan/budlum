@@ -139,7 +139,7 @@ pub fn recompute_fold(total: usize, tape: &ActTape, prev_head: &[u8; 32]) -> [u8
     let vh = sha256(&vbytes);
     let mut msg = Vec::with_capacity(32 + 8 + 32 + 32);
     msg.extend_from_slice(prev_head);
-    msg.extend_from_slice(&tape.tick.to_be_bytes());
+    msg.extend_from_slice(&u64::from(tape.tick).to_be_bytes());
     msg.extend_from_slice(&sh);
     msg.extend_from_slice(&vh);
     sha256(&msg)
