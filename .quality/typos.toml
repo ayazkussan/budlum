@@ -40,7 +40,9 @@ extend-ignore-re = [
   "\\b12D3Koo[A-Za-z0-9]+\\b",          # libp2p PeerID
   "sha256:[0-9a-f]+",                   # docker digest
   "(?i)\\bbud1[a-z0-9]+\\b",            # bech32-style Budlum addresses
-  "\\bflate2\\b",                       # the crate name from Cargo.toml: an
+  "\\bflate2\\b",
+  "\\bBSE1\\b",                       # the envelope magic: a frozen wire token,
+                                       # bytes are pinned in goldens, not prose.                       # the crate name from Cargo.toml: an
                                        # identifier that pins the dep, not prose.
                                        # Region-ignore (not word map) so a typo'd
                                        # bare "flate" in prose still fails.
@@ -48,6 +50,8 @@ extend-ignore-re = [
 
 [default.extend-words]
 # -- BudFly (fly neuromorphic) domain terms -------------------------------------
+BSE = "BSE"
+bse = "bse"
 AER = "AER"
 Inh = "Inh"
 inh = "inh"
