@@ -4,7 +4,7 @@
 
 use budfly::connectome::{generate, DEFAULT_SEED};
 use budfly::divan::council;
-use budfly::envelope::{cheap_consistent, decode, encode_council};
+use budfly::envelope::{cheap_consistent, cheap_replay_consistent, decode, decode2, encode_council, encode_council_card};
 use budfly::oracle::{sentinel_stimulus, SENTINEL_TICKS};
 use budfly::replay::{mdn_early_stim, replay_cert};
 use budfly::tournament::tournament;
@@ -43,7 +43,7 @@ fn main() {
         env.iter().map(|b| format!("{b:02x}")).collect::<String>()
     );
 
-    let base = sentinel_stimulus(&fly, &[0xffu8; 32]);
+    let base = sentinel_stimulus(&fly, &digest);
     let branch = mdn_early_stim(&fly, &base, 10);
     let cert = replay_cert(&fly, &base, &branch, 10, SENTINEL_TICKS);
     println!("\n[replay] what if MDN fired at tick 10?");
@@ -51,6 +51,10 @@ fn main() {
         "  prefix_bound={} branch_counters={:?} verdict={:?} (honest negative: verdict stands)",
         cert.prefix_bound, cert.branch_counters, cert.branch_verdict
     );
+
+    let env2 = encode_council_card(&digest, &rep, &cert);
+    let ok2 = decode2(&env2).map(|e| cheap_replay_consistent(&e, &cert.base_head_at_fork)) == Some(true);
+    println!("\n[envelope2] BSE-2 verdict + replay card: {} bytes, cheap_replay_consistent={ok2}", env2.len());
 
     let challenger = generate(1, 16, CHALLENGER_SEED);
     let m = tournament(&fly, &challenger);

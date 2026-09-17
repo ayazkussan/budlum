@@ -587,6 +587,54 @@ pin("envelope.hex", env.hex())
 pin("envelope.cheap_consistent", dec_council == dec["council"])
 pin("envelope.selfcheck", dec["anchors"] == seat_a and dec["verdicts"] == [VCODE[v] for v in seat_v])
 
+
+# ----------------------------------------------------------- [envelope bse2]
+# BSE-2: the verdict PLUS its counterfactual card, 204 bytes.
+# Layout (frozen):
+#   "BSE2"            4 B
+#   fact_digest      32 B
+#   seat anchors   3*32 B
+#   seat verdicts  3*1  B
+#   council        1    B
+#   fork_tick      4    B (little-endian u32; 0 = no card)
+#   base_head@fork-1 32 B (zero bytes when fork == 0)
+#   branch_final     32 B
+# Cheap native check: fork > 0  =>  the card exists; the verifier's cheap
+# replay check is one 32-byte compare against the PUBLISHED base head at
+# fork-1 (wherever that base is committed: chain, manifest, or the BSE-1
+# lineage of the same fact). No execution, no hashing.
+FF = bytes([0xFF] * 32)
+ff_seat_v, ff_seat_a = [], []
+for s in range(3):
+    v, dl, dr, mdn, a = sentinel(sizes, off, edges, seat_digest(FF, s))
+    ff_seat_v.append(v)
+    ff_seat_a.append(a)
+ff_unan = ff_seat_v[0] == ff_seat_v[1] == ff_seat_v[2]
+ff_council = ff_seat_v[0] if ff_unan else "Abstain"
+pin("envelope2.ff_seat_verdicts", ",".join(ff_seat_v))
+pin("envelope2.ff_unanimous", ff_unan)
+pin("envelope2.ff_council", ff_council)
+
+def encode_bse2(digest, seat_anchors, seat_verdicts, council, fork, base_head_hex, branch_hex):
+    card = fork.to_bytes(4, "little")
+    card += (bytes(32) if fork == 0 else bytes.fromhex(base_head_hex))
+    card += (bytes(32) if fork == 0 else bytes.fromhex(branch_hex))
+    b = b"BSE2" + digest + b"".join(bytes.fromhex(a) for a in seat_anchors)
+    b += bytes([VCODE[v] for v in seat_verdicts]) + bytes([VCODE[council]]) + card
+    assert len(b) == 204
+    return b
+b2 = encode_bse2(FF, ff_seat_a, ff_seat_v, ff_council, FORK,
+                 base_log[FORK - 1], branch_log[-1])
+pin("envelope2.len", len(b2))
+pin("envelope2.hex", b2.hex())
+pin("envelope2.fork", FORK)
+pin("envelope2.cheap_replay", b2[136:140] == FORK.to_bytes(4, "little")
+    and b2[140:172].hex() == base_log[FORK - 1]
+    and b2[172:204].hex() == branch_log[-1])
+# BSE-1 stays a strict sub-case: fork == 0 => card bytes are zeros.
+b2_nocard = encode_bse2(FF, ff_seat_a, ff_seat_v, ff_council, 0, "00" * 32, "00" * 32)
+pin("envelope2.nocard_tail", b2_nocard[136:].hex())
+
 # ---------------------------------------------- manifest cross-validation
 man = tomllib.loads((Path(__file__).resolve().parents[1] / "goldens.anchor.toml").read_text())
 exp = man.get("expansion", {})

@@ -36,12 +36,15 @@ zarfta** mühürlenir.
 | C8 | Donanım seçimi kararlılık metriğiyle turnuvalanır | panel 8, A=7 B=5 abstain → kazanan B |
 | C9 | Mahkeme kararı 136 B zarfa sığar; ucuz tutarlılık denetimi sıfır nöral yürütme | `BSE1…00010000` hex, `cheap_consistent=True`, sahtesi reddedilir |
 | C10 | Bütünü sıfır-bağımlılık, clippy-unwrap yok, fails-closed | CI gate, API yüzeyi |
+| C11 | Karar ve kontrgerçek kartı tek zarfta (204 B, "BSE2") | `envelope2.len=204`, frozen hex, BSE-1 = fork==0 alt-durumu |
+| C12 | Ucuz replay denetimi tek 32 B byte-compare (yayınlanmış baş ile) | `cheap_replay_consistent` forged-head reddi (pinli) |
+| C13 | Forksuz kart byte'ları sıfır; kartlı fork'suz kabul edilmez | `decode2` garbaje `None`, pin `envelope2.nocard_tail` |
 
 ## Varyantlar (yedek iddialar)
 
 - Koltuk sayısı 3→N (maliyet anchor başına lineer ~2,3 µJ/tick başına; pinler 3'te donmuş).
 - Panel turnuvası yerine ağırlıklı lig (çok-digest skor tablosu).
-- BSE-2 zarf varyantı: fork-başlı replay için `fork:cards` alanı eklenmiş 200 B.
+- ~~BSE-2 zarf varyantı~~ **SEVK EDİLDİ**: fork kartı zarfa girdi (204 B, C11–C13).
 - zk-ona indirgeme: C1–C7 kısıtları (`air.rs`) zincir-dışı kanıtla zarfı 32 B'a bastırır (yol haritası, iddia edilmiyor).
 
 ## Dürüst-negatifler (icattan düşülmeyenler)
