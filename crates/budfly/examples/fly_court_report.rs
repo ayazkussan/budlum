@@ -15,17 +15,17 @@ fn main() {
     let fly = generate(1, 16, DEFAULT_SEED);
 
     println!("=== FLY COURT SESSION (frozen dynamics, 1/16 scale) ===");
-    println!("connectome: {} neurons, {} synapses", fly.total, fly.edges.len());
+    println!(
+        "connectome: {} neurons, {} synapses",
+        fly.total,
+        fly.edges.len()
+    );
 
     let digest = [0x42u8; 32];
     let rep = council(&fly, &digest);
     println!("\n[council] digest = 0x42..32");
     for (s, (v, a)) in rep.verdicts.iter().zip(rep.anchors.iter()).enumerate() {
-        println!(
-            "  seat {s}: {:?}  anchor {:02x?}...",
-            v,
-            &a[..4]
-        );
+        println!("  seat {s}: {:?}  anchor {:02x?}...", v, &a[..4]);
     }
     println!(
         "  unanimous={} council={:?} (fails closed on any split)",
@@ -34,8 +34,14 @@ fn main() {
 
     let env = encode_council(&digest, &rep);
     let checked = decode(&env).map(|e| cheap_consistent(&e)) == Some(true);
-    println!("\n[envelope] BSE-1: {} bytes, cheap_consistent={checked}", env.len());
-    println!("  hex: {}", env.iter().map(|b| format!("{b:02x}")).collect::<String>());
+    println!(
+        "\n[envelope] BSE-1: {} bytes, cheap_consistent={checked}",
+        env.len()
+    );
+    println!(
+        "  hex: {}",
+        env.iter().map(|b| format!("{b:02x}")).collect::<String>()
+    );
 
     let base = sentinel_stimulus(&fly, &[0xffu8; 32]);
     let branch = mdn_early_stim(&fly, &base, 10);

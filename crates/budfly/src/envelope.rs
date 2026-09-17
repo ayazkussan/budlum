@@ -109,8 +109,8 @@ pub fn decode(bytes: &[u8]) -> Option<Envelope> {
 /// corrupted record that contradicts its own seats dies here.
 #[must_use]
 pub fn cheap_consistent(env: &Envelope) -> bool {
-    let unanimous =
-        env.seat_verdicts[0] == env.seat_verdicts[1] && env.seat_verdicts[1] == env.seat_verdicts[2];
+    let unanimous = env.seat_verdicts[0] == env.seat_verdicts[1]
+        && env.seat_verdicts[1] == env.seat_verdicts[2];
     env.council
         == (if unanimous {
             env.seat_verdicts[0]
