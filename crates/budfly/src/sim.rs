@@ -90,6 +90,13 @@ impl Stimuli {
             _ => 0,
         }
     }
+
+    /// Snapshot of all `(gid, (start, end))` windows — for counterfactual
+    /// branch edits (mutating the snapshot's source is done via `set`).
+    #[must_use]
+    pub fn windows(&self) -> Vec<(u32, (u32, u32))> {
+        self.windows.iter().map(|(g, w)| (*g, *w)).collect()
+    }
 }
 
 /// One audited transition row for one neuron at one tick.

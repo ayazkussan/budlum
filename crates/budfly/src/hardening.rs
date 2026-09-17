@@ -36,9 +36,21 @@ use crate::connectome::{generate, Connectome};
 use crate::divan::council;
 use crate::erasure;
 use crate::league;
+use crate::oracle::sentinel_stimulus;
 use crate::sha256::sha256;
+use crate::sim::run_log;
 use crate::tape::{decode_tape, judge};
 use crate::tournament::{panel_digest, PANEL_SIZE};
+
+/// The ladder self-consistency check at 1/48th of its naive cost: the L2
+/// chain's first head is the 1-tick chain head (pinned prefix property —
+/// `attest.l1_prefix_of_l2`), so running one tick answers the whole
+/// question. Equivalence with [`attest::ladder_consistent`] is asserted in
+/// the sweep test on the frozen base challenge.
+fn fast_ladder(conn: &Connectome, digest: &[u8; 32]) -> bool {
+    let stim = sentinel_stimulus(conn, digest);
+    run_log(conn, 1, &stim).first() == Some(&attest::attest_l1(conn, digest))
+}
 
 /// Full report of the ACT-1 tape sweep.
 #[derive(Clone, Debug)]
@@ -176,7 +188,7 @@ pub fn attest_adversary_sweep(conn: &Connectome) -> AttestHardReport {
         if attest::attest_l1(conn, &ch) != l1_base {
             nonce_avalanche += 1;
         }
-        if attest::ladder_consistent(conn, &ch) {
+        if fast_ladder(conn, &ch) {
             ladder_robust += 1;
         }
     }
@@ -286,6 +298,9 @@ mod tests {
     #[test]
     fn attestation_binding_is_total_and_the_ladder_reheads() {
         let c = generate(1, 16, DEFAULT_SEED);
+        // documented equivalence of the 1-tick fast path on the frozen base:
+        let ch0 = attest::challenge(b"fly-peer-01", 7, &[0xA5u8; 32]);
+        assert_eq!(fast_ladder(&c, &ch0), attest::ladder_consistent(&c, &ch0));
         let rep = attest_adversary_sweep(&c);
         assert_eq!(rep.nonce_avalanche, 32);
         assert_eq!(rep.ladder_robust, 32);

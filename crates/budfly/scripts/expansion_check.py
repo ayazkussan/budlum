@@ -1093,6 +1093,359 @@ pin("hard.league.table_total_order", len(set(standing)) == 4)
 pin("hard.league.total_councils", len(LEAGUE_SEEDS) * 8)
 pin("hard.league.abstain_sum", sum(abstain_list))
 
+# ------------------------------------------------------------------ [act2]
+# ACT-2: the ghost-reaper. The v1 sweep proved the forger's ONLY freedom is
+# the "ghost refractory" (r_before flip at the window's first tick), because
+# neither the v1 chain fold nor the windowed C6 looks at tick T-1's
+# refractory counter. The v2 kill is total, and it is architectural, not a
+# patch on v1 (v1 stays frozen):
+#   1. NEW CHAIN: fold2(t) = sha256(head2(t-1) | t be8 | sh(spikes) |
+#      vh(v_after LE) | rh(r_before LE))  -- the refractory counter enters
+#      the committed state.
+#   2. BOTH window ticks are judged against their published head2 anchors:
+#      fold2(T-1) == head2(T-1) AND fold2(T) == head2(T). A ghost at the
+#      window's left edge dies on the FIRST anchor.
+# Wire: "ACT2" + identical header/rows layout as ACT-1 (same 24,708 bytes).
+def anchor2_log_generic(ticks, stim):
+    adj = [[] for _ in range(total)]
+    for p, q, w in edges:
+        adj[p].append((q, w))
+    v = [0] * total
+    refr = [0] * total
+    pend = [0] * total
+    anchor = b"\x00" * 32
+    log = []
+    for t in range(ticks):
+        spiking = []
+        sbytes = bytearray(total)
+        rbytes = bytearray()
+        for gid in range(total):
+            i_ext = I_STIM if (gid in stim and stim[gid][0] <= t < stim[gid][1]) else 0
+            i_syn = pend[gid] if t > 0 else 0
+            vb, rb = v[gid], refr[gid]
+            rbytes += rb.to_bytes(4, "little")
+            if rb > 0:
+                refr[gid] = rb - 1
+                v[gid] = 0
+            else:
+                raw = max(V_MIN, min(V_MAX, vb - (vb >> LEAK_SHIFT) + i_ext + i_syn))
+                if raw >= V_TH:
+                    v[gid] = 0
+                    refr[gid] = REFRAC
+                    spiking.append(gid)
+                    sbytes[gid] = 1
+                else:
+                    v[gid] = raw
+        nxt = [0] * total
+        for p in spiking:
+            for q, w in adj[p]:
+                nxt[q] = max(-FAN_IN_MAX, min(FAN_IN_MAX, nxt[q] + w))
+        pend = nxt
+        sh = hashlib.sha256(bytes(sbytes)).digest()
+        vh = hashlib.sha256(b"".join(x.to_bytes(4, "little", signed=True) for x in v)).digest()
+        rh = hashlib.sha256(bytes(rbytes)).digest()
+        anchor = hashlib.sha256(anchor + t.to_bytes(8, "big") + sh + vh + rh).digest()
+        log.append(anchor.hex())
+    return log
+
+a2log = anchor2_log_generic(48, ff_stim)
+A2_TM2, A2_TM1, A2_T = a2log[T - 2], a2log[T - 1], a2log[T]
+tape2 = b"ACT2" + tape[4:]
+
+def tape2_decode(b):
+    """Same decode rules as ACT-1, different magic."""
+    if len(b) < 12 or b[:4] != b"ACT2":
+        return None
+    return tape_decode_rust(b"ACT1" + b[4:])
+
+def tape2_viol(dec):
+    tk, rows = dec
+    by_neuron = [[] for _ in range(total)]
+    for idx_r, r in enumerate(rows):
+        by_neuron[idx_r % total].append(r)
+    return sum(air_window_violations(nrs) for nrs in by_neuron), rows
+
+def fold2_one(tick_val, one_tick_rows, prev_head):
+    """fold2 over exactly `total` rows of one tick."""
+    rr = one_tick_rows[:total]
+    sh = hashlib.sha256(bytes(r[5] for r in rr)).digest()
+    vh = hashlib.sha256(b"".join(r[3].to_bytes(4, "little", signed=True) for r in rr)).digest()
+    rh = hashlib.sha256(b"".join(r[4].to_bytes(4, "little") for r in rr)).digest()
+    return hashlib.sha256(prev_head + tick_val.to_bytes(8, "big") + sh + vh + rh).digest()
+
+def judge2_py(b):
+    """Mirror of tape2::judge2 -> None | (viol, ok_tm1, ok_t)."""
+    dec = tape2_decode(b)
+    if dec is None:
+        return None
+    tk, rows = dec
+    _v, rows = tape2_viol(dec)
+    viol = _v
+    # window rows: first `total` = tick base, second `total` = tick base+1
+    base = tk - 1 if tk > 0 else 0
+    ok_tm1 = fold2_one(base, rows[:total], bytes.fromhex(A2_TM2)).hex() == A2_TM1
+    ok_t = fold2_one(base + 1, rows[total:2 * total], bytes.fromhex(A2_TM1)).hex() == A2_T
+    return viol, ok_tm1, ok_t
+
+_h2 = judge2_py(tape2)
+pin("act2.sha256", hashlib.sha256(tape2).hexdigest())
+pin("act2.violations_honest", _h2[0])
+pin("act2.fold2_ok", _h2[1] and _h2[2])
+pin("act2.head2_tm1", A2_TM1)
+pin("act2.head2_t", A2_T)
+# forged twin on ACT-2: same lazy liar
+rowsF2 = {g: list(rowsA[g]) for g in rowsA}
+_t, vb, ie, isy, va, sp, rb = rowsF2[gid_tam][T]
+rowsF2[gid_tam][T] = (_t, vb, ie, isy, va, 1 - sp, rb)
+for g in range(total):
+    _t2, vb2, ie2, isy2, va2, sp2, rb2 = rowsF2[g][T]
+    rowsF2[g][T] = (_t2, vb2, ie2, isy2, 0, sp2, rb2)
+tape2F = b"ACT2" + act_encode(rowsF2, T)[4:]
+_f2 = judge2_py(tape2F)
+pin("act2.violations_forged", _f2[0])
+pin("act2.forged_fold2_ok", _f2[1] and _f2[2])
+# THE GHOST-REAPER SWEEP: rerun all 24,708 single-bit mutants under judge2.
+a2_mut = a2_mal = a2_viol = a2_fold = 0
+a2_esc = []
+for o in range(len(tape2)):
+    mb2 = bytearray(tape2)
+    mb2[o] ^= 1
+    dec2 = tape2_decode(bytes(mb2))
+    if dec2 is None:
+        a2_mal += 1
+        continue
+    tk2, rows2 = dec2
+    if o >= 12:
+        # neuron-local violation fast path (baseline is zero)
+        i = (o - 12) // ROWB
+        gid2 = i % total
+        tw2 = T - 1 + i // total
+        patched2 = rows2[i]
+        honest2 = [tuple(rowsA[gid2][t][j] for j in (1, 2, 3, 4, 6, 5)) + (t,)
+                   for t in (T - 1, T)]
+        win2 = [patched2 if t == tw2 else h for t, h in zip((T - 1, T), honest2)]
+        viol2 = air_window_violations(win2)
+    else:
+        by_neuron2 = [[] for _ in range(total)]
+        for idx_r2, r2 in enumerate(rows2):
+            by_neuron2[idx_r2 % total].append(r2)
+        viol2 = sum(air_window_violations(nrs) for nrs in by_neuron2)
+    if viol2 > 0:
+        a2_viol += 1
+        continue
+    base2 = tk2 - 1 if tk2 > 0 else 0
+    ok1 = fold2_one(base2, rows2[:total], bytes.fromhex(A2_TM2)).hex() == A2_TM1
+    ok2 = fold2_one(base2 + 1, rows2[total:2 * total], bytes.fromhex(A2_TM1)).hex() == A2_T
+    if not (ok1 and ok2):
+        a2_fold += 1
+    else:
+        a2_esc.append(o)
+a2_hash = hashlib.sha256(b"".join(o.to_bytes(4, "little") for o in a2_esc)).hexdigest()
+pin("act2.sweep_mutations", len(tape2))
+pin("act2.sweep_malformed", a2_mal)
+pin("act2.sweep_viol", a2_viol)
+pin("act2.sweep_fold2", a2_fold)
+pin("act2.sweep_escaped", len(a2_esc))
+pin("act2.sweep_escape_hash", a2_hash)
+pin("act2.ghosts_retired", a2_mal == 8 and a2_viol == 24300 and a2_fold == 400
+    and len(a2_esc) == 0)
+
+# ------------------------------------------------------------- [envelope3]
+# BSE-3: the verdict plus a STACK of counterfactual cards — every "peki ya"
+# the court considered, in one envelope. Layout (frozen):
+#   "BSE3" | digest | 3*32 anchors | 3 verdicts | council | card_count u8 |
+#   per card: fork u32 LE | base_head@fork-1 32B | branch_final 32B (68 B)
+# Cheap rule (per card, no execution): one 32-byte compare of the card's
+# base head against the PUBLISHED base chain at fork-1.
+def encode_bse3(digest, seat_anchors, seat_verdicts, council, cards):
+    b = b"BSE3" + digest + b"".join(bytes.fromhex(a) for a in seat_anchors)
+    b += bytes([VCODE[v] for v in seat_verdicts]) + bytes([VCODE[council]])
+    b += bytes([len(cards)])
+    for fork, base_hex, branch_hex in cards:
+        b += fork.to_bytes(4, "little") + bytes.fromhex(base_hex) + bytes.fromhex(branch_hex)
+    return b
+
+# card 2's counterfactual: "koku 4. tickte kesilseydi?" (odor cut early)
+cf3 = dict(sentinel_stim(FF))
+for g3 in list(cf3):
+    if cf3[g3] == (0, 8):
+        cf3[g3] = (0, 4)
+branch2_log = anchor_log_generic(48, cf3)
+assert branch2_log[:4] == base_log[:4], "card 2 prefix must bind before tick 4"
+b3_cards = [(FORK, base_log[FORK - 1], branch_log[-1]),
+            (4, base_log[3], branch2_log[-1])]
+b3 = encode_bse3(FF, ff_seat_a, ff_seat_v, ff_council, b3_cards)
+def cheap3(env_b, published_base):
+    n = env_b[136]
+    for c in range(n):
+        s = 137 + c * 68
+        fk = int.from_bytes(env_b[s:s + 4], "little")
+        if fk <= 0 or env_b[s + 4:s + 36].hex() != published_base[fk - 1]:
+            return False
+    return True
+pin("envelope3.len", len(b3))
+pin("envelope3.cards", b3[136])
+pin("envelope3.hex", b3.hex())
+pin("envelope3.forks", ",".join(str(c[0]) for c in b3_cards))
+pin("envelope3.branch2_final", branch2_log[-1])
+pin("envelope3.cheap_replay_all", cheap3(b3, base_log))
+
+# ------------------------------------------------------------- [erasure2]
+# v1's K=8 frozen sample is a HEARTBEAT; the round protocol WALKS THE WHOLE
+# BLOB. The schedule is a root-bound permutation (Fisher-Yates over the 32
+# chunk indices, keystream sha256(DOMAIN | root | 'perm' | ctr le16)):
+# round r takes slots perm[8r..8r+8]. Four rounds x 8 slots = 32 =
+# FULL SURFACE COVERAGE BY CONSTRUCTION (a permuted walk visits every chunk
+# exactly once). Still NOT possession (the v1 pin stands): each answer
+# proves the pinned map ran on a chunk-bound challenge, never that bytes
+# were read.
+def era2_permutation(root):
+    """Root-bound permutation of the 32 chunks: Fisher-Yates fed by the
+    keystream sha256(DOMAIN | root | 'perm' | ctr le16). Frozen draw order:
+    i walks 31..1, stream consumed two bytes at a time, carrying across
+    draws. Four rounds x 8 slots then cover EVERY chunk exactly once --
+    coverage is a theorem about the permutation, not a statistic."""
+    order = list(range(32))
+    stream = b""
+    ctr = 0
+    for i in range(31, 0, -1):
+        while len(stream) < 2:
+            stream += hashlib.sha256(b"BUDFLY-ERASURE1\x00" + root +
+                                     b"perm" + ctr.to_bytes(2, "little")).digest()
+            ctr += 1
+        j = int.from_bytes(stream[:2], "little") % (i + 1)
+        stream = stream[2:]
+        order[i], order[j] = order[j], order[i]
+    return order
+
+era2_perm = era2_permutation(er_root)
+era2_sched = [era2_perm[r * 8:(r + 1) * 8] for r in range(4)]
+era2_all_idx = [x for row in era2_sched for x in row]
+era2_answers = []
+for r in range(4):
+    for ix in era2_sched[r]:
+        era2_answers.append(anchor_log_generic(
+            1, sentinel_stim(chunk_challenge(er_root, ix, 3)))[0])
+# per-round avalanche: chunk 13 bit flip must move every answer of EVERY round
+era2_av_ok = 0
+CH2 = list(CHUNKS)
+CH2[13] = bytes([CH2[13][0] ^ 1]) + CH2[13][1:]
+er_root2b = hashlib.sha256(b"".join(CH2)).digest()
+for r in range(4):
+    moved = True
+    for j, ix in enumerate(era2_sched[r]):
+        a2b = anchor_log_generic(1, sentinel_stim(chunk_challenge(er_root2b, ix, 3)))[0]
+        if a2b == era2_answers[r * 8 + j]:
+            moved = False
+    if moved:
+        era2_av_ok += 1
+pin("erasure2.rounds", 4)
+pin("erasure2.schedule", ";".join(",".join(map(str, row)) for row in era2_sched))
+pin("erasure2.coverage_unique", len(set(era2_all_idx)))
+pin("erasure2.round_avalanche", era2_av_ok)
+pin("erasure2.answers_sha256",
+    hashlib.sha256(b"".join(bytes.fromhex(a) for a in era2_answers)).hexdigest())
+
+# ------------------------------------------------------------------ [zk]
+# BudZero bridge, stone 1: the arithmetization SKELETON, executable.
+# Trace columns per row (8): vb, ie, isy, va, rb, sp, sel_refrac, sel_above.
+# Gates (4), each a selector-multiplied equation set over the columns:
+#   G0 genesis (tick==0):     vb==0, rb==0
+#   G1 refractory (rb>0):     va==0, sp==0
+#   G2 integrate (rb==0):     sp==sel_above, va==(sp?0:clamp(leak+ie+isy))
+#   G3 chain (i>0):           rb==(prev.rb>0 ? prev.rb-1 : (prev.sp?REFRAC:0))
+# Threshold/ clamp are NOT native field ops: they arithmetize via bit-
+# decomposition notes; with selectors multiplied in, max constraint degree
+# is 3. The skeleton is EXECUTABLE: gate selection follows the same decision
+# tree as air.rs, so its mismatch count MUST equal air's violation count on
+# any trace — pinned on both the honest and the forged window.
+def zk_skel_violations(nrows_all):
+    bad = 0
+    for nrs in nrows_all:
+        for i, (vb, ie, isy, va, rb, sp, tick) in enumerate(nrs):
+            if tick == 0:  # G0
+                if vb != 0 or rb != 0:
+                    bad += 1
+                continue
+            if i > 0:  # G3
+                pp = nrs[i - 1]
+                exp_r = (pp[4] - 1) if pp[4] > 0 else (REFRAC if pp[5] == 1 else 0)
+                if rb != exp_r:
+                    bad += 1
+                    continue
+            if rb > 0:  # G1
+                if va != 0 or sp != 0:
+                    bad += 1
+                continue
+            # G2 with selectors
+            leaked = vb - (vb >> LEAK_SHIFT)
+            raw = max(V_MIN, min(V_MAX, leaked + ie + isy))
+            sel_above = 1 if raw >= V_TH else 0
+            if sp != sel_above:
+                bad += 1
+                continue
+            if sel_above == 1:
+                if va != 0:
+                    bad += 1
+            elif va != raw:
+                bad += 1
+    return bad
+
+zk_by_neuron = [[tuple(rowsA[g][t][j] for j in (1, 2, 3, 4, 6, 5)) + (t,)
+                 for t in (T - 1, T)] for g in range(total)]
+zk_by_neuron_F = [[tuple(rowsF[g][t][j] for j in (1, 2, 3, 4, 6, 5)) + (t,)
+                   for t in (T - 1, T)] for g in range(total)]
+pin("zk.columns", 8)
+pin("zk.gates", 4)
+pin("zk.degree_max", 3)
+pin("zk.window_rows", 2 * total)
+pin("zk.honest_violations", zk_skel_violations(zk_by_neuron))
+pin("zk.forged_violations", zk_skel_violations(zk_by_neuron_F))
+
+# --------------------------------------------------------------- [league2]
+# The 8-team league and the SEASON ARCHIVE: three seasons, each on its own
+# panel stream (season-salted digests), every table hashed into an archive
+# chain. Rule: sha256("budfly-panel" | season u8 | i u8) for season >= 1.
+# standing_digest(s) = sha256(season u8 | per team IN STANDING ORDER:
+#   seed u64 LE | abstains u8 | tie_anchor 32B)
+# archive_head: seeded sha256("BUDFLY-ARCHIVE1\x00"), chained per season.
+LEAGUE2_SEEDS = list(range(0xB0DF17, 0xB0DF1F))
+def season_panel_digest(season, i):
+    return hashlib.sha256(b"budfly-panel" + bytes([season]) + bytes([i])).digest()
+def play_season_table(season):
+    table_rows = {}
+    for sd in LEAGUE2_SEEDS:
+        sz, of, tot, ed = build_connectome(1, 16, seed=sd)
+        ab = 0
+        for i in range(8):
+            d = season_panel_digest(season, i)
+            vs = [sentinel(sz, of, ed, seat_digest(d, s))[0] for s in range(3)]
+            if not (vs[0] == vs[1] == vs[2]):
+                ab += 1
+        anchor = sentinel(sz, of, ed, seat_digest(season_panel_digest(season, 0), 0))[4]
+        table_rows[sd] = (ab, anchor)
+    order = sorted(LEAGUE2_SEEDS, key=lambda sd: (table_rows[sd][0], table_rows[sd][1]))
+    return order, table_rows
+
+ARCH_SEED = hashlib.sha256(b"BUDFLY-ARCHIVE1\x00").digest()
+arch_head = ARCH_SEED.hex()
+league2_out = {}
+for S in (1, 2, 3):
+    order, trows = play_season_table(S)
+    sd_bytes = bytes([S])
+    for sd in order:
+        ab, anch = trows[sd]
+        sd_bytes += sd.to_bytes(8, "little") + bytes([ab]) + bytes.fromhex(anch)
+    sdigest = hashlib.sha256(sd_bytes).digest()
+    arch_head = hashlib.sha256(bytes.fromhex(arch_head) + sdigest).hexdigest()
+    league2_out[S] = (order, trows)
+    pin(f"league2.s{S}.abstains", ",".join(str(trows[sd][0]) for sd in LEAGUE2_SEEDS))
+    pin(f"league2.s{S}.standing", ",".join(hex(sd) for sd in order))
+pin("league2.seeds", ",".join(hex(s) for s in LEAGUE2_SEEDS))
+pin("league2.seasons", 3)
+pin("league2.champions", ",".join(hex(league2_out[S][0][0]) for S in (1, 2, 3)))
+pin("league2.archive_head_final", arch_head)
+
 # ---------------------------------------------- manifest cross-validation
 man = tomllib.loads((Path(__file__).resolve().parents[1] / "goldens.anchor.toml").read_text())
 exp = man.get("expansion", {})

@@ -80,6 +80,69 @@ pub fn erasure_answers(conn: &Connectome, root: &[u8; 32], epoch: u64) -> [[u8; 
     out
 }
 
+/// Number of chunks (as `usize` for indexing).
+pub const CHUNKS: usize = 32;
+/// Rounds of the v2 walk (frozen: 32 chunks / 8 slots).
+pub const ERA2_ROUNDS: usize = 4;
+/// Slots per round (frozen).
+pub const ERA2_SLOTS: usize = 8;
+
+/// The v2 round protocol's schedule: a root-bound permutation of all
+/// chunks via Fisher-Yates fed by the keystream
+/// `sha256(DOMAIN | root | "perm" | ctr le16)`, `i` walking 31..=1, the
+/// stream consumed two bytes at a time with carry-over. Four rounds x
+/// eight slots then cover EVERY chunk exactly once — full-surface coverage
+/// by construction, not by coupon-collector luck.
+#[must_use]
+pub fn era2_permutation(root: &[u8; 32]) -> [u16; CHUNKS] {
+    let mut order = [0u16; CHUNKS];
+    for (i, o) in order.iter_mut().enumerate() {
+        *o = i as u16;
+    }
+    let mut stream: Vec<u8> = Vec::new();
+    let mut ctr = 0u16;
+    for i in (1..CHUNKS).rev() {
+        while stream.len() < 2 {
+            let mut buf = Vec::with_capacity(DOMAIN.len() + 32 + 4 + 2);
+            buf.extend_from_slice(DOMAIN);
+            buf.extend_from_slice(root);
+            buf.extend_from_slice(b"perm");
+            buf.extend_from_slice(&ctr.to_le_bytes());
+            stream.extend_from_slice(&sha256(&buf));
+            ctr += 1;
+        }
+        let j = usize::from(u16::from_le_bytes([stream[0], stream[1]])) % (i + 1);
+        stream.drain(..2);
+        order.swap(i, j);
+    }
+    order
+}
+
+/// Round `r`'s chunk indices: `perm[8r..8r+8]`.
+#[must_use]
+pub fn era2_round_indices(root: &[u8; 32], r: usize) -> [u16; ERA2_SLOTS] {
+    let perm = era2_permutation(root);
+    let start = (r % ERA2_ROUNDS) * ERA2_SLOTS;
+    let mut out = [0u16; ERA2_SLOTS];
+    out.copy_from_slice(&perm[start..start + ERA2_SLOTS]);
+    out
+}
+
+/// The prover's answers over one round of the walk.
+#[must_use]
+pub fn era2_round_answers(
+    conn: &Connectome,
+    root: &[u8; 32],
+    r: usize,
+    epoch: u64,
+) -> [[u8; 32]; ERA2_SLOTS] {
+    let mut out = [[0u8; 32]; ERA2_SLOTS];
+    for (i, idx) in era2_round_indices(root, r).iter().enumerate() {
+        out[i] = challenge_canary(conn, &chunk_challenge(root, *idx, epoch));
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -118,6 +181,49 @@ mod tests {
         let answers2 = erasure_answers(&c, &root2, 3);
         for (a, b) in answers.iter().zip(answers2.iter()) {
             assert_ne!(a, b, "bit flip must move every answer");
+        }
+    }
+
+    #[test]
+    fn the_round_protocol_walks_the_whole_surface() {
+        let c = generate(1, 16, DEFAULT_SEED);
+        let blob = toy_blob();
+        let root = erasure_root(&blob);
+        let perm = era2_permutation(&root);
+        let expect: [u16; CHUNKS] = [
+            12, 21, 22, 28, 2, 1, 7, 5, 0, 15, 3, 29, 24, 9, 13, 17, 16, 8, 23, 10, 31, 19, 18,
+            14, 26, 6, 30, 4, 25, 11, 27, 20,
+        ];
+        assert_eq!(perm, expect, "the frozen Fisher-Yates schedule");
+        let mut seen = perm.to_vec();
+        seen.sort_unstable();
+        seen.dedup();
+        assert_eq!(seen.len(), CHUNKS, "coverage is total by construction");
+
+        // answers over the four rounds, round-major order, hash-pinned:
+        let mut all = Vec::with_capacity(ERA2_ROUNDS * ERA2_SLOTS * 32);
+        for r in 0..ERA2_ROUNDS {
+            for a in era2_round_answers(&c, &root, r, 3).iter() {
+                all.extend_from_slice(a);
+            }
+        }
+        assert_eq!(
+            hex32(&sha256(&all)),
+            "75ceca8bbc7d744979276fb3668cdee870cd120c34d0b7eee5078672a2ea41d1"
+        );
+
+        // per-round avalanche: chunk 13's bit flip moves every answer of
+        // EVERY round (the schedule permutes too — the walk itself moves):
+        let mut blob2 = blob;
+        blob2[13][0] ^= 1;
+        let root2 = erasure_root(&blob2);
+        for r in 0..ERA2_ROUNDS {
+            let idxs = era2_round_indices(&root, r);
+            for (j, idx) in idxs.iter().enumerate() {
+                let a1 = challenge_canary(&c, &chunk_challenge(&root, *idx, 3));
+                let a2 = challenge_canary(&c, &chunk_challenge(&root2, *idx, 3));
+                assert_ne!(a1, a2, "round {r} slot {j} must move");
+            }
         }
     }
 }
