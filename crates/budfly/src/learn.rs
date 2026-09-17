@@ -192,7 +192,11 @@ mod tests {
         let r = conditioned_run(&c);
         eprintln!(
             "DBG changed={} floor={} ceil={} pre={} post={} mbon={:?} run={} learn={}",
-            r.changed, r.floor_min, r.ceil_max, r.pre_mbon, r.post_mbon,
+            r.changed,
+            r.floor_min,
+            r.ceil_max,
+            r.pre_mbon,
+            r.post_mbon,
             r.mbon_per_tick,
             crate::sha256::hex32(&r.run_anchor),
             crate::sha256::hex32(&r.learn_anchor)
