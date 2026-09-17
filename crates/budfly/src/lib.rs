@@ -32,13 +32,16 @@ pub mod canary;
 pub mod compass;
 pub mod connectome;
 pub mod dispute;
+pub mod divan;
 pub mod fabric;
 pub mod learn;
 pub mod lesion;
 pub mod oracle;
 pub mod reflex;
+pub mod replay;
 pub mod rng;
 pub mod sha256;
+pub mod tournament;
 pub mod sim;
 
 pub use connectome::{generate, Connectome, Region, DEFAULT_SEED, N_REGIONS};

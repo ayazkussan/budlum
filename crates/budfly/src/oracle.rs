@@ -93,14 +93,13 @@ pub fn sentinel_stimulus(conn: &Connectome, digest: &[u8; 32]) -> Stimuli {
     stim
 }
 
-pub fn sentinel_verdict(conn: &Connectome, digest: &[u8; 32]) -> SentinelReport {
-    let stim = sentinel_stimulus(conn, digest);
-
-    let result = run(conn, SENTINEL_TICKS, &stim, false);
-    let dn_l = result.region_spikes[Region::DnL.idx()];
-    let dn_r = result.region_spikes[Region::DnR.idx()];
-    let mdn = result.region_spikes[Region::Mdn.idx()];
-    let verdict = if mdn > 0 && mdn > 3 * dn_l.max(dn_r) {
+/// The settlement verdict rule over descending spike counts (frozen).
+///
+/// Fails closed: an MDN veto that dominates the command pools, or any tie,
+/// settles as `Abstain`. Mirrors `scripts/expansion_check.py::verdict_of`.
+#[must_use]
+pub fn verdict_rule(dn_l: u64, dn_r: u64, mdn: u64) -> Verdict {
+    if mdn > 0 && mdn > 3 * dn_l.max(dn_r) {
         Verdict::Abstain
     } else if dn_l > dn_r {
         Verdict::Affirm
@@ -108,7 +107,17 @@ pub fn sentinel_verdict(conn: &Connectome, digest: &[u8; 32]) -> SentinelReport 
         Verdict::Reject
     } else {
         Verdict::Abstain
-    };
+    }
+}
+
+pub fn sentinel_verdict(conn: &Connectome, digest: &[u8; 32]) -> SentinelReport {
+    let stim = sentinel_stimulus(conn, digest);
+
+    let result = run(conn, SENTINEL_TICKS, &stim, false);
+    let dn_l = result.region_spikes[Region::DnL.idx()];
+    let dn_r = result.region_spikes[Region::DnR.idx()];
+    let mdn = result.region_spikes[Region::Mdn.idx()];
+    let verdict = verdict_rule(dn_l, dn_r, mdn);
     SentinelReport {
         verdict,
         dn_l,

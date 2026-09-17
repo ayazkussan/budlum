@@ -45,7 +45,7 @@ pub const LEAK_SHIFT: u32 = 4;
 pub const FAN_IN_MAX: i32 = SCALE * 64;
 
 /// External stimulus: per-neuron `[start, end)` tick windows at [`I_STIM`].
-#[derive(Default)]
+#[derive(Clone, Default)]
 pub struct Stimuli {
     windows: HashMap<u32, (u32, u32)>,
 }

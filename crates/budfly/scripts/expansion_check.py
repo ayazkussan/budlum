@@ -452,6 +452,110 @@ pin("canary.allones.tick1", clog[0])
 pin("canary.allones.chain_end", clog[-1])
 pin("canary.self_consistent", clog[-1] == sent_anchor)
 
+
+def sentinel_stim(digest):
+    """The one builder (draw order frozen): compass sector, then LobL, LobR."""
+    st = {}
+    r = Rng(int.from_bytes(digest[0:8], "little"))
+    eb0, ne = off[CX_EB], sizes[CX_EB]
+    sector = int.from_bytes(digest[8:10], "little") % ne
+    width = max(4, ne // 4)
+    for i in range(width):
+        st[eb0 + (sector + i) % ne] = (0, 8)
+    for lob in (LOB_L, LOB_R):
+        base, n = off[lob], sizes[lob]
+        for b in range(32):
+            if (digest[16 + b // 8] >> (b % 8)) & 1:
+                g = base + r.below(n)
+                if g not in st:
+                    st[g] = (0, 4)
+    return st
+
+def verdict_of(dl, dr, mdn):
+    if mdn > 0 and mdn > 3 * max(dl, dr):
+        return "Abstain"
+    if dl > dr:
+        return "Affirm"
+    if dr > dl:
+        return "Reject"
+    return "Abstain"
+
+# ---------------------------------------------------------------- [replay]
+# Sealed replay certificate: the base chain is published; a counterfactual
+# branch forks the STIMULUS at FORK while dynamics stay deterministic. The
+# certificate's spine: branch prefix must byte-match the published prefix —
+# cheap on-chain check (no re-execution), expensive fraud (re-execution of
+# one branch only). Frozen question: "what if MDN fired at tick 10?".
+FORK = 10
+base_log = anchor_log_generic(48, sentinel_stim(bytes([0xFF] * 32)))
+vB, Bdl, Bdr, Bmdn, sent_anchor2 = sentinel(sizes, off, edges, bytes([0xFF] * 32))
+assert base_log[-1] == sent_anchor2, "log end must seal the sentinel verdict"
+
+cf = dict(sentinel_stim(bytes([0xFF] * 32)))
+for i in range(sizes[MDN]):
+    cf[off[MDN] + i] = (FORK, FORK + 2)  # MDN veto arrives at tick 10
+branch_log = anchor_log_generic(48, cf)
+assert branch_log[:FORK] == base_log[:FORK], "prefix must bind before the fork"
+cf_anchor, cf_spk, _ = run(sizes, off, total, edges, 48, cf)
+assert cf_anchor == branch_log[-1], "run() final anchor must seal the log end"
+Cdl, Cdr, Cmdn = cf_spk.get(DN_L, 0), cf_spk.get(DN_R, 0), cf_spk.get(MDN, 0)
+pin("replay.fork_tick", FORK)
+pin("replay.base_anchor_at_fork", base_log[FORK - 1])
+pin("replay.prefix_bound", branch_log[:FORK] == base_log[:FORK])
+pin("replay.base_counters", f"{Bdl},{Bdr},{Bmdn}")
+pin("replay.base_verdict", verdict_of(Bdl, Bdr, Bmdn))
+pin("replay.mdn10_branch_final", branch_log[-1])
+pin("replay.mdn10_counters", f"{Cdl},{Cdr},{Cmdn}")
+pin("replay.mdn10_verdict", verdict_of(Cdl, Cdr, Cmdn))
+
+# ----------------------------------------------------------------- [divan]
+# The Fly Court: three jurors = three seat-salted probes of ONE fact digest.
+# Draw-order discipline: one builder per (builder, seat) — the seat salt is
+# folded into a fresh digest, never into a second draw of the base stream.
+# Council rule (fails closed): anything but unanimity settles as Abstain.
+D0 = bytes([0x42] * 32)
+def seat_digest(d, seat):
+    return hashlib.sha256(d + bytes([seat])).digest()
+seat_v, seat_a = [], []
+for s in range(3):
+    v, dl, dr, mdn, a = sentinel(sizes, off, edges, seat_digest(D0, s))
+    seat_v.append(v)
+    seat_a.append(a)
+    pin(f"divan.seat{s}_verdict", v)
+    pin(f"divan.seat{s}_anchor", a)
+unanimous = seat_v[0] == seat_v[1] == seat_v[2]
+pin("divan.unanimous", unanimous)
+pin("divan.council", seat_v[0] if unanimous else "Abstain")
+# Dishonest-juror expulsion: seat 2 submits a chain that is lazy at tick 23
+# (spike-bit flip on CxEb+3, all-zero membrane bytes). The bisection game
+# locates the lie; the seat is expelled. An honest rerun arbitrates.
+seat2_log_honest = anchor_log_generic(48, sentinel_stim(seat_digest(D0, 2)))
+seat2_log_liar = anchor_log_run(48, sentinel_stim(seat_digest(D0, 2)), tamper=23)
+expel = next(t for t in range(48) if seat2_log_honest[t] != seat2_log_liar[t])
+pin("divan.liar_seat", 2)
+pin("divan.liar_divergence", expel)
+pin("divan.liar_final", seat2_log_liar[-1])
+pin("divan.seat2_honest_final", seat2_log_honest[-1])
+
+# ------------------------------------------------------------- [tournament]
+# Two seeds, same ring, same panel: survival = decisiveness. The settlement
+# layer pays for a council that can say something; an abstention machine is
+# dead weight. Referee = the divan of each fly over a frozen 8-digest panel.
+sizesB, offB, totalB, edgesB = build_connectome(1, 16, seed=0xB0DF18)
+assert sizesB == sizes and offB == off and totalB == total, "same anatomy, new wiring"
+panel = [hashlib.sha256(b"budfly-panel" + bytes([i])).digest() for i in range(8)]
+def council_abstains(sizes_, off_, edges_, digest):
+    vs = [sentinel(sizes_, off_, edges_, seat_digest(digest, s))[0] for s in range(3)]
+    return not (vs[0] == vs[1] == vs[2])
+abA = sum(council_abstains(sizes, off, edges, d) for d in panel)
+abB = sum(council_abstains(sizesB, offB, edgesB, d) for d in panel)
+pin("tournament.panel", 8)
+pin("tournament.abstains_a", abA)
+pin("tournament.abstains_b", abB)
+pin("tournament.survivor", "A" if abA < abB else ("B" if abB < abA else "both"))
+# Arbitration sanity: the deciding run is re-executable under dispute rules
+# (bisection machinery is fly-agnostic; it sees chains, not champions).
+
 # ---------------------------------------------- manifest cross-validation
 man = tomllib.loads((Path(__file__).resolve().parents[1] / "goldens.anchor.toml").read_text())
 exp = man.get("expansion", {})
