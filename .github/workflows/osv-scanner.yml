@@ -123,14 +123,19 @@ jobs:
       - name: OSV failure surface (annotations)
         if: failure()
         run: |
-          scan_out="$(grep -aE 'CVE-|GHSA-|RUSTSEC-|error|ERROR|not found|invalid' /tmp/osv-scan.txt | head -9 || true)"
-          if [ -z "$scan_out" ]; then
-            scan_out="$(tail -9 /tmp/osv-scan.txt || true)"
+          # filter lines also carry advisory ids; the real finding sits
+          # BEHIND them. Hunt the non-filter lines first, then the tail.
+          scan_out="$(grep -aE 'CVE-|GHSA-|RUSTSEC-' /tmp/osv-scan.txt | grep -av 'filtered out' | head -6 || true)"
+          if [ -n "$scan_out" ]; then
+            echo "::error file=osv-scan.txt,line=1::non-filtered advisory lines:"
+            while IFS= read -r line; do
+              echo "::error file=osv-scan.txt,line=1::${line}"
+            done <<< "$scan_out"
           fi
-          echo "::error file=osv-scan.txt,line=1::first matching lines of the failing scan follow (cap 9)"
+          echo "::error file=osv-scan.txt,line=1::tail of the scan output:"
           while IFS= read -r line; do
             echo "::error file=osv-scan.txt,line=1::${line}"
-          done <<< "$scan_out"
+          done <<< "$(tail -6 /tmp/osv-scan.txt || true)"
 
       # So the list above never shrinks: every Cargo.lock in the repository must
       # be scanned. If a new sub-crate is added and its lock silently stays out
