@@ -130,7 +130,10 @@ pub struct Season {
 /// ```
 #[must_use]
 pub fn play_archive() -> (Vec<Season>, [u8; 32]) {
-    let flies: Vec<Connectome> = LEAGUE2_SEEDS.iter().map(|sd| generate(1, 16, *sd)).collect();
+    let flies: Vec<Connectome> = LEAGUE2_SEEDS
+        .iter()
+        .map(|sd| generate(1, 16, *sd))
+        .collect();
     let mut head = crate::sha256::sha256(ARCHIVE_DOMAIN);
     let mut seasons = Vec::new();
     for s in 1..=ARCHIVE_SEASONS {
@@ -201,21 +204,15 @@ mod tests {
         assert_eq!(abs[2], vec![8, 5, 7, 4, 6, 2, 7, 4]);
         assert_eq!(
             seasons[0].standing_table,
-            vec![
-                0xB0DF1C, 0xB0DF1A, 0xB0DF1D, 0xB0DF18, 0xB0DF1E, 0xB0DF17, 0xB0DF1B, 0xB0DF19
-            ]
+            vec![0xB0DF1C, 0xB0DF1A, 0xB0DF1D, 0xB0DF18, 0xB0DF1E, 0xB0DF17, 0xB0DF1B, 0xB0DF19]
         );
         assert_eq!(
             seasons[1].standing_table,
-            vec![
-                0xB0DF1C, 0xB0DF18, 0xB0DF1D, 0xB0DF19, 0xB0DF1A, 0xB0DF17, 0xB0DF1E, 0xB0DF1B
-            ]
+            vec![0xB0DF1C, 0xB0DF18, 0xB0DF1D, 0xB0DF19, 0xB0DF1A, 0xB0DF17, 0xB0DF1E, 0xB0DF1B]
         );
         assert_eq!(
             seasons[2].standing_table,
-            vec![
-                0xB0DF1C, 0xB0DF1A, 0xB0DF1E, 0xB0DF18, 0xB0DF1B, 0xB0DF1D, 0xB0DF19, 0xB0DF17
-            ]
+            vec![0xB0DF1C, 0xB0DF1A, 0xB0DF1E, 0xB0DF18, 0xB0DF1B, 0xB0DF1D, 0xB0DF19, 0xB0DF17]
         );
         for s in &seasons {
             assert_eq!(

@@ -191,8 +191,8 @@ mod tests {
         let root = erasure_root(&blob);
         let perm = era2_permutation(&root);
         let expect: [u16; CHUNKS] = [
-            12, 21, 22, 28, 2, 1, 7, 5, 0, 15, 3, 29, 24, 9, 13, 17, 16, 8, 23, 10, 31, 19, 18,
-            14, 26, 6, 30, 4, 25, 11, 27, 20,
+            12, 21, 22, 28, 2, 1, 7, 5, 0, 15, 3, 29, 24, 9, 13, 17, 16, 8, 23, 10, 31, 19, 18, 14,
+            26, 6, 30, 4, 25, 11, 27, 20,
         ];
         assert_eq!(perm, expect, "the frozen Fisher-Yates schedule");
         let mut seen = perm.to_vec();

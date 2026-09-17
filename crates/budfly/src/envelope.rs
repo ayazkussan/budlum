@@ -412,7 +412,13 @@ mod tests {
         let digest = [0xffu8; 32];
         let rep = council(&c, &digest);
         let base = sentinel_stimulus(&c, &digest);
-        let cert1 = replay_cert(&c, &base, &mdn_early_stim(&c, &base, 10), 10, SENTINEL_TICKS);
+        let cert1 = replay_cert(
+            &c,
+            &base,
+            &mdn_early_stim(&c, &base, 10),
+            10,
+            SENTINEL_TICKS,
+        );
         // card 2: "what if the bump had been cut at tick 4?" — every (0, 8)
         // stimulus window shortened to (0, 4), the frozen edit rule.
         let mut cf = base.clone();
@@ -438,6 +444,9 @@ mod tests {
         let mut wrong = published.clone();
         wrong[3][31] ^= 1;
         assert!(!cheap_replay_consistent3(&dec, &wrong));
-        assert!(decode3(&env[..200]).is_none(), "a truncated stack is not BSE-3");
+        assert!(
+            decode3(&env[..200]).is_none(),
+            "a truncated stack is not BSE-3"
+        );
     }
 }
