@@ -778,6 +778,83 @@ pin("attest.l3_counters", f"{adl},{adr},{amdn}")
 ap_ch8 = att_digest(peer, 8, bytes([0xA5] * 32))
 pin("attest.epoch_moves_l2", anchor_log_generic(48, sentinel_stim(ap_ch8))[-1] != l2)
 
+
+# ------------------------------------------------------------ [d1 fixtures]
+# The bud-zero handoff: the ACT-1 arbitration tapes as canonical fixture
+# files. scripts/dump_fixtures.py regenerates these byte-for-byte; the
+# regeneration-equality pins below are what keeps the circuit's test
+# vectors from quietly drifting while the zk pipeline learns to read them.
+hon_tape = act_encode(rowsA, T)
+gi = off[CX_EB] + 3
+rowsL = {g: list(rowsA[g]) for g in rowsA}
+t_, vb, ie, isy, va, sp, rb = rowsL[gi][T]
+rowsL[gi][T] = (t_, vb, ie, isy, va, 1 - sp, rb)
+for g in range(total):
+    _t2, vb2, ie2, isy2, va2, sp2, rb2 = rowsL[g][T]
+    rowsL[g][T] = (_t2, vb2, ie2, isy2, 0, sp2, rb2)
+liar_tape = act_encode(rowsL, T)
+pin("d1.honest_tape_sha256", hashlib.sha256(hon_tape).hexdigest())
+pin("d1.liar_tape_sha256", hashlib.sha256(liar_tape).hexdigest())
+pin("d1.honest_expect_violations", act_c_violations(rowsA, (T - 1, T)))
+pin("d1.liar_expect_violations", act_c_violations(rowsL, (T - 1, T)))
+pin("d1.fixtures_contract", "budfly-fixtures-v1")
+
+# ---------------------------------------------------------------- [league]
+# Season mode: FOUR seeds, 8-digest panel each, decisiveness standings.
+# Standing rule (frozen): fewer council non-unanimities ranks higher;
+# ties broken by seat-0 anchor of panel digest 0, lexicographic.
+LEAGUE_SEEDS = [0xB0DF17, 0xB0DF18, 0xB0DF19, 0xB0DF1A]
+flies = {}
+for sd in LEAGUE_SEEDS:
+    flies[sd] = build_connectome(1, 16, seed=sd)
+rows_by_seed = {}
+for sd in LEAGUE_SEEDS:
+    sz, of, tot, ed = flies[sd]
+    assert (sz, of, tot) == (sizes, off, total), "same anatomy across seeds"
+    ab = 0
+    for d in panel:
+        vs = [sentinel(sz, of, ed, seat_digest(d, s))[0] for s in range(3)]
+        if not (vs[0] == vs[1] == vs[2]):
+            ab += 1
+    tie_anchor = sentinel(sz, of, ed, seat_digest(panel[0], 0))[4]
+    rows_by_seed[sd] = (ab, tie_anchor)
+standing = sorted(LEAGUE_SEEDS, key=lambda sd: (rows_by_seed[sd][0], rows_by_seed[sd][1]))
+pin("league.seeds", ",".join(hex(s) for s in LEAGUE_SEEDS))
+pin("league.abstains", ",".join(str(rows_by_seed[sd][0]) for sd in LEAGUE_SEEDS))
+pin("league.standing", ",".join(hex(s) for s in standing))
+pin("league.champion", hex(standing[0]))
+
+# --------------------------------------------------------------- [erasure]
+# D2 experiment: the wandering prover. A blob of 32 chunks (deterministic
+# toy bytes), merkle root as the committed fact; a verifier issues K = 8
+# chunk-bound canary challenges; the prover answers each with the 1-tick
+# L1 anchor. The pin pins the PROTOCOL, not a storage claim (see the
+# honest-negative below and docs/BUDFLY_APPLICATIONS.md D2 row).
+CHUNKS = [hashlib.sha256(b"budfly-erasure-chunk" + i.to_bytes(2, "little")).digest()
+          for i in range(32)]
+er_root = hashlib.sha256(b"".join(CHUNKS)).digest()
+def chunk_challenge(root, idx, epoch):
+    return hashlib.sha256(b"BUDFLY-ERASURE1\x00" + root +
+                          idx.to_bytes(2, "little") + epoch.to_bytes(8, "big")).digest()
+er_answers = [anchor_log_generic(1, sentinel_stim(chunk_challenge(er_root, i, 3)))[0]
+              for i in [0, 5, 9, 13, 17, 21, 26, 31]]
+pin("erasure.root", er_root.hex())
+pin("erasure.k", 8)
+pin("erasure.answers", ",".join(a[:16] for a in er_answers))
+# avalanche property: flip ONE bit in one chunk -> root moves -> all
+# challenges move -> every answer changes.
+CHUNKS2 = list(CHUNKS)
+CHUNKS2[13] = bytes([CHUNKS2[13][0] ^ 1]) + CHUNKS2[13][1:]
+er_root2 = hashlib.sha256(b"".join(CHUNKS2)).digest()
+er_answers2 = [anchor_log_generic(1, sentinel_stim(chunk_challenge(er_root2, i, 3)))[0]
+               for i in [0, 5, 9, 13, 17, 21, 26, 31]]
+pin("erasure.bitflip_moves_all", all(a != b for a, b in zip(er_answers, er_answers2)))
+# HONEST NEGATIVE (pinned so nobody retrades it later): answering the
+# canary proves running the pinned map on the challenge; it does NOT by
+# itself prove the chunk bytes were ever read. Soundness requires the
+# chunk bytes feeding the stimulus stream, which this v1 does NOT do.
+pin("erasure.proves_possession", False)
+
 # ---------------------------------------------- manifest cross-validation
 man = tomllib.loads((Path(__file__).resolve().parents[1] / "goldens.anchor.toml").read_text())
 exp = man.get("expansion", {})
