@@ -54,11 +54,7 @@ pub fn replay_cert(
     let branch_log = run_log(conn, ticks, branch);
     let f = (fork as usize).min(ticks as usize);
     let prefix_bound = base_log[..f] == branch_log[..f];
-    let base_head_at_fork = if f == 0 {
-        [0u8; 32]
-    } else {
-        base_log[f - 1]
-    };
+    let base_head_at_fork = if f == 0 { [0u8; 32] } else { base_log[f - 1] };
     let branch_final = *branch_log.last().unwrap_or(&[0u8; 32]);
     let r = run(conn, ticks, branch, false);
     let dl = r.region_spikes[Region::DnL.idx()];

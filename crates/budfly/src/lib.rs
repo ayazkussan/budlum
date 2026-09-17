@@ -41,8 +41,8 @@ pub mod reflex;
 pub mod replay;
 pub mod rng;
 pub mod sha256;
-pub mod tournament;
 pub mod sim;
+pub mod tournament;
 
 pub use connectome::{generate, Connectome, Region, DEFAULT_SEED, N_REGIONS};
 pub use fabric::{place, real_scale_report, Chip, Placement, RealScaleReport};
