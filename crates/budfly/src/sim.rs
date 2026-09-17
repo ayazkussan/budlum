@@ -146,7 +146,9 @@ pub fn run_masked(conn: &Connectome, ticks: u32, stim: &Stimuli, dead: &[bool]) 
 /// The verifier side of the dispute game lives on this vector.
 #[must_use]
 pub fn run_log(conn: &Connectome, ticks: u32, stim: &Stimuli) -> Vec<[u8; 32]> {
-    run_core(conn, ticks, stim, false, None, true).log.unwrap_or_default()
+    run_core(conn, ticks, stim, false, None, true)
+        .log
+        .unwrap_or_default()
 }
 
 #[allow(clippy::too_many_arguments)]

@@ -37,7 +37,12 @@ pub const fn bisect_queries_max(ticks: u32) -> u32 {
 /// kept in-crate so the honest side and the threat model version together.
 #[doc(hidden)]
 #[must_use]
-pub fn dishonest_log_fixture(conn: &Connectome, ticks: u32, stim: &Stimuli, tamper: u32) -> Vec<[u8; 32]> {
+pub fn dishonest_log_fixture(
+    conn: &Connectome,
+    ticks: u32,
+    stim: &Stimuli,
+    tamper: u32,
+) -> Vec<[u8; 32]> {
     let total = conn.total;
     let mut v = vec![0i32; total];
     let mut refr = vec![0u32; total];

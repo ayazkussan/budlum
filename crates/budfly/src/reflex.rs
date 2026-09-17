@@ -48,8 +48,20 @@ mod tests {
         assert_eq!(f, want, "first-spike tick per region");
         // the behavioral arcs embedded in the table:
         assert_eq!(f[Region::DnL.idx()], 6, "LamL->DnL reflex arc = 6 ticks");
-        assert_eq!(f[Region::Mdn.idx()], 22, "MDN veto lags 16 ticks behind DnL");
-        assert_eq!(f[Region::DnR.idx()], -1, "left stimulus lateralizes (DnR silent)");
-        assert_eq!(f[Region::MbMbon.idx()], -1, "no odor pattern -> MBON silent");
+        assert_eq!(
+            f[Region::Mdn.idx()],
+            22,
+            "MDN veto lags 16 ticks behind DnL"
+        );
+        assert_eq!(
+            f[Region::DnR.idx()],
+            -1,
+            "left stimulus lateralizes (DnR silent)"
+        );
+        assert_eq!(
+            f[Region::MbMbon.idx()],
+            -1,
+            "no odor pattern -> MBON silent"
+        );
     }
 }
