@@ -133,6 +133,13 @@ jobs:
             exit 1
           }
           echo "${out}"
+          # fixture bytes are canonical circuit test vectors: the verifier
+          # recomputes their sha256 from the mirror pins and kills drift
+          out=$(python3 crates/budfly/scripts/dump_fixtures.py 2>&1) || {
+            echo "${out}" | tail -20 | while IFS= read -r l; do echo "::error::[fixtures] ${l}"; done
+            exit 1
+          }
+          echo "${out}"
 
   determinism-smoke:
     # Determinism is not just a unit property here, it is the product: compile

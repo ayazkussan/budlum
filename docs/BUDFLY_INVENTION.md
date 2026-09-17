@@ -45,6 +45,12 @@ zarfta** mühürlenir.
 | C17 | (peer, epoch, nonce)-bağlı davranışsal build-parmakizi el sıkışması | `attest.rs`, frozen challenge + L1/L2 pin'leri |
 | C18 | Merdiven iç tutarlılığı: L1 her zaman L2 zincirinin ilk başı | `attest.l1_prefix_of_l2=True`, `ladder_consistent` |
 | C19 | Epoch-freshness: eski epoch cevabı taze challenge'da geçmez | `attest.epoch_moves_l2=True` |
+| C20 | Sezonluk sıralama tablosu: ayak-bağlama kuralı dahil hakem imzası taşır | `league.rs`, standing pinleri (çaylak şampiyon 0xB0DF1A) |
+| C21 | Turnuva şampiyonu sezonda tahtını koruyamaz; metrik tutarlılığı sürer | 0xB0DF18 saltanatı, tie-break'te B0DF19 kırılıyor (pinli) |
+| C22 | Yürüyen kanıtlayıcı protokolü (erasure): root-bağlı chunk challenge'ları | `erasure.rs`, K=8 cevap pinleri |
+| C23 | Tek-bit avalansı: 1 chunk bit'i => root kayar => 8/8 cevap değişir | `erasure.bitflip_moves_all=True` |
+| C24 | Dürüst-negatif sabitlenmiş iddia sınırı: kanıt posesyon DEĞİLDİR (v1) | `erasure.proves_possession=False` (geri alınamaz pin) |
+| C25 | Devre test-vektörleri kanonik: ikili ACT-1 bant + yeniden-üretim kapısı | fixtures/ + `dump_fixtures.py`, sözleşme `budfly-fixtures-v1` |
 
 ## Varyantlar (yedek iddialar)
 

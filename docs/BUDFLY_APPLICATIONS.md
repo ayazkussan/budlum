@@ -21,7 +21,7 @@
 | B1 | SENTINEL (RoleId 10, oy-hakkısız validator) | olgu transkripti mührü (anchor), jury quorum, 136 B/204 B zarf | ~2,3 µJ/verdict, zarf C1 | Donmuş spike dinamikleriyle "oy kullanmayan karar mekanizması" | SEVK (sentinel+divan+BSE-1/2) |
 | B2 | Fraud-proof tahkimi (ACT-1 bant) | ihtilaflı tek tick'in delili, connectome'suz: kısıt katili + fold katili | 24,7 KB/tick | STARK'sız çalışan kanıt bandı; zk bunu 32 B'a bastırır | SEVK |
 | B3 | Lezyon-bataryası → saha arızası dili | çekirdek arızası `run_masked` imzası (no_eb/no_mdn/no_apl) | anchor ×3 + sayaç | Makina-arızası = davranış imzası; probing v2 bekler | SEVK |
-| B4 | Donanım turnuvası (kararlılık lig'i) | seed/placement alternatifi seçimi abstain-sayısıyla | panel ×N council | Kaybedeni tahkim belirler — yarışmanın bile delili vardır | SEVK (pin 7-5); lig ÖNERİ |
+| B4 | Donanım turnuvası + sezon ligi | 4-tohumlu sezon sıralaması, tie-break ayak-bağlamalı | panel ×N council | Sıralama tablosu hakem-imzalı; çaylak şampiyon | **SEVK** (turnuva + lig) |
 
 ## C. Yazılım süreçleri yüzeyi
 
@@ -35,8 +35,8 @@
 
 | # | Yüzey | Teklif | Sınır | Durum |
 |---|---|---|---|---|
-| D1 | BudZero zk aritmetizasyon | C1–C7 = circuit'in çalışabilir spec'i; STARK ACT-1 bandını 32 B'a bastırır | bud-zero pipeline'ı ayrı proje; burada sadece spec+fixture | **DENEY** — plaka 1 dikildi (tape.rs) |
-| D2 | Depolama erasure prover | blob merkle root = digest; kanıt yürüyen sinek | erasure kanıtlarının ağırlık sınıfı farklı; ucuz ama hile-olasılığı sınırı belirsiz | DENEY (scope-locked) |
+| D1 | BudZero zk aritmetizasyon | C1–C7 = circuit'in çalışabilir spec'i; ikili ACT-1 test vektörü kanonik (`budfly-fixtures-v1`) | bud-zero pipeline ayrı proje; vektör burada prover orada | **DENEY** — spec + fixture SEVK |
+| D2 | Depolama erasure prover | root-bağlı chunk challenge -> K×L1 cevap; avalans pinli | posesyon DEĞİLDİR: pin geri alınamaz | **DENEY** — protokol + sınır birlikte pinlendi |
 | D3 | Lubot fact-finality anchor'ı | c1 payload hash → sentinel digest; validator RoleId 10 | Lubot runtime bu repoda yok — prompt+patch serisi | ÖNERİ (doc: BUDFLY_SENTINEL_VALIDATOR) |
 
 ## Komuta zinciri — sinek her yerde aynı şeyi söyler
