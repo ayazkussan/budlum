@@ -134,12 +134,7 @@ pub fn run(conn: &Connectome, ticks: u32, stim: &Stimuli, audit: bool) -> RunRes
 /// shape is unchanged (dead neurons contribute zero rows and zero bits).
 /// Bit-exact mirror of `run_masked` in `scripts/expansion_check.py`.
 #[must_use]
-pub fn run_masked(
-    conn: &Connectome,
-    ticks: u32,
-    stim: &Stimuli,
-    dead: &[bool],
-) -> RunResult {
+pub fn run_masked(conn: &Connectome, ticks: u32, stim: &Stimuli, dead: &[bool]) -> RunResult {
     run_core(conn, ticks, stim, true, Some(dead))
 }
 

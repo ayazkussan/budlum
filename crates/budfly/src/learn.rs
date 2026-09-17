@@ -109,9 +109,7 @@ pub fn conditioned_run(conn: &Connectome) -> LearnReport {
         for &g in &spiking {
             cur_spiked[g] = true;
         }
-        let gate = spiking
-            .iter()
-            .any(|&g| conn.region_of(g) == Region::Mdn)
+        let gate = spiking.iter().any(|&g| conn.region_of(g) == Region::Mdn)
             || (0..total).any(|g| prev_spiked[g] && conn.region_of(g) == Region::Mdn);
         if gate {
             for (i, e) in conn.edges.iter().enumerate() {
@@ -202,8 +200,10 @@ mod tests {
         );
         assert_eq!(
             r.mbon_per_tick,
-            vec![0, 0, 0, 0, 0, 0, 0, 0, 0, 8, 0, 8, 0, 8, 0, 5, 0, 6, 0, 4, 0, 6, 0, 3,
-                 0, 0, 0, 0, 0, 0, 0, 0]
+            vec![
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 8, 0, 8, 0, 8, 0, 5, 0, 6, 0, 4, 0, 6, 0, 3, 0, 0, 0, 0,
+                0, 0, 0, 0
+            ]
         );
         assert_eq!(r.changed, 63);
         assert_eq!(r.floor_min, 128);

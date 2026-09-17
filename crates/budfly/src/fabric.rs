@@ -280,6 +280,9 @@ mod tests {
             let rowv = fault_row(&chip, k).unwrap_or_default();
             assert_eq!(rowv, (ok, cyc, tps, 576_782), "fault row k={k}");
         }
-        assert!(fault_row(&chip, 3123).is_none(), "total loss kills the fabric");
+        assert!(
+            fault_row(&chip, 3123).is_none(),
+            "total loss kills the fabric"
+        );
     }
 }

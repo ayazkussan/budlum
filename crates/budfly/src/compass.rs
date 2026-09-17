@@ -95,11 +95,24 @@ mod tests {
             hex32(&w.anchor),
             "438a58bf5c4869d355d810fb0954ce1e786002fd9e17521fb5cbd5a2496dc299"
         );
-        assert_eq!(w.hold_sector0, 0, "the bump must NOT lock sector 0 (honest negative)");
+        assert_eq!(
+            w.hold_sector0, 0,
+            "the bump must NOT lock sector 0 (honest negative)"
+        );
         assert_eq!(w.any_spike, 64);
         assert_eq!(
             w.t40_histogram,
-            vec![(0, 2), (1, 2), (3, 3), (4, 1), (5, 2), (11, 1), (12, 2), (13, 1), (14, 3)]
+            vec![
+                (0, 2),
+                (1, 2),
+                (3, 3),
+                (4, 1),
+                (5, 2),
+                (11, 1),
+                (12, 2),
+                (13, 1),
+                (14, 3)
+            ]
         );
     }
 }
