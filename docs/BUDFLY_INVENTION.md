@@ -51,6 +51,9 @@ zarfta** mühürlenir.
 | C23 | Tek-bit avalansı: 1 chunk bit'i => root kayar => 8/8 cevap değişir | `erasure.bitflip_moves_all=True` |
 | C24 | Dürüst-negatif sabitlenmiş iddia sınırı: kanıt posesyon DEĞİLDİR (v1) | `erasure.proves_possession=False` (geri alınamaz pin) |
 | C25 | Devre test-vektörleri kanonik: ikili ACT-1 bant + yeniden-üretim kapısı | fixtures/ + `dump_fixtures.py`, sözleşme `budfly-fixtures-v1` |
+| C26 | ACT-1 hasar taraması kapsamlı: 24.708 tek-bit mutant + tüm kesmeler; kaçış envanteri 396 offset'in tamamı "hayalet refraktör" sınıfında (`f16:rb0sp0`), offset listesi hash-mühürlü; spike/v_after/r-zinciri/fold %100 delici | `hardening.rs::tape_adversary_sweep`, `hard.tape.*` pinleri (8+24.300+4+396) |
+| C27 | Erasure avalansı tam uzayda kanıtlı: 32/32 chunk pozisyonu K=8 cevabın tamamını kaydırır; epoch cevapları 8/8 hareket eder | `hard.erasure.chunk_avalanche=32`, `hard.erasure.epoch_moves=8` |
+| C28 | Kimlik ve lig bağışıklığı: nonce avalansı 32/32, merdiven kendi kendini 32/32 yeniden başlatır, eş binding; lig replay/shuffle/tie/total-order invaryantları | `hard.attest.*`, `hard.league.*` pinleri (32 kurul, 20 abstain bütçesi) |
 
 ## Varyantlar (yedek iddialar)
 

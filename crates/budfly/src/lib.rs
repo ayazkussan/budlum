@@ -37,6 +37,7 @@ pub mod divan;
 pub mod envelope;
 pub mod erasure;
 pub mod fabric;
+pub mod hardening;
 pub mod league;
 pub mod learn;
 pub mod lesion;

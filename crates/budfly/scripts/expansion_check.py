@@ -855,6 +855,244 @@ pin("erasure.bitflip_moves_all", all(a != b for a, b in zip(er_answers, er_answe
 # chunk bytes feeding the stimulus stream, which this v1 does NOT do.
 pin("erasure.proves_possession", False)
 
+# ------------------------------------------------------------- [hardening]
+# The adversary sweep: not "does the honest tape pass" but "how much room
+# does a forger actually have". Every question below is run, not argued:
+#   tape    every single-bit flip of the honest tape + every truncation
+#   erasure every chunk position avalanches all K answers
+#   attest  every nonce byte avalanches L1; ladder stays self-consistent
+#   league  replay/shuffle/tie invariants of the frozen season
+#
+# CLASSIFICATION PRECEDENCE (frozen): malformed -> viol_caught ->
+# fold_caught -> escaped. The escape inventory is pinned OFFSET BY OFFSET
+# (sha256 of the LE offset list): the forger's entire freedom for v1 is a
+# published, hashed set of byte positions.
+#
+# WINDOW SEMANTICS — this evaluator mirrors tape.rs/air.rs EXACTLY: the C6
+# refractory chain is checked only INSIDE the taped window (i > 0), genesis
+# is tick-keyed, and v_before is an input to the constraints, not a chained
+# commitment. That is what the shipped verifier enforces.
+ROWB = 21
+def tape_decode_rust(b):
+    """Bit-exact mirror of tape::decode_tape. Returns (tick, rows) or None;
+    rows are (vb, ie, isy, va, rb, sp) tuples with window tick labels."""
+    if len(b) < 12 or b[:4] != b"ACT1":
+        return None
+    tick = int.from_bytes(b[4:8], "little")
+    count = int.from_bytes(b[8:12], "little")
+    if len(b) != 12 + count * ROWB:
+        return None
+    tib = count // total  # checked_div; total == 588 here
+    if tib != (1 if tick == 0 else 2):
+        return None
+    base = tick - 1 if tick > 0 else 0
+    rows = []
+    for i in range(count):
+        s = 12 + i * ROWB
+        bb = b[s:s + ROWB]
+        rows.append((
+            int.from_bytes(bb[0:4], "little", signed=True),
+            int.from_bytes(bb[4:8], "little", signed=True),
+            int.from_bytes(bb[8:12], "little", signed=True),
+            int.from_bytes(bb[12:16], "little", signed=True),
+            int.from_bytes(bb[16:20], "little"),
+            bb[20],
+            base + i // total,
+        ))
+    return tick, rows
+
+def air_window_violations(nrows):
+    """Bit-exact mirror of air::count_violations for ONE neuron's window
+    rows [(vb,ie,isy,va,rb,sp,tick), ...] in tape order."""
+    bad = 0
+    for i, (vb, ie, isy, va, rb, sp, tick) in enumerate(nrows):
+        if tick == 0:
+            if vb != 0 or rb != 0:
+                bad += 1
+            continue
+        if i > 0:
+            pp = nrows[i - 1]
+            exp_r = (pp[4] - 1) if pp[4] > 0 else (REFRAC if pp[5] == 1 else 0)
+            if rb != exp_r:
+                bad += 1
+                continue
+        if rb > 0:
+            if va != 0 or sp != 0:
+                bad += 1
+            continue
+        leaked = vb - (vb >> LEAK_SHIFT)
+        raw = max(V_MIN, min(V_MAX, leaked + ie + isy))
+        exp_sp = 1 if raw >= V_TH else 0
+        if sp != exp_sp:
+            bad += 1
+            continue
+        if exp_sp == 1:
+            if va != 0:
+                bad += 1
+        elif va != raw:
+            bad += 1
+    return bad
+
+def tape_fold_rust(tick, rows, prev_head):
+    """Mirror of tape::recompute_fold over the decoded rows."""
+    last = rows[len(rows) - total:]
+    sh = hashlib.sha256(bytes(r[5] for r in last[:total])).digest()
+    vh = hashlib.sha256(b"".join(r[3].to_bytes(4, "little", signed=True)
+                                 for r in last[:total])).digest()
+    return hashlib.sha256(prev_head + tick.to_bytes(8, "big") + sh + vh).digest()
+
+TAPE_TICK, PUB_HEAD = T, bytes.fromhex(ff_log[T])
+PREV_HEAD = bytes.fromhex(ff_log[T - 1])
+mutations = malformed = viol_caught = fold_caught = 0
+escapes = []
+tick_flip_hits = []  # header mutant detail, for the report line
+for o in range(len(tape)):
+    if o < 12:
+        mb = bytearray(tape)
+        mb[o] ^= 1
+        dec = tape_decode_rust(bytes(mb))
+        if dec is None:
+            malformed += 1
+            continue
+        tk, rows = dec
+        by_neuron = [[] for _ in range(total)]
+        for idx_r, r in enumerate(rows):
+            by_neuron[idx_r % total].append(r)
+        viol = sum(air_window_violations(nrs) for nrs in by_neuron)
+        if viol > 0:
+            viol_caught += 1
+        elif tape_fold_rust(tk, rows, PREV_HEAD) != PUB_HEAD:
+            fold_caught += 1
+            tick_flip_hits.append(o)
+        else:
+            escapes.append(o)
+        continue
+    # body mutant: row i, neuron gid; only that neuron's 2-row window
+    # can change verdict (baseline is zero violations everywhere).
+    i = (o - 12) // ROWB
+    gid = i % total
+    tw = T - 1 + i // total
+    rb21 = bytearray(tape[12 + i * ROWB: 12 + (i + 1) * ROWB])
+    rb21[(o - 12) % ROWB] ^= 1
+    patched = (
+        int.from_bytes(rb21[0:4], "little", signed=True),
+        int.from_bytes(rb21[4:8], "little", signed=True),
+        int.from_bytes(rb21[8:12], "little", signed=True),
+        int.from_bytes(rb21[12:16], "little", signed=True),
+        int.from_bytes(rb21[16:20], "little"),
+        rb21[20],
+        tw,
+    )
+    honest = [tuple(rowsA[gid][t][j] for j in (1, 2, 3, 4, 6, 5)) + (t,)
+              for t in (T - 1, T)]
+    # note: rowsA tuples are (t, vb, ie, isy, va, sp, rb) -> reordered above
+    # to (vb, ie, isy, va, rb, sp, tick) matching the air evaluator.
+    win = [patched if t == tw else h for t, h in zip((T - 1, T), honest)]
+    viol = air_window_violations(win)
+    if viol > 0:
+        viol_caught += 1
+        continue
+    # fold: patch only moves it when the byte lands in tick-T spike/v_after
+    rows_last = None
+    if tw == T and ((o - 12) % ROWB >= 12):
+        rows_last = []
+        for g2 in range(total):
+            if g2 == gid:
+                rows_last.append(patched)
+            else:
+                hx = rowsA[g2][T]
+                rows_last.append((hx[1], hx[2], hx[3], hx[4], hx[6], hx[5], T))
+        fd = tape_fold_rust(T, rows_last, PREV_HEAD)
+    else:
+        fd = tape_fold_rust(
+            T,
+            [(hx[1], hx[2], hx[3], hx[4], hx[6], hx[5], T)
+             for hx in (rowsA[g][T] for g in range(total))],
+            PREV_HEAD)
+    if fd != PUB_HEAD:
+        fold_caught += 1
+    else:
+        escapes.append(o)
+
+mutations = len(tape)
+trunc_decodable = sum(1 for L in range(len(tape))
+                      if tape_decode_rust(tape[:L]) is not None)
+append_decodable = 1 if tape_decode_rust(tape + b"\x00") is not None else 0
+esc_hash = hashlib.sha256(b"".join(o.to_bytes(4, "little") for o in escapes)).hexdigest()
+# escape CLASS inventory: (field_of_row(0..20), row_state) must be reported
+# with the counts so a class shift breaks the pins even at equal totals.
+def esc_class(o):
+    if o < 12:
+        return "header"
+    f = (o - 12) % ROWB
+    i = (o - 12) // ROWB
+    gid = i % total
+    hx = rowsA[gid][T - 1 + i // total]
+    state = f"rb{hx[6]}sp{hx[5]}"  # r_before, spike of the honest row
+    return f"f{f}:{state}"
+from collections import Counter as _Counter
+esc_inv = sorted(_Counter(esc_class(o) for o in escapes).items())
+pin("hard.tape.mutations", mutations)
+pin("hard.tape.malformed", malformed)
+pin("hard.tape.viol_caught", viol_caught)
+pin("hard.tape.fold_caught", fold_caught)
+pin("hard.tape.escaped", len(escapes))
+pin("hard.tape.escape_offsets_sha256", esc_hash)
+pin("hard.tape.escape_classes", ";".join(f"{k}={v}" for k, v in esc_inv))
+pin("hard.tape.trunc_decodable", trunc_decodable)
+pin("hard.tape.append_decodable", append_decodable)
+
+# erasure: full-position avalanche, not just chunk 13
+era_chunk_ok = 0
+for ci in range(32):
+    cm = list(CHUNKS)
+    cm[ci] = bytes([cm[ci][0] ^ 1]) + cm[ci][1:]
+    r2 = hashlib.sha256(b"".join(cm)).digest()
+    a2 = [anchor_log_generic(1, sentinel_stim(chunk_challenge(r2, ix, 3)))[0]
+          for ix in [0, 5, 9, 13, 17, 21, 26, 31]]
+    if all(x != y for x, y in zip(er_answers, a2)):
+        era_chunk_ok += 1
+era_epoch4 = [anchor_log_generic(1, sentinel_stim(chunk_challenge(er_root, ix, 4)))[0]
+              for ix in [0, 5, 9, 13, 17, 21, 26, 31]]
+pin("hard.erasure.chunk_avalanche", era_chunk_ok)
+pin("hard.erasure.epoch_moves", sum(1 for x, y in zip(er_answers, era_epoch4) if x != y))
+
+# attest: every nonce byte avalanches L1 and the ladder re-heads itself
+base_l1 = l1  # from [attest]
+nonce_av = ladder_ok = 0
+for nb in range(32):
+    nn = bytearray([0xA5] * 32)
+    nn[nb] ^= 1
+    chn = hashlib.sha256(b"BUDFLY-ATTEST1\\x00" + peer +
+                         (7).to_bytes(8, "big") + bytes(nn)).digest()
+    lg = anchor_log_generic(48, sentinel_stim(chn))
+    if lg[0] != base_l1:
+        nonce_av += 1
+    if lg[0] == anchor_log_generic(1, sentinel_stim(chn))[0]:
+        ladder_ok += 1
+peer_flip_l2 = anchor_log_generic(48, sentinel_stim(
+    hashlib.sha256(b"BUDFLY-ATTEST1\\x00" + b"fly-peer-02" +
+                   (7).to_bytes(8, "big") + bytes([0xA5] * 32)).digest()))[-1]
+pin("hard.attest.nonce_avalanche", nonce_av)
+pin("hard.attest.ladder_robust", ladder_ok)
+pin("hard.attest.peer_binding", peer_flip_l2 != l2)
+
+# league: invariants of the frozen season table (reuses [league] rows)
+ref_sizes, ref_off, ref_total, ref_edges = flies[0xB0DF17]
+rep1 = [sentinel(ref_sizes, ref_off, ref_edges, seat_digest(panel[0], s))[0]
+        for s in range(3)]
+rep2 = [sentinel(ref_sizes, ref_off, ref_edges, seat_digest(panel[0], s))[0]
+        for s in range(3)]
+shuffled = sorted([0xB0DF19, 0xB0DF17, 0xB0DF1A, 0xB0DF18],
+                  key=lambda sd: (rows_by_seed[sd][0], rows_by_seed[sd][1]))
+abstain_list = [rows_by_seed[sd][0] for sd in LEAGUE_SEEDS]
+pin("hard.league.council_replay_identical", rep1 == rep2)
+pin("hard.league.shuffle_stable", shuffled == standing)
+pin("hard.league.tie_engaged", len(set(abstain_list)) < len(abstain_list))
+pin("hard.league.table_total_order", len(set(standing)) == 4)
+pin("hard.league.total_councils", len(LEAGUE_SEEDS) * 8)
+pin("hard.league.abstain_sum", sum(abstain_list))
+
 # ---------------------------------------------- manifest cross-validation
 man = tomllib.loads((Path(__file__).resolve().parents[1] / "goldens.anchor.toml").read_text())
 exp = man.get("expansion", {})
