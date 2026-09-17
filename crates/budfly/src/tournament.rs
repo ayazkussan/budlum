@@ -92,7 +92,11 @@ mod tests {
     fn the_challenger_outlives_the_reference_on_decisiveness() {
         let a = generate(1, 16, DEFAULT_SEED);
         let b = generate(1, 16, CHALLENGER_SEED);
-        assert_eq!((a.total, a.edges.len()), (b.total, b.edges.len()));
+        // same anatomy (region sizes, offsets, total) — the wiring differs;
+        // edge count is NOT structural: dedup collisions vary with the seed.
+        assert_eq!(a.sizes, b.sizes);
+        assert_eq!(a.offsets, b.offsets);
+        assert_eq!(a.total, b.total);
         let rep = tournament(&a, &b);
         assert_eq!(rep.abstains_a, 7);
         assert_eq!(rep.abstains_b, 5);
