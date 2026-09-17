@@ -173,3 +173,7 @@ unused = ["bytes10_16", "bytes20_32"]
 "tournament.abstains_a" = 7
 "tournament.abstains_b" = 5
 "tournament.survivor" = "B"
+"envelope.len" = 136
+"envelope.hex" = "425345314242424242424242424242424242424242424242424242424242424242424242ae3aa8d0afc6a7db9a9bb222b8c6917aefad1dc32dea271da827be696112e5ed6b14cece457976715767da61b2cb48ef8ff27cb06b2fb9840887aa2c67a1d1fb5400ce9c2b1f00a8159c178b618fc363f3ccddcb9bab3f22ce2c50f6d40612ec00010000"
+"envelope.cheap_consistent" = true
+"envelope.selfcheck" = true

@@ -33,6 +33,7 @@ pub mod compass;
 pub mod connectome;
 pub mod dispute;
 pub mod divan;
+pub mod envelope;
 pub mod fabric;
 pub mod learn;
 pub mod lesion;

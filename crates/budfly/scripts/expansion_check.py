@@ -556,6 +556,37 @@ pin("tournament.survivor", "A" if abA < abB else ("B" if abB < abA else "both"))
 # Arbitration sanity: the deciding run is re-executable under dispute rules
 # (bisection machinery is fly-agnostic; it sees chains, not champions).
 
+
+# --------------------------------------------------------------- [envelope]
+# BSE-1 "BudFly Settlement Envelope": the 136-byte court verdict — the one
+# artifact a settlement layer stores instead of re-running anything.
+# Layout (frozen):
+#   "BSE1"            4 B
+#   fact_digest      32 B
+#   seat anchors   3*32 B
+#   seat verdicts  3*1  B   (0=Abstain, 1=Affirm, 2=Reject)
+#   council        1    B
+# Cheap checks (no fly execution): magic, explicit length, council rule
+# re-applied to the seat codes must reproduce the council byte.
+VCODE = {"Abstain": 0, "Affirm": 1, "Reject": 2}
+def encode_bse1(digest, seat_anchors, seat_verdicts, council):
+    b = b"BSE1" + digest + b"".join(bytes.fromhex(a) for a in seat_anchors)
+    b += bytes([VCODE[v] for v in seat_verdicts]) + bytes([VCODE[council]])
+    assert len(b) == 136
+    return b
+def decode_bse1(b):
+    assert len(b) == 136 and b[:4] == b"BSE1"
+    return {"digest": b[4:36], "anchors": [b[36+i*32:68+i*32].hex() for i in range(3)],
+            "verdicts": list(b[132:135]), "council": b[135]}
+env = encode_bse1(D0, seat_a, seat_v, "Abstain")
+dec = decode_bse1(env)
+unanimous_codes = dec["verdicts"][0] == dec["verdicts"][1] == dec["verdicts"][2]
+dec_council = dec["verdicts"][0] if unanimous_codes else 0
+pin("envelope.len", len(env))
+pin("envelope.hex", env.hex())
+pin("envelope.cheap_consistent", dec_council == dec["council"])
+pin("envelope.selfcheck", dec["anchors"] == seat_a and dec["verdicts"] == [VCODE[v] for v in seat_v])
+
 # ---------------------------------------------- manifest cross-validation
 man = tomllib.loads((Path(__file__).resolve().parents[1] / "goldens.anchor.toml").read_text())
 exp = man.get("expansion", {})

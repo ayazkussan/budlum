@@ -110,6 +110,13 @@ jobs:
             echo "${out}" | tail -30 | while IFS= read -r l; do echo "::error::[example] ${l}"; done
             exit 1
           }
+
+      - name: fly court example runs
+        run: |
+          out=$(cargo run --manifest-path crates/budfly/Cargo.toml --example fly_court_report 2>&1) || {
+            echo "${out}" | tail -30 | while IFS= read -r l; do echo "::error::[court-example] ${l}"; done
+            exit 1
+          }
           echo "${out}"
       # The Python reference is the provenance oracle: it recomputed every
       # golden anchor committed in tests/goldens.rs. If this passes while the
