@@ -124,7 +124,6 @@ mod tests {
     use super::*;
     use crate::connectome::{generate, DEFAULT_SEED};
     use crate::divan::council;
-    use crate::sha256::hex32;
 
     const FROZEN_HEX: &str = "425345314242424242424242424242424242424242424242424242424242424242424242ae3aa8d0afc6a7db9a9bb222b8c6917aefad1dc32dea271da827be696112e5ed6b14cece457976715767da61b2cb48ef8ff27cb06b2fb9840887aa2c67a1d1fb5400ce9c2b1f00a8159c178b618fc363f3ccddcb9bab3f22ce2c50f6d40612ec00010000";
 
@@ -134,7 +133,6 @@ mod tests {
         let rep = council(&c, &[0x42u8; 32]);
         let env = encode_council(&[0x42u8; 32], &rep);
         assert_eq!(env.len(), ENVELOPE_LEN);
-        assert_eq!(hex32(&env[..32]), &FROZEN_HEX[..64]);
         let full: String = env.iter().map(|b| format!("{b:02x}")).collect();
         assert_eq!(full, FROZEN_HEX);
     }
