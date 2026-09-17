@@ -61,6 +61,7 @@ pub struct SentinelReport {
 /// * compass sector start = `u16(digest[8..10]) mod ring`;
 /// * lobula: bits 0..32 of `digest[16..24]`, left population first, each set
 ///   bit draws one neuron from the seeded stream.
+///
 /// The frozen digest-derived challenge stimulus (also used by
 /// `canary::challenge_canary` — one builder, one draw order, never two).
 #[must_use]
