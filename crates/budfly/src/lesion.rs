@@ -50,9 +50,11 @@ pub fn odor_stim(conn: &Connectome) -> Stimuli {
 #[must_use]
 pub fn dead_region(conn: &Connectome, region: Region) -> Vec<bool> {
     let mut dm = vec![false; conn.total];
-    for g in conn.offset(region)..conn.offset(region) + conn.size(region) {
-        dm[g] = true;
-    }
+    let (lo, hi) = (
+        conn.offset(region),
+        conn.offset(region) + conn.size(region),
+    );
+    dm[lo..hi].fill(true);
     dm
 }
 

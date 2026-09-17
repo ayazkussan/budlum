@@ -52,9 +52,10 @@ pub fn degree_sum_hash(conn: &Connectome) -> String {
 pub fn bfs_from(conn: &Connectome, src: Region) -> Vec<i32> {
     let mut d = vec![-1i32; conn.total];
     let mut dq = VecDeque::new();
-    for g in conn.offset(src)..conn.offset(src) + conn.size(src) {
-        d[g] = 0;
-        dq.push_back(g);
+    let (lo, hi) = (conn.offset(src), conn.offset(src) + conn.size(src));
+    for (gi, slot) in d[lo..hi].iter_mut().enumerate() {
+        *slot = 0;
+        dq.push_back(lo + gi);
     }
     while let Some(g) = dq.pop_front() {
         for e in &conn.adj[g] {
