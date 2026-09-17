@@ -65,7 +65,7 @@ pub fn play_season() -> Vec<LeagueRow> {
 #[must_use]
 pub fn standing(rows: &[LeagueRow]) -> Vec<u64> {
     let mut xs: Vec<LeagueRow> = rows.to_vec();
-    xs.sort_by(|a, b| (a.abstains, a.tie_anchor).cmp(&(b.abstains, b.tie_anchor)));
+    xs.sort_by_key(|r| (r.abstains, r.tie_anchor));
     xs.iter().map(|r| r.seed).collect()
 }
 
