@@ -28,6 +28,7 @@
 
 pub mod air;
 pub mod analysis;
+pub mod canary;
 pub mod compass;
 pub mod connectome;
 pub mod dispute;

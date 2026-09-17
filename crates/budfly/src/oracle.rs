@@ -61,7 +61,10 @@ pub struct SentinelReport {
 /// * compass sector start = `u16(digest[8..10]) mod ring`;
 /// * lobula: bits 0..32 of `digest[16..24]`, left population first, each set
 ///   bit draws one neuron from the seeded stream.
-pub fn sentinel_verdict(conn: &Connectome, digest: &[u8; 32]) -> SentinelReport {
+/// The frozen digest-derived challenge stimulus (also used by
+/// `canary::challenge_canary` — one builder, one draw order, never two).
+#[must_use]
+pub fn sentinel_stimulus(conn: &Connectome, digest: &[u8; 32]) -> Stimuli {
     let mut rng = SplitMix64::new(u64::from_le_bytes([
         digest[0], digest[1], digest[2], digest[3], digest[4], digest[5], digest[6], digest[7],
     ]));
@@ -86,6 +89,11 @@ pub fn sentinel_verdict(conn: &Connectome, digest: &[u8; 32]) -> SentinelReport 
             }
         }
     }
+    stim
+}
+
+pub fn sentinel_verdict(conn: &Connectome, digest: &[u8; 32]) -> SentinelReport {
+    let stim = sentinel_stimulus(conn, digest);
 
     let result = run(conn, SENTINEL_TICKS, &stim, false);
     let dn_l = result.region_spikes[Region::DnL.idx()];

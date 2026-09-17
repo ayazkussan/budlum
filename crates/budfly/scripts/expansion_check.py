@@ -22,8 +22,9 @@ import tomllib
 
 from reference_check import (
     SCALE, V_TH, V_MAX, V_MIN, REFRAC, W_SYN, I_STIM, LEAK_SHIFT,
-    LAM_L, LAM_R, CX_EB, CX_FB, MB_KC, MB_MBON, MB_APL, DN_L, DN_R, MDN,
-    build_connectome, run,
+    LAM_L, LAM_R, LOB_L, LOB_R, CX_EB, CX_FB, MB_KC, MB_MBON, MB_APL,
+    DN_L, DN_R, MDN,
+    Rng, build_connectome, run, sentinel,
 )
 
 # Mirrors Rust sim.rs (per-add progressive clamp during delivery). The
@@ -384,6 +385,72 @@ pin("reflex.first_spike_tick", ",".join(f"{RN[r]}:{first[r]}" for r in range(16)
 pin("reflex.latency_dnl", first[DN_L])
 pin("reflex.latency_mdn", first[MDN])
 pin("reflex.dnr_silent", first[DN_R] == -1 and first[MB_MBON] == -1)
+
+# ---------------------------------------------------------------- [canary]
+# 1-tick challenge-response canary: cheap integrity heartbeat pinned to the
+# expensive contract through the SAME log path (self-consistency asserted).
+vg, dl, dr, mdn, sent_anchor = sentinel(sizes, off, edges, bytes([0xFF] * 32))
+rng_stim_check = bytes([0xFF] * 32)
+# sentinel all-ones stimulus reproduced via the same builder on this side:
+s_stim = {}
+_r = Rng(int.from_bytes(rng_stim_check[0:8], "little"))
+_eb0, _ne = off[CX_EB], sizes[CX_EB]
+_sector = int.from_bytes(rng_stim_check[8:10], "little") % _ne
+_width = max(4, _ne // 4)
+for _i in range(_width):
+    s_stim[_eb0 + (_sector + _i) % _ne] = (0, 8)
+for _lob in (LOB_L, LOB_R):
+    _base, _n = off[_lob], sizes[_lob]
+    for _b in range(32):
+        if (rng_stim_check[16 + _b // 8] >> (_b % 8)) & 1:
+            _gid = _base + _r.below(_n)
+            if _gid not in s_stim:
+                s_stim[_gid] = (0, 4)
+
+def anchor_log_generic(ticks, stim):
+    adj = [[] for _ in range(total)]
+    for p, q, w in edges:
+        adj[p].append((q, w))
+    v = [0] * total
+    refr = [0] * total
+    pend = [0] * total
+    anchor = b"\x00" * 32
+    log = []
+    for t in range(ticks):
+        spiking = []
+        sbytes = bytearray(total)
+        for gid in range(total):
+            i_ext = I_STIM if (gid in stim and stim[gid][0] <= t < stim[gid][1]) else 0
+            i_syn = pend[gid] if t > 0 else 0
+            vb, rb = v[gid], refr[gid]
+            if rb > 0:
+                refr[gid] = rb - 1
+                v[gid] = 0
+            else:
+                raw = max(V_MIN, min(V_MAX, vb - (vb >> LEAK_SHIFT) + i_ext + i_syn))
+                if raw >= V_TH:
+                    v[gid] = 0
+                    refr[gid] = REFRAC
+                    spiking.append(gid)
+                    sbytes[gid] = 1
+                else:
+                    v[gid] = raw
+        nxt = [0] * total
+        for p in spiking:
+            for q, w in adj[p]:
+                nxt[q] = max(-FAN_IN_MAX, min(FAN_IN_MAX, nxt[q] + w))
+        pend = nxt
+        sh = hashlib.sha256(bytes(sbytes)).digest()
+        vh = hashlib.sha256(b"".join(x.to_bytes(4, "little", signed=True) for x in v)).digest()
+        anchor = hashlib.sha256(anchor + t.to_bytes(8, "big") + sh + vh).digest()
+        log.append(anchor.hex())
+    return log
+
+clog = anchor_log_generic(48, s_stim)
+assert clog[-1] == sent_anchor, "canary log path must land on the sentinel golden"
+pin("canary.allones.tick1", clog[0])
+pin("canary.allones.chain_end", clog[-1])
+pin("canary.self_consistent", clog[-1] == sent_anchor)
 
 # ---------------------------------------------- manifest cross-validation
 man = tomllib.loads((Path(__file__).resolve().parents[1] / "goldens.anchor.toml").read_text())

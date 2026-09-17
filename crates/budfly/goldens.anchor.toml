@@ -146,3 +146,6 @@ unused = ["bytes10_16", "bytes20_32"]
 "reflex.latency_dnl" = "6"
 "reflex.latency_mdn" = "22"
 "reflex.dnr_silent" = "True"
+"canary.allones.tick1" = "6c221c70ef0a411e5ceaafc8c31109fec44b21684585e31bd4bea1ae2f11db62"
+"canary.allones.chain_end" = "398e126a88776b4f15f7da9bfb7bd927f47fc32e8a92128a354380ce8d429cc3"
+"canary.self_consistent" = "True"
