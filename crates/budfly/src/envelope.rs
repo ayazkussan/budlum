@@ -123,7 +123,6 @@ pub fn cheap_consistent(env: &Envelope) -> bool {
         })
 }
 
-
 /// BSE-2 size in bytes (frozen).
 pub const ENVELOPE2_LEN: usize = 204;
 /// BSE-2 magic prefix (frozen).
@@ -252,7 +251,13 @@ mod tests {
         let digest = [0xffu8; 32];
         let rep = council(&c, &digest);
         let base = sentinel_stimulus(&c, &digest);
-        let cert = replay_cert(&c, &base, &mdn_early_stim(&c, &base, 10), 10, SENTINEL_TICKS);
+        let cert = replay_cert(
+            &c,
+            &base,
+            &mdn_early_stim(&c, &base, 10),
+            10,
+            SENTINEL_TICKS,
+        );
         let env = encode_council_card(&digest, &rep, &cert);
         assert_eq!(env.len(), ENVELOPE2_LEN);
         let full: String = env.iter().map(|b| format!("{b:02x}")).collect();
