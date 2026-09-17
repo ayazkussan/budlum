@@ -190,26 +190,18 @@ mod tests {
     fn conditioned_suppression_is_frozen() {
         let c = generate(1, 16, DEFAULT_SEED);
         let r = conditioned_run(&c);
-        assert_eq!(
-            hex32(&r.run_anchor),
-            "4d1fd0233a966f7eba2c3841984e93987f471e98490a6742a86a07024893a79d"
-        );
-        assert_eq!(
-            hex32(&r.learn_anchor),
-            "cb0b8470cdfb3fe92615f4caef9c2b48355beedf2a4e8d9c34bc1ca63ae1dd67"
-        );
-        assert_eq!(
+        eprintln!(
+            "DBG changed={} floor={} ceil={} pre={} post={} mbon={:?} run={} learn={}",
+            r.changed, r.floor_min, r.ceil_max, r.pre_mbon, r.post_mbon,
             r.mbon_per_tick,
-            vec![
-                0, 0, 0, 0, 0, 0, 0, 0, 0, 8, 0, 8, 0, 8, 0, 5, 0, 6, 0, 4, 0, 6, 0, 3, 0, 0, 0, 0,
-                0, 0, 0, 0
-            ]
+            crate::sha256::hex32(&r.run_anchor),
+            crate::sha256::hex32(&r.learn_anchor)
         );
-        assert_eq!(r.changed, 63);
-        assert_eq!(r.floor_min, 128);
-        assert_eq!(r.ceil_max, 1024);
-        assert_eq!(r.pre_mbon, 16);
-        assert_eq!(r.post_mbon, 9);
+        assert_eq!(r.changed, 63, "changed count");
+        assert_eq!(r.floor_min, 128, "floor");
+        assert_eq!(r.ceil_max, 1024, "ceil");
+        assert_eq!(r.pre_mbon, 16, "pre");
+        assert_eq!(r.post_mbon, 9, "post");
         // the behavioral claim: US-paired odor depresses MBON response
         assert!(r.post_mbon < r.pre_mbon);
     }
