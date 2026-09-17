@@ -82,7 +82,7 @@ pub fn decode_tape(total: usize, bytes: &[u8]) -> Option<ActTape> {
     if bytes.len() != HEADER_BYTES + count * ROW_BYTES {
         return None;
     }
-    let ticks_in_tape = if total == 0 { 0 } else { count / total };
+    let ticks_in_tape = count.checked_div(total).unwrap_or(0);
     let expected_ticks = if tick == 0 { 1 } else { 2 };
     if ticks_in_tape != expected_ticks {
         return None;
