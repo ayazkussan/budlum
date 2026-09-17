@@ -32,13 +32,14 @@ pub fn count_violations(rows: &[Vec<TraceRow>]) -> usize {
     let mut bad = 0usize;
     for neuron_rows in rows {
         for (i, row) in neuron_rows.iter().enumerate() {
-            if i == 0 {
-                // C7: genesis state
+            if row.tick == 0 {
+                // C7: genesis state (tick-keyed, so trace WINDOWS that start
+                // later than 0 are judged by C6 glue, not by genesis).
                 if row.v_before != 0 || row.r_before != 0 {
                     bad += 1;
                     continue;
                 }
-            } else {
+            } else if i > 0 {
                 // C6: r_before must equal the value the previous row committed to
                 let prev = &neuron_rows[i - 1];
                 let expected = if prev.r_before > 0 {

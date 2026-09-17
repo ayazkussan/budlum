@@ -39,13 +39,16 @@ zarfta** mühürlenir.
 | C11 | Karar ve kontrgerçek kartı tek zarfta (204 B, "BSE2") | `envelope2.len=204`, frozen hex, BSE-1 = fork==0 alt-durumu |
 | C12 | Ucuz replay denetimi tek 32 B byte-compare (yayınlanmış baş ile) | `cheap_replay_consistent` forged-head reddi (pinli) |
 | C13 | Forksuz kart byte'ları sıfır; kartlı fork'suz kabul edilmez | `decode2` garbaje `None`, pin `envelope2.nocard_tail` |
+| C14 | Tek-tick dolandırıcılık kanıtı connectome'suz yargılanır (ACT-1 bant, ~24,7 KB) | `tape.rs`, pinli byte-uzunluk 24708 + sha256 |
+| C15 | Çift bağımsız kilit: kısıt katili (C1–C7, 192 ihlal) + zincir katili (fold uyumsuz) | iki pin, ikisi de bağımsız ateşler |
+| C16 | Genesis tick-anahtarlıdır; trace PENCERELERİ genesis'a takılmaz | `air.rs` C7 tick==0 refaktörü, mevcut testler değişmeden yeşil |
 
 ## Varyantlar (yedek iddialar)
 
 - Koltuk sayısı 3→N (maliyet anchor başına lineer ~2,3 µJ/tick başına; pinler 3'te donmuş).
 - Panel turnuvası yerine ağırlıklı lig (çok-digest skor tablosu).
 - ~~BSE-2 zarf varyantı~~ **SEVK EDİLDİ**: fork kartı zarfa girdi (204 B, C11–C13).
-- zk-ona indirgeme: C1–C7 kısıtları (`air.rs`) zincir-dışı kanıtla zarfı 32 B'a bastırır (yol haritası, iddia edilmiyor).
+- ~~zk-ona indirgeme~~ **İLK DİREK DİKİLDİ**: ACT-1 bant = STARK'sız çalışan sürüm (C14–C16); zk bunu 32 B'a bastırır (yol haritası, artık somut).
 
 ## Dürüst-negatifler (icattan düşülmeyenler)
 

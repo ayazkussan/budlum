@@ -635,6 +635,117 @@ pin("envelope2.cheap_replay", b2[136:140] == FORK.to_bytes(4, "little")
 b2_nocard = encode_bse2(FF, ff_seat_a, ff_seat_v, ff_council, 0, "00" * 32, "00" * 32)
 pin("envelope2.nocard_tail", b2_nocard[136:].hex())
 
+
+# ------------------------------------------------------------------- [act]
+# ACT-1 "Arbitration Check Tape": the one-tick fraud-proof, verifiable
+# WITHOUT the connectome. A bisection lands on a disputed tick T; the honest
+# executor answers with rows for T-1 and T (the two-tick window the C1-C7
+# constraint catalogue needs: C6 glues T-1 to T, genesis only if T<=1).
+#
+# Layout (frozen):
+#   "ACT1"        4 B
+#   tick_t       u32 LE 4 B
+#   row_count    u32 LE 4 B
+#   rows: for tick in (T-1, T), for gid in 0..total:
+#         v_before i32 LE | i_ext i32 LE | i_syn i32 LE |
+#         v_after  i32 LE | r_before u32 LE | spike u8     (21 B/row)
+#
+# Two independent kill switches, checked without re-running anything:
+#   (i)  constraint kill: evaluate C1-C7 over the window rows (air mirror)
+#   (ii) fold kill: recompute head(T) = sha256(prev_head | T be8 |
+#        sha256(spike_bytes) | sha256(v_after LE)) and compare to the
+#        published chain head. Forgery fails (i), (ii), or both.
+T = 23
+ff_stim = sentinel_stim(bytes([0xFF] * 32))
+A, spkA, rowsA = run(sizes, off, total, edges, 48, ff_stim, audit_rows=True)
+ff_log = anchor_log_generic(48, ff_stim)
+
+def act_rows_bytes(rows_map, ticks_sel):
+    buf = bytearray()
+    n = 0
+    for t in ticks_sel:
+        for gid in range(total):
+            _t, vb, i_ext, i_syn, va, sp, rb = rows_map[gid][t]
+            buf += vb.to_bytes(4, "little", signed=True)
+            buf += i_ext.to_bytes(4, "little", signed=True)
+            buf += i_syn.to_bytes(4, "little", signed=True)
+            buf += va.to_bytes(4, "little", signed=True)
+            buf += rb.to_bytes(4, "little", signed=False)
+            buf += bytes([sp])
+            n += 1
+    return bytes(buf), n
+
+def act_encode(rows_map, t):
+    sel = (t - 1, t) if t > 0 else (0,)
+    body, n = act_rows_bytes(rows_map, sel)
+    return b"ACT1" + t.to_bytes(4, "little") + n.to_bytes(4, "little") + body
+
+def act_c_violations(rows_map, sel):
+    # mirror of air::count_violations over a window, per neuron
+    bad = 0
+    for gid in range(total):
+        for idx, t in enumerate(sel):
+            _t, vb, i_ext, i_syn, va, sp, rb = rows_map[gid][t]
+            if t == 0:
+                if vb != 0 or rb != 0:
+                    bad += 1
+                continue
+            _pt, pvb, pi_ext, pi_syn, pva, psp, prb = rows_map[gid][t - 1]
+            exp_r = (prb - 1) if prb > 0 else (REFRAC if psp == 1 else 0)
+            if rb != exp_r:
+                bad += 1
+                continue
+            if rb > 0:
+                if va != 0 or sp != 0:
+                    bad += 1
+                continue
+            leaked = vb - (vb >> LEAK_SHIFT)
+            raw_i = max(V_MIN, min(V_MAX, leaked + i_ext + i_syn))
+            exp_sp = 1 if raw_i >= V_TH else 0
+            if sp != exp_sp:
+                bad += 1
+                continue
+            if sp == 1:
+                if va != 0:
+                    bad += 1
+            else:
+                if va != raw_i:
+                    bad += 1
+    return bad
+
+def act_fold(rows_map, sel_last, prev_head):
+    sh = hashlib.sha256(bytes(1 if rows_map[gid][sel_last][5] else 0
+                              for gid in range(total))).digest()
+    vh = hashlib.sha256(b"".join(rows_map[gid][sel_last][4].to_bytes(4, "little", signed=True)
+                                 for gid in range(total))).digest()
+    return hashlib.sha256(prev_head + sel_last.to_bytes(8, "big") + sh + vh).hexdigest()
+
+tape = act_encode(rowsA, T)
+sel = (T - 1, T)
+hon_viol = act_c_violations(rowsA, sel)
+hon_fold = act_fold(rowsA, T, bytes.fromhex(ff_log[T - 1]))
+# forged twin: flip the CxEb+3 spike at T, zero the membrane bytes (lazy liar)
+gid_tam = off[CX_EB] + 3
+rowsF = {g: list(rowsA[g]) for g in rowsA}
+t_, vb, ie, isy, va, sp, rb = rowsF[gid_tam][T]
+rowsF[gid_tam][T] = (t_, vb, ie, isy, va, 1 - sp, rb)
+# lazy liar: the fold's membrane bytes of tick T are all zeros => claim v_after == 0
+for g in range(total):
+    _t2, vb2, ie2, isy2, va2, sp2, rb2 = rowsF[g][T]
+    rowsF[g][T] = (_t2, vb2, ie2, isy2, 0, sp2, rb2)
+forg_viol = act_c_violations(rowsF, sel)
+forg_fold = act_fold(rowsF, T, bytes.fromhex(ff_log[T - 1]))
+tapeF = act_encode(rowsF, T)
+pin("act.tick", T)
+pin("act.rows", 2 * total)
+pin("act.tape_len", len(tape))
+pin("act.sha256", hashlib.sha256(tape).hexdigest())
+pin("act.violations_honest", hon_viol)
+pin("act.fold_honest_ok", hon_fold == ff_log[T])
+pin("act.violations_forged", forg_viol)
+pin("act.fold_forged_still_ok", forg_fold == ff_log[T])
+pin("act.sha256_forged", hashlib.sha256(tapeF).hexdigest())
+
 # ---------------------------------------------- manifest cross-validation
 man = tomllib.loads((Path(__file__).resolve().parents[1] / "goldens.anchor.toml").read_text())
 exp = man.get("expansion", {})

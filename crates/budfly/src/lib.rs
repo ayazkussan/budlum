@@ -43,6 +43,7 @@ pub mod replay;
 pub mod rng;
 pub mod sha256;
 pub mod sim;
+pub mod tape;
 pub mod tournament;
 
 pub use connectome::{generate, Connectome, Region, DEFAULT_SEED, N_REGIONS};
