@@ -162,7 +162,6 @@ mod tests {
     use super::*;
     use crate::connectome::{generate, DEFAULT_SEED};
     use crate::oracle::{sentinel_stimulus, SENTINEL_TICKS};
-    use crate::sha256::hex32;
     use crate::sim::{run, run_log};
 
     #[test]
