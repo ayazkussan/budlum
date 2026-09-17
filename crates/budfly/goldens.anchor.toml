@@ -1,0 +1,100 @@
+# BudFly anchor manifest — machine-checkable list of every frozen anchor.
+#
+# Source of truth: the crate's test-suite (tests/goldens.rs) and the Python
+# mirror (scripts/reference_check.py) recompute every value below from the
+# frozen dynamics. This file is the EXTERNALLY PINNABLE view: a consumer
+# (sentinel, auditor, Lubot gate) that does not want to run the dynamics
+# can pin sha256(goldens.anchor.toml) as the "anchor manifest root".
+#
+# If any digest here changes, the crate's dynamics changed. That is a
+# governance event, never a drive-by refactor. Every entry exists verbatim
+# in tests/goldens.rs — there is exactly one table, twice.
+
+manifest_version = 1
+crate = "budfly"
+crate_version = "0.1.0"
+toolchain = "1.97.1"
+canonical_connectome_scale = "scale_num=1, scale_den=16, DEFAULT_SEED"
+
+# Mirror self-check: sha256(b"budlum-genesis") — used as case 3 input below.
+[genesis]
+digest = "d9cbd5cb19d40295d4f194d458ddc7ebf6295544e30d71e377774f33c1bff209"
+
+# ---------------------------------------------------- sentinel goldens
+# sentinel_verdict(digest): 48 ticks; verdict semantics (Affirm/Reject/
+# Abstain) follow the DNa02 left/right race with the MDN veto, fails closed
+# on ties. digest_kind names how the 32 input bytes were produced.
+[[sentinel_case]]
+digest_kind = "all_zero"
+digest = "0000000000000000000000000000000000000000000000000000000000000000"
+verdict = "Abstain"
+dnavo_l = 0
+dnavo_r = 0
+mdn = 0
+anchor = "50f5f2ab0f7342fb412c7b781ea3b9dee5f45160a8a5a22ace3283b784d18173"
+
+[[sentinel_case]]
+digest_kind = "all_ones_ff"
+digest = "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+verdict = "Affirm"
+dnavo_l = 7
+dnavo_r = 6
+mdn = 1
+anchor = "398e126a88776b4f15f7da9bfb7bd927f47fc32e8a92128a354380ce8d429cc3"
+
+[[sentinel_case]]
+digest_kind = "genesis"
+digest = "d9cbd5cb19d40295d4f194d458ddc7ebf6295544e30d71e377774f33c1bff209"
+verdict = "Affirm"
+dnavo_l = 5
+dnavo_r = 3
+mdn = 6
+anchor = "ac4e8042233658c31ac154f7ee7fd7ee0707959373e057f60743e41b68ae0eb4"
+
+[[sentinel_case]]
+digest_kind = "incrementing_00_to_1f"
+digest = "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f"
+verdict = "Reject"
+dnavo_l = 1
+dnavo_r = 3
+mdn = 0
+anchor = "01b3ff076fa7850317ff1883e18b58f1e17d77dd2efaa12eb24b8db943699cb2"
+
+# -------------------------------------------------------- ring bump
+# Compass-bump scenario: a quarter of the EB ring is stimulated for the
+# first 8 ticks, the run lasts 64 ticks; anchor must hold. The bump must
+# actually fire: EB spike count > 0 is part of the pinned behaviour.
+[ring_bump]
+ticks = 64
+bump_ticks = "0..8"
+bump_width_fraction = "1/4 of CxEb"
+anchor = "aedfd9426fd3d9f0e79afa1a889cb7bfb88e1e7a8cc0c33b3561718ea127aea3"
+eb_spikes_positive = true
+
+# -------------------------------------------------- tamper property
+# One-bit avalanche: flipping byte 20 of the all_ones_ff digest by XOR 0x01
+# MUST change the 48-tick anchor. Verified by reference_check.py (oracle
+# sentinel path) and pinned in oracle.rs unit tests.
+[tamper]
+base_digest = "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+flip_byte = 19
+flip_xor = 1
+property = "anchor(base) != anchor(base ^ flip)"
+
+# Which of the 32 digest bytes the sentinel stimulus actually reads
+# (frozen dynamics; both implementations were audited to agree):
+#   bytes 0..8   little-endian SplitMix64 seed
+#   bytes 8..10  u16 compass sector start
+#   bytes 10..16 IGNORED (unused)
+#   bytes 16..20 lobula tickle bits 0..31 (left population first)
+#   bytes 20..32 IGNORED (unused)
+# FAILS-CLOSED CONSUMER RULE: a digest is only bound to the verdict through
+# the used ranges above. Consumers anchoring evidence-identity to the whole
+# 32 bytes must hash the resolved anchor themselves; BudFly never claims
+# the ignored ranges carry signal. anchor(bytes 20..32 tampered) ==
+# anchor(original) is the documented, pinned property.
+[digest_binding]
+rng_seed = "bytes0_8_le"
+compass_sector = "bytes8_10_u16"
+lobula_bits = "bytes16_20_bits0_31"
+unused = ["bytes10_16", "bytes20_32"]

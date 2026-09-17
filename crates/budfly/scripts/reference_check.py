@@ -349,7 +349,48 @@ def main():
     rep16 = fabric_report(total, edges, 500, chip)
     assert (rep16["cores"], rep16["mesh"], rep16["sram_overflow_cores"]) == (3, (2, 2), 0)
     print(f"[fabric] 1/16 placement {rep16}")
+
+    check_manifest(sizes, off, edges)
     print("REFERENCE CHECK PASS")
+
+
+def check_manifest(sizes, off, edges):
+    """Cross-validate goldens.anchor.toml: every externally pinnable anchor
+    must recompute to the value the manifest pins, and the manifest table
+    must agree with SENTINEL_GOLDENS in this file (one table, twice)."""
+    import hashlib, tomllib
+    from pathlib import Path
+    man = tomllib.loads((Path(__file__).resolve().parents[1] / "goldens.anchor.toml").read_text())
+    gen = hashlib.sha256(b"budlum-genesis").hexdigest()
+    assert man["genesis"]["digest"] == gen, "manifest genesis digest wrong"
+
+    cases = man["sentinel_case"]
+    assert len(cases) == len(SENTINEL_GOLDENS), "manifest case count drifted"
+    for entry in cases:
+        d = bytes.fromhex(entry["digest"])
+        want = (entry["verdict"], entry["dnavo_l"], entry["dnavo_r"],
+                entry["mdn"], entry["anchor"])
+        got = sentinel(sizes, off, edges, d)
+        assert got == want, f"manifest case {entry['digest_kind']} recomputes to {got}"
+    # manifest rows must equal the in-file golden table exactly
+    for (digest, verdict, dl, dr, mdn, want), entry in zip(SENTINEL_GOLDENS, cases):
+        assert bytes.fromhex(entry["digest"]) == (digest if isinstance(digest, bytes) else digest)
+        assert entry["anchor"] == want and entry["verdict"] == verdict, "one table, twice rule"
+    rb = man["ring_bump"]
+    assert rb["anchor"] == RING64_ANCHOR and rb["eb_spikes_positive"], "ring anchor drift"
+    tb = man["tamper"]
+    base = bytes.fromhex(tb["base_digest"])
+    flipped = bytearray(base)
+    flipped[tb["flip_byte"]] ^= tb["flip_xor"]
+    a1 = sentinel(sizes, off, edges, base)[4]
+    a2 = sentinel(sizes, off, edges, bytes(flipped))[4]
+    assert a1 != a2, "one-bit avalanche broken"
+    # documented binding scope: byte 31 is in the unused range 20..32
+    offscope = bytearray(base)
+    offscope[31] ^= 1
+    a3 = sentinel(sizes, off, edges, bytes(offscope))[4]
+    assert a1 == a3, "documented unbound byte must NOT move the anchor"
+    print(f"[manifest] {len(cases)} cases + ring + tamper property all recompute")
 
 if __name__ == "__main__":
     main()

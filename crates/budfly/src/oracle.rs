@@ -126,6 +126,33 @@ mod tests {
         assert_eq!((a.dn_l, a.dn_r, a.mdn), (b.dn_l, b.dn_r, b.mdn));
     }
 
+    /// Pinned by goldens.anchor.toml [tamper] and validated by
+    /// scripts/reference_check.py: one bit in a USED digest byte moves the
+    /// 48-tick anchor (avalanche), while a byte in the documented UNBOUND
+    /// range (20..32) must not. The unbound scope is a published property,
+    /// never silently assumed by consumers.
+    #[test]
+    fn one_bit_avalanche_and_binding_scope() {
+        let c = generate(1, 16, DEFAULT_SEED);
+        let d = [0xffu8; 32];
+        let a = sentinel_verdict(&c, &d);
+        let mut used = d;
+        used[19] ^= 1; // last bound lobula byte
+        let mut offscope = d;
+        offscope[31] ^= 1; // documented unbound range byte
+        assert_ne!(
+            a.anchor,
+            sentinel_verdict(&c, &used).anchor,
+            "bound byte must avalanche"
+        );
+        assert_eq!(
+            a.anchor,
+            sentinel_verdict(&c, &offscope).anchor,
+            "byte 31 is documented as unbound"
+        );
+        assert!(a.stim_neurons > 0, "sentinel stimulus must be non-empty");
+    }
+
     #[test]
     fn abstain_fails_closed_on_ties() {
         // The tie/veto rule is the settlement layer's fail-closed stance in
