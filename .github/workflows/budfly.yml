@@ -97,7 +97,10 @@ jobs:
         run: |
           out=$(cargo test --manifest-path crates/budfly/Cargo.toml 2>&1) || {
             { echo '### cargo test'; echo '```'; echo "${out}"; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
-            echo "${out}" | tail -40 | while IFS= read -r l; do echo "::error::[tests] ${l}"; done
+            # panic lines first: annotation storage is capped, the verdict
+            # must survive the cap before padding lines crowd it out
+            echo "${out}" | grep -E "panicked|assertion|FAILED|failures:|left ==|mismatch|left.*right" | head -25 | while IFS= read -r l; do echo "::error::[tests] ${l}"; done
+            echo "${out}" | tail -12 | while IFS= read -r l; do echo "::error::[tests-tail] ${l}"; done
             exit 1
           }
           echo "${out}" | tail -5
