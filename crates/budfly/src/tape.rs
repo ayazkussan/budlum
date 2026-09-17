@@ -151,7 +151,10 @@ pub fn recompute_fold(total: usize, tape: &ActTape, prev_head: &[u8; 32]) -> [u8
 #[must_use]
 pub fn judge(conn: &Connectome, bytes: &[u8], prev_head: &[u8; 32]) -> Option<(usize, [u8; 32])> {
     let tape = decode_tape(conn.total, bytes)?;
-    Some((constraint_violations(conn.total, &tape), recompute_fold(conn.total, &tape, prev_head)))
+    Some((
+        constraint_violations(conn.total, &tape),
+        recompute_fold(conn.total, &tape, prev_head),
+    ))
 }
 
 #[cfg(test)]
