@@ -217,6 +217,10 @@ mod tests {
         let stim = sentinel_stimulus(&c, &[0xffu8; 32]);
         let audited = run(&c, SENTINEL_TICKS, &stim, true);
         let rows = audited.rows.clone().unwrap_or_default();
+        // non-vacuity probe over the bump-era window (ticks 7..=8), built
+        // before `rows` is moved into the forged world:
+        let probe: Vec<Vec<TraceRow>> =
+            rows.iter().map(|nr| nr[7..=8].to_vec()).collect::<Vec<_>>();
         let honest = windows(rows.clone(), false);
         let forged = windows(rows, true);
         assert_eq!(
@@ -233,9 +237,6 @@ mod tests {
             crate::sha256::sha256(&witness_bytes(&honest)),
             "the liar's witness binds differently"
         );
-        // non-vacuity probe over the bump-era window (ticks 7..=8):
-        let probe: Vec<Vec<TraceRow>> =
-            rows.iter().map(|nr| nr[7..=8].to_vec()).collect::<Vec<_>>();
         assert_eq!(
             sel_counts(&probe),
             (37, 26),
