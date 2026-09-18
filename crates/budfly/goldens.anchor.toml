@@ -298,3 +298,9 @@ unused = ["bytes10_16", "bytes20_32"]
 "zk2.liar_witness_differs" = true
 "zk2.probe_refrac_ones" = 37
 "zk2.probe_above_ones" = 26
+"zk3.window_rows" = 1176
+"zk3.honest_residual_zero" = true
+"zk3.forged_residual_hits" = 192
+"zk3.gate_hits" = "G0=0;G1=0;G2=192;G3=0"
+"zk3.residual_sha256" = "4f437d300ce039c0bf8e815d6f31d52895f04ce78507ad7e25f3e42df185f436"
+"zk3.hits_eq_catalogue" = true

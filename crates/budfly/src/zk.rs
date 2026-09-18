@@ -38,13 +38,13 @@ pub const GATES: usize = 4;
 /// threshold and clamp arithmetize through bit-decomposition notes).
 pub const DEGREE_MAX: usize = 3;
 
-/// One gate's verdict for one row: violation found or clean.
-fn gate_bad(prev: Option<&TraceRow>, row: &TraceRow) -> bool {
-    // EXACT air.rs decision tree: a FAILED genesis check counts and skips;
-    // a genesis row that PASSES falls through to the state gates.
+/// The index of the gate that arrests `row`, if any (0=G0, 1=G1, 2=G2,
+/// 3=G3). Mirrors `air::violates` EXACTLY: a FAILED genesis check skips
+/// the state gates; a genesis row that passes falls through.
+fn gate_index(prev: Option<&TraceRow>, row: &TraceRow) -> Option<usize> {
     if row.tick == 0 {
         if row.v_before != 0 || row.r_before != 0 {
-            return true; // G0 violated
+            return Some(0); // G0 violated
         }
     } else if let Some(p) = prev {
         // G3: refractory chain (off-genesis, when a previous row exists)
@@ -56,29 +56,57 @@ fn gate_bad(prev: Option<&TraceRow>, row: &TraceRow) -> bool {
             0
         };
         if row.r_before != expected {
-            return true;
+            return Some(3);
         }
     }
     if row.r_before > 0 {
         // G1: refractory hold
-        return row.v_after != 0 || row.spike != 0;
+        return (row.v_after != 0 || row.spike != 0).then_some(1);
     }
     // G2: integrate, with the selectors materialized
     let leaked = row.v_before - (row.v_before >> LEAK_SHIFT);
     let raw = (leaked + row.i_ext + row.i_syn).clamp(V_MIN, V_MAX);
     let sel_above = u8::from(raw >= V_TH);
     if row.spike != sel_above {
-        return true;
+        return Some(2);
     }
     if sel_above == 1 {
-        row.v_after != 0
+        (row.v_after != 0).then_some(2)
     } else {
-        row.v_after != raw
+        (row.v_after != raw).then_some(2)
     }
+}
+
+/// One gate's verdict for one row: violation found or clean.
+fn gate_bad(prev: Option<&TraceRow>, row: &TraceRow) -> bool {
+    gate_index(prev, row).is_some()
 }
 
 /// Bytes per witness row: five 4-byte fields plus three selector/spike bytes.
 pub const WITNESS_STRIDE: usize = 23;
+
+/// Gate-residual table: one byte per trace row (`1 << g` iff gate `g`
+/// arrested that row, else 0) plus the per-gate hit histogram. The honest
+/// matrix is all zero BY PIN; the forged matrix's hit count must equal the
+/// catalogue's violation count.
+#[must_use]
+pub fn gate_residuals(rows: &[Vec<TraceRow>]) -> (Vec<u8>, [usize; 4]) {
+    let mut mask = Vec::with_capacity(rows.iter().map(Vec::len).sum::<usize>());
+    let mut hits = [0usize; 4];
+    for neuron_rows in rows {
+        for (i, row) in neuron_rows.iter().enumerate() {
+            let prev = if i == 0 { None } else { neuron_rows.get(i - 1) };
+            match gate_index(prev, row) {
+                Some(g) => {
+                    mask.push(1u8 << g);
+                    hits[g] += 1;
+                }
+                None => mask.push(0),
+            }
+        }
+    }
+    (mask, hits)
+}
 
 /// The arithmetized WITNESS of a trace: per row, the eight columns
 /// `(v_before, i_ext, i_syn, v_after, r_before, spike, sel_refrac,
@@ -241,6 +269,33 @@ mod tests {
             sel_counts(&probe),
             (37, 26),
             "selectors fire when the bump does"
+        );
+    }
+
+    #[test]
+    fn the_residual_matrix_names_the_arresting_gate() {
+        let c = generate(1, 16, DEFAULT_SEED);
+        let stim = sentinel_stimulus(&c, &[0xffu8; 32]);
+        let audited = run(&c, SENTINEL_TICKS, &stim, true);
+        let rows = audited.rows.clone().unwrap_or_default();
+        let honest = windows(rows.clone(), false);
+        let forged = windows(rows, true);
+        let (m0, h0) = gate_residuals(&honest);
+        assert!(m0.iter().all(|b| *b == 0), "the honest residual matrix is all zero");
+        assert_eq!(h0, [0, 0, 0, 0]);
+        let (m1, h1) = gate_residuals(&forged);
+        assert_eq!(
+            h1,
+            [0, 0, 192, 0],
+            "the integration gate G2 arrested every forged row"
+        );
+        // one hit per violated row, and the sum is the catalogue's count:
+        assert_eq!(h1.iter().sum::<usize>(), 192);
+        assert_eq!(h1.iter().sum::<usize>(), count_violations(&forged));
+        assert_eq!(h1.iter().sum::<usize>(), skeleton_violations(&forged));
+        assert_eq!(
+            crate::sha256::hex32(&crate::sha256::sha256(&m1)),
+            "4f437d300ce039c0bf8e815d6f31d52895f04ce78507ad7e25f3e42df185f436"
         );
     }
 }

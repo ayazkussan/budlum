@@ -1605,6 +1605,49 @@ for g in range(total):
 pin("zk2.probe_refrac_ones", pr_r)
 pin("zk2.probe_above_ones", pr_a)
 
+# ------------------------------------------------------------------ [zk3]
+# BudZero bridge, stone 3: the GATE-RESIDUAL matrix. One byte per row:
+# bit g set iff gate g is the FIRST failed gate on that row (the decision
+# tree counts at most one violation per row). The honest matrix is all
+# zero BY PIN; the forged matrix's hit count must equal the catalogue's
+# violation count, and its per-gate histogram names the arresting officer.
+def zk_gate_tree(prev, row):
+    (vb, ie, isy, va, rb, sp, tick) = row
+    if tick == 0:
+        if vb != 0 or rb != 0:
+            return 0  # G0
+    elif prev is not None:
+        (pvb, _pie, _pisy, _pva, prb, psp, _ptick) = prev
+        exp_r = (prb - 1) if prb > 0 else (REFRAC if psp == 1 else 0)
+        if rb != exp_r:
+            return 3  # G3
+    if rb > 0:
+        return 1 if (va != 0 or sp != 0) else -1  # G1
+    raw = max(V_MIN, min(V_MAX, vb - (vb >> LEAK_SHIFT) + ie + isy))
+    if sp != (1 if raw >= V_TH else 0):
+        return 2  # G2
+    return 2 if ((va != 0) if raw >= V_TH else (va != raw)) else -1
+
+def zk_residual_matrix(nrows_all):
+    mask = []
+    hits = [0, 0, 0, 0]
+    for nrs in nrows_all:
+        for i, row in enumerate(nrs):
+            g = zk_gate_tree(nrs[i - 1] if i > 0 else None, row)
+            mask.append(0 if g < 0 else (1 << g))
+            if g >= 0:
+                hits[g] += 1
+    return bytes(mask), hits
+
+hon_mask, hon_hits = zk_residual_matrix(zk_by_neuron)
+for_mask, for_hits = zk_residual_matrix(zk_by_neuron_F)
+pin("zk3.window_rows", 2 * total)
+pin("zk3.honest_residual_zero", all(b == 0 for b in hon_mask))
+pin("zk3.forged_residual_hits", sum(for_hits))
+pin("zk3.gate_hits", ";".join(f"G{g}={for_hits[g]}" for g in range(4)))
+pin("zk3.residual_sha256", hashlib.sha256(for_mask).hexdigest())
+pin("zk3.hits_eq_catalogue", sum(for_hits) == 192)
+
 # ---------------------------------------------- manifest cross-validation
 man = tomllib.loads((Path(__file__).resolve().parents[1] / "goldens.anchor.toml").read_text())
 exp = man.get("expansion", {})
