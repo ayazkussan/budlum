@@ -431,9 +431,18 @@ mod tests {
         let c = generate(1, 16, crate::connectome::DEFAULT_SEED);
         let rep = prosecute_all_ticks(&c);
         assert_eq!(rep.ticks, 48);
-        assert_eq!(rep.convicted, 48, "every tick of the fraud calendar convicts");
-        assert!(rep.divergence_exact, "divergence is located at the exact tick, every time");
-        assert_eq!(rep.viol_min, 1, "even the genesis tick's flip is a catalogue violation");
+        assert_eq!(
+            rep.convicted, 48,
+            "every tick of the fraud calendar convicts"
+        );
+        assert!(
+            rep.divergence_exact,
+            "divergence is located at the exact tick, every time"
+        );
+        assert_eq!(
+            rep.viol_min, 1,
+            "even the genesis tick's flip is a catalogue violation"
+        );
         assert_eq!(rep.viol_max, 241);
         assert_eq!(rep.viol_sum, 8989);
         assert_eq!(
@@ -444,15 +453,21 @@ mod tests {
 
     #[test]
     fn the_cheap_gates_blind_spot_is_exactly_as_documented() {
-        use crate::envelope::{encode_council_cards, ReplayCard};
         use crate::connectome::DEFAULT_SEED;
+        use crate::envelope::{encode_council_cards, ReplayCard};
         use crate::replay::{mdn_early_stim, replay_cert};
 
         let c = generate(1, 16, DEFAULT_SEED);
         let digest = [0xffu8; 32];
         let rep = council(&c, &digest);
         let base = sentinel_stimulus(&c, &digest);
-        let cert1 = replay_cert(&c, &base, &mdn_early_stim(&c, &base, 10), 10, SENTINEL_TICKS);
+        let cert1 = replay_cert(
+            &c,
+            &base,
+            &mdn_early_stim(&c, &base, 10),
+            10,
+            SENTINEL_TICKS,
+        );
         let mut cf = base.clone();
         for (g, w) in cf.windows() {
             if w == (0, 8) {

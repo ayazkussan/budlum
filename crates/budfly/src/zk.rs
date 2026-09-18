@@ -205,7 +205,10 @@ mod tests {
         let mut liar0 = rows.clone();
         tamper_at(&mut liar0, 0, c.offset(Region::CxEb) + 3);
         assert_eq!(skeleton_violations(&liar0), count_violations(&liar0));
-        assert!(count_violations(&liar0) > 0, "genesis fraud is not invisible");
+        assert!(
+            count_violations(&liar0) > 0,
+            "genesis fraud is not invisible"
+        );
     }
 
     #[test]
@@ -220,17 +223,23 @@ mod tests {
             crate::sha256::hex32(&crate::sha256::sha256(&witness_bytes(&honest))),
             "bb23c67e50eb155e744b5a1df4a2009a54c210436d41d6af29d3ab6f91b37fc2"
         );
-        assert_eq!(sel_counts(&honest), (0, 0), "the quiet tail has no selectors on");
+        assert_eq!(
+            sel_counts(&honest),
+            (0, 0),
+            "the quiet tail has no selectors on"
+        );
         assert_ne!(
             crate::sha256::sha256(&witness_bytes(&forged)),
             crate::sha256::sha256(&witness_bytes(&honest)),
             "the liar's witness binds differently"
         );
         // non-vacuity probe over the bump-era window (ticks 7..=8):
-        let probe: Vec<Vec<TraceRow>> = rows
-            .iter()
-            .map(|nr| nr[7..=8].to_vec())
-            .collect::<Vec<_>>();
-        assert_eq!(sel_counts(&probe), (37, 26), "selectors fire when the bump does");
+        let probe: Vec<Vec<TraceRow>> =
+            rows.iter().map(|nr| nr[7..=8].to_vec()).collect::<Vec<_>>();
+        assert_eq!(
+            sel_counts(&probe),
+            (37, 26),
+            "selectors fire when the bump does"
+        );
     }
 }
