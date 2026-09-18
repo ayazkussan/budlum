@@ -301,7 +301,7 @@ pub fn prosecute_all_ticks(conn: &Connectome) -> ProsecutionReport {
     }
     let csv = viols
         .iter()
-        .map(|v| v.to_string())
+        .map(ToString::to_string)
         .collect::<Vec<_>>()
         .join(",");
     ProsecutionReport {
