@@ -32,14 +32,16 @@
 //! Bit-exact mirror of `scripts/expansion_check.py` [hardening].
 
 use crate::attest;
-use crate::connectome::{generate, Connectome};
+use crate::connectome::{generate, Connectome, Region};
+use crate::dispute::{dishonest_log_fixture, find_divergence};
 use crate::divan::council;
+use crate::envelope::{cheap_replay_consistent3, decode3};
 use crate::erasure;
 use crate::league;
-use crate::oracle::sentinel_stimulus;
+use crate::oracle::{sentinel_stimulus, SENTINEL_TICKS};
 use crate::sha256::sha256;
-use crate::sim::run_log;
-use crate::tape::{decode_tape, judge};
+use crate::sim::{run, run_log};
+use crate::tape::{decode_tape, encode_tape, judge};
 use crate::tournament::{panel_digest, PANEL_SIZE};
 
 /// The ladder self-consistency check at 1/48th of its naive cost: the L2
@@ -244,6 +246,112 @@ pub fn league_adversary_sweep() -> LeagueHardReport {
     }
 }
 
+/// Full-stack conviction sweep over every tick of the fixture: the lazy
+/// liar tampers exactly at tick `k`, the verifier must (i) locate the
+/// divergence EXACTLY at `k` and (ii) convict the liar's ACT-1 judgement of
+/// that window (violations > 0 or fold mismatch). Prosecution = divergence
+/// localisation + catalogue + fold, all three at once.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ProsecutionReport {
+    pub ticks: usize,
+    pub convicted: usize,
+    pub divergence_exact: bool,
+    pub viol_min: usize,
+    pub viol_max: usize,
+    pub viol_sum: usize,
+    pub viol_hash: [u8; 32],
+}
+
+/// Sweep every tick of the frozen fixture through the full prosecution path.
+#[must_use]
+pub fn prosecute_all_ticks(conn: &Connectome) -> ProsecutionReport {
+    let m = &[0xffu8; 32];
+    let stim = sentinel_stimulus(conn, m);
+    let honest_log = run_log(conn, SENTINEL_TICKS, &stim);
+    let audited = run(conn, SENTINEL_TICKS, &stim, true);
+    let base_rows = audited.rows.clone().unwrap_or_default();
+    let ticks = SENTINEL_TICKS as usize;
+    let tam = conn.offset(Region::CxEb) + 3;
+    let mut viols = Vec::with_capacity(ticks);
+    let mut convicted = 0usize;
+    let mut divergence_exact = true;
+    for k in 0..ticks {
+        let liar_log = dishonest_log_fixture(conn, SENTINEL_TICKS, &stim, k as u32);
+        let div = find_divergence(&honest_log, &liar_log);
+        if div != Some(k) {
+            divergence_exact = false;
+        }
+        let mut rows = base_rows.clone();
+        for (g, nr) in rows.iter_mut().enumerate() {
+            nr[k].v_after = 0;
+            if g == tam {
+                nr[k].spike = 1 - nr[k].spike;
+            }
+        }
+        let tape = encode_tape(conn.total, k as u32, &rows);
+        let prev = if k == 0 { [0u8; 32] } else { honest_log[k - 1] };
+        let (viol, fold_matches) = match judge(conn, &tape, &prev) {
+            Some((violations, fold)) => (violations, fold == honest_log[k]),
+            None => (usize::MAX, false),
+        };
+        viols.push(viol);
+        if div == Some(k) && (viol > 0 || !fold_matches) {
+            convicted += 1;
+        }
+    }
+    let csv = viols
+        .iter()
+        .map(|v| v.to_string())
+        .collect::<Vec<_>>()
+        .join(",");
+    ProsecutionReport {
+        ticks,
+        convicted,
+        divergence_exact,
+        viol_min: *viols.iter().min().unwrap_or(&0),
+        viol_max: *viols.iter().max().unwrap_or(&0),
+        viol_sum: viols.iter().sum(),
+        viol_hash: sha256(csv.as_bytes()),
+    }
+}
+
+/// The cheap gate's trust boundary, quantified: flip every byte of a frozen
+/// BSE-3 envelope and count which mutants the free checks (strict decode +
+/// council rule + per-card base compare) accept. Whatever survives is
+/// cheap-blind BY DESIGN — anchors, the fact digest, and branch finals are
+/// commitments only the expensive dispute path re-verifies.
+#[derive(Clone, Debug)]
+pub struct CheapSweepReport {
+    pub mutations: usize,
+    pub rejected: usize,
+    pub accepted_offsets: Vec<u32>,
+    pub accepted_offsets_sha256: [u8; 32],
+}
+
+/// Byte-flip sweep of a BSE-3 envelope through the cheap gates.
+#[must_use]
+pub fn envelope3_cheap_sweep(bytes: &[u8], published: &[[u8; 32]]) -> CheapSweepReport {
+    let mut accepted_offsets = Vec::new();
+    for (o, &b) in bytes.iter().enumerate() {
+        let mut mb = bytes.to_vec();
+        mb[o] = b ^ 1;
+        let accepts = decode3(&mb).is_some_and(|e| cheap_replay_consistent3(&e, published));
+        if accepts {
+            accepted_offsets.push(o as u32);
+        }
+    }
+    let mut buf = Vec::with_capacity(accepted_offsets.len() * 4);
+    for o in &accepted_offsets {
+        buf.extend_from_slice(&o.to_le_bytes());
+    }
+    CheapSweepReport {
+        mutations: bytes.len(),
+        rejected: bytes.len() - accepted_offsets.len(),
+        accepted_offsets,
+        accepted_offsets_sha256: sha256(&buf),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -316,5 +424,52 @@ mod tests {
         assert!(rep.table_total_order);
         assert_eq!(rep.total_councils, 32);
         assert_eq!(rep.abstain_sum, 20);
+    }
+
+    #[test]
+    fn every_single_tick_fraud_is_convicted() {
+        let c = generate(1, 16, crate::connectome::DEFAULT_SEED);
+        let rep = prosecute_all_ticks(&c);
+        assert_eq!(rep.ticks, 48);
+        assert_eq!(rep.convicted, 48, "every tick of the fraud calendar convicts");
+        assert!(rep.divergence_exact, "divergence is located at the exact tick, every time");
+        assert_eq!(rep.viol_min, 1, "even the genesis tick's flip is a catalogue violation");
+        assert_eq!(rep.viol_max, 241);
+        assert_eq!(rep.viol_sum, 8989);
+        assert_eq!(
+            crate::sha256::hex32(&rep.viol_hash),
+            "229cc4eb178dd6c88ae88255d8ae24d574cf64ef546ecf3bbd43e471d43b5e67"
+        );
+    }
+
+    #[test]
+    fn the_cheap_gates_blind_spot_is_exactly_as_documented() {
+        use crate::envelope::{encode_council_cards, ReplayCard};
+        use crate::connectome::DEFAULT_SEED;
+        use crate::replay::{mdn_early_stim, replay_cert};
+
+        let c = generate(1, 16, DEFAULT_SEED);
+        let digest = [0xffu8; 32];
+        let rep = council(&c, &digest);
+        let base = sentinel_stimulus(&c, &digest);
+        let cert1 = replay_cert(&c, &base, &mdn_early_stim(&c, &base, 10), 10, SENTINEL_TICKS);
+        let mut cf = base.clone();
+        for (g, w) in cf.windows() {
+            if w == (0, 8) {
+                cf.set(g, 0, 4);
+            }
+        }
+        let cert2 = replay_cert(&c, &base, &cf, 4, SENTINEL_TICKS);
+        let cards = [ReplayCard::from(&cert1), ReplayCard::from(&cert2)];
+        let env = encode_council_cards(&digest, &rep, &cards);
+        let published = run_log(&c, SENTINEL_TICKS, &base);
+        let rep = envelope3_cheap_sweep(&env, &published);
+        assert_eq!(rep.mutations, 273);
+        assert_eq!(rep.rejected, 79);
+        assert_eq!(rep.accepted_offsets.len(), 194);
+        assert_eq!(
+            crate::sha256::hex32(&rep.accepted_offsets_sha256),
+            "77d2a278f1f6ac5879aa96eadcc810cced859aef992c01176ad66264824e8a49"
+        );
     }
 }

@@ -344,7 +344,7 @@ def anchor_log_run(ticks, stim, tamper=None):
             for q, w in adj[p]:
                 nxt[q] = max(-FAN_IN_MAX, min(FAN_IN_MAX, nxt[q] + w))
         pend = nxt
-        if tamper and t == tamper:
+        if tamper is not None and t == tamper:
             gid = off[CX_EB] + 3
             sbytes[gid] = 1 - sbytes[gid]
             vh = hashlib.sha256(b"\x00" * (total * 4)).digest()
@@ -906,11 +906,13 @@ def air_window_violations(nrows):
     rows [(vb,ie,isy,va,rb,sp,tick), ...] in tape order."""
     bad = 0
     for i, (vb, ie, isy, va, rb, sp, tick) in enumerate(nrows):
+        # EXACT air.rs tree: a FAILED genesis check counts and skips; an
+        # OK genesis row FALLS THROUGH to the state gates (no continue).
         if tick == 0:
             if vb != 0 or rb != 0:
                 bad += 1
-            continue
-        if i > 0:
+                continue
+        elif i > 0:
             pp = nrows[i - 1]
             exp_r = (pp[4] - 1) if pp[4] > 0 else (REFRAC if pp[5] == 1 else 0)
             if rb != exp_r:
@@ -1363,11 +1365,12 @@ def zk_skel_violations(nrows_all):
     bad = 0
     for nrs in nrows_all:
         for i, (vb, ie, isy, va, rb, sp, tick) in enumerate(nrs):
+            # EXACT air.rs tree (genesis-OK rows fall through to G1/G2):
             if tick == 0:  # G0
                 if vb != 0 or rb != 0:
                     bad += 1
-                continue
-            if i > 0:  # G3
+                    continue
+            elif i > 0:  # G3
                 pp = nrs[i - 1]
                 exp_r = (pp[4] - 1) if pp[4] > 0 else (REFRAC if pp[5] == 1 else 0)
                 if rb != exp_r:
@@ -1445,6 +1448,162 @@ pin("league2.seeds", ",".join(hex(s) for s in LEAGUE2_SEEDS))
 pin("league2.seasons", 3)
 pin("league2.champions", ",".join(hex(league2_out[S][0][0]) for S in (1, 2, 3)))
 pin("league2.archive_head_final", arch_head)
+
+# ------------------------------------------------------------ [prosecution]
+# FULL-STACK CONVICTION SWEEP: for EVERY tick k of the 48, the lazy liar
+# tampers exactly there (CxEb+3 spike flip + zeroed v_after). The validator
+# must (i) locate divergence EXACTLY at k and (ii) convict with the ACT-1
+# judgement of that window (violations > 0 or fold mismatch). Any miss at
+# any tick would be a hole in the whole dispute story.
+pros_convicted = 0
+pros_div_exact = True
+pros_viols = []
+for k in range(48):
+    liar = anchor_log_run(48, ff_stim, tamper=k)
+    div = next((t for t in range(48) if ff_log[t] != liar[t]), None)
+    if div != k:
+        pros_div_exact = False
+    rowsK = {g: list(rowsA[g]) for g in rowsA}
+    _t, vb, ie, isy, va, sp, rb = rowsK[gid_tam][k]
+    rowsK[gid_tam][k] = (_t, vb, ie, isy, va, 1 - sp, rb)
+    for g in range(total):
+        _t2, v2, i2, s2, a2, p2, r2 = rowsK[g][k]
+        rowsK[g][k] = (_t2, v2, i2, s2, 0, p2, r2)
+    sel_k = (k - 1, k) if k > 0 else (0,)
+    win_n = [[tuple(rowsK[g][t][j] for j in (1, 2, 3, 4, 6, 5)) + (t,)
+              for t in sel_k] for g in range(total)]
+    viol_k = sum(air_window_violations(nrs) for nrs in win_n)
+    prev_k = (b"\x00" * 32) if k == 0 else bytes.fromhex(ff_log[k - 1])
+    fold_ok = act_fold(rowsK, k, prev_k) == ff_log[k]
+    if div == k and (viol_k > 0 or not fold_ok):
+        pros_convicted += 1
+    pros_viols.append(viol_k)
+pin("pros.ticks", 48)
+pin("pros.convicted", pros_convicted)
+pin("pros.divergence_exact", pros_div_exact)
+pin("pros.viol_min", min(pros_viols))
+pin("pros.viol_max", max(pros_viols))
+pin("pros.viol_sum", sum(pros_viols))
+pin("pros.viol_hash",
+    hashlib.sha256(",".join(map(str, pros_viols)).encode()).hexdigest())
+
+# ------------------------------------------------------------- [bse3cheap]
+# THE CHEAP GATE'S TRUST BOUNDARY, QUANTIFIED: flip every byte of the frozen
+# BSE-3 envelope and ask the FREE checks (strict decode + council rule +
+# per-card base compare) whether the mutant is accepted. Whatever survives
+# is cheap-blind BY DESIGN: seat anchors, the fact digest, and branch finals
+# are commitments only the expensive path (re-execution under dispute)
+# re-verifies. The pin maps that boundary byte-exactly.
+def py_decode3_strict(b):
+    if len(b) < 137 or b[:4] != b"BSE3":
+        return None
+    n = b[136]
+    if len(b) != 137 + n * 68:
+        return None
+    for c in range(n):
+        s = 137 + c * 68
+        fk = int.from_bytes(b[s:s + 4], "little")
+        if fk == 0 or b[s + 4:s + 36] == bytes(32) or b[s + 36:s + 68] == bytes(32):
+            return None
+    return n
+
+def py_cheap_accept(b):
+    n = py_decode3_strict(b)
+    if n is None:
+        return False
+    vdec = [x if x in (1, 2) else 0 for x in (b[132], b[133], b[134])]
+    unan = vdec[0] == vdec[1] == vdec[2]
+    council_dec = b[135] if b[135] in (1, 2) else 0
+    if (vdec[0] if unan else 0) != council_dec:
+        return False
+    for c in range(n):
+        s = 137 + c * 68
+        fk = int.from_bytes(b[s:s + 4], "little")
+        if not (0 < fk <= 48) or b[s + 4:s + 36].hex() != base_log[fk - 1]:
+            return False
+    return True
+
+cheap_accepted = []
+for o in range(len(b3)):
+    mb = bytearray(b3)
+    mb[o] ^= 1
+    if py_cheap_accept(bytes(mb)):
+        cheap_accepted.append(o)
+def cheap_class(o):
+    if 4 <= o < 36: return "digest"
+    if 36 <= o < 132: return "anchors"
+    if 132 <= o < 135: return "verdicts"
+    if o == 135: return "council"
+    if o == 136: return "count"
+    if o >= 137:
+        c, off = (o - 137) // 68, (o - 137) % 68
+        if off < 4: return f"card{c}.fork"
+        if off < 36: return f"card{c}.base_head"
+        return f"card{c}.branch_final"
+    return "magic"
+from collections import Counter as _C2
+cc = sorted(_C2(cheap_class(o) for o in cheap_accepted).items())
+pin("bse3cheap.mutations", len(b3))
+pin("bse3cheap.rejected", len(b3) - len(cheap_accepted))
+pin("bse3cheap.accepted", len(cheap_accepted))
+pin("bse3cheap.accepted_offsets_sha256",
+    hashlib.sha256(b"".join(o.to_bytes(4, "little") for o in cheap_accepted)).hexdigest())
+pin("bse3cheap.accepted_classes", ";".join(f"{k}={v}" for k, v in cc))
+
+# ------------------------------------------------------------------ [zk2]
+# BudZero bridge, stone 2: the arithmetized WITNESS of the frozen fixture.
+# Columns materialized per row (8): vb, ie, isy, va, rb, sp, sel_refrac,
+# sel_above (frozen rule: sel_above = 1 iff rb == 0 and clamp(leak + ie +
+# isy) >= V_TH). The witness hash is what a circuit's test vector binds to.
+def zk_witness_bytes(nrows_all):
+    buf = bytearray()
+    for nrs in nrows_all:
+        for (vb, ie, isy, va, rb, sp, _tick) in nrs:
+            leaked = vb - (vb >> LEAK_SHIFT)
+            raw = max(V_MIN, min(V_MAX, leaked + ie + isy))
+            sel_r = 1 if rb > 0 else 0
+            sel_a = 1 if (rb == 0 and raw >= V_TH) else 0
+            buf += vb.to_bytes(4, "little", signed=True)
+            buf += ie.to_bytes(4, "little", signed=True)
+            buf += isy.to_bytes(4, "little", signed=True)
+            buf += va.to_bytes(4, "little", signed=True)
+            buf += rb.to_bytes(4, "little")
+            buf += bytes([sp, sel_r, sel_a])
+    return bytes(buf)
+
+hon_witness = zk_witness_bytes(zk_by_neuron)
+lia_witness = zk_witness_bytes(zk_by_neuron_F)
+w_sel_ones = a_sel_ones = 0
+for nrs in zk_by_neuron:
+    for (vb, ie, isy, va, rb, sp, _t) in nrs:
+        if rb > 0:
+            w_sel_ones += 1
+        else:
+            leaked = vb - (vb >> LEAK_SHIFT)
+            if max(V_MIN, min(V_MAX, leaked + ie + isy)) >= V_TH:
+                a_sel_ones += 1
+pin("zk2.witness_rows", 2 * total)
+pin("zk2.witness_sha256", hashlib.sha256(hon_witness).hexdigest())
+pin("zk2.sel_refrac_ones", w_sel_ones)
+pin("zk2.sel_above_ones", a_sel_ones)
+pin("zk2.gate_g3_rows", total)
+pin("zk2.liar_witness_differs",
+    hashlib.sha256(lia_witness).digest() != hashlib.sha256(hon_witness).digest())
+# NON-VACUITY PROBE: the fixture window (22,23) is a quiet tail, so both
+# selector columns are all-zero there by pin. Prove the columns are not
+# degenerate by re-measuring them over the bump-era window (7,8), where
+# the compass stimulus is active:
+pr_r = pr_a = 0
+for g in range(total):
+    for t in (7, 8):
+        _t, vb, ie, isy, va, sp, rb = rowsA[g][t]
+        if rb > 0:
+            pr_r += 1
+        else:
+            if max(V_MIN, min(V_MAX, vb - (vb >> LEAK_SHIFT) + ie + isy)) >= V_TH:
+                pr_a += 1
+pin("zk2.probe_refrac_ones", pr_r)
+pin("zk2.probe_above_ones", pr_a)
 
 # ---------------------------------------------- manifest cross-validation
 man = tomllib.loads((Path(__file__).resolve().parents[1] / "goldens.anchor.toml").read_text())
