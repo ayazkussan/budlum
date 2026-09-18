@@ -281,7 +281,10 @@ mod tests {
         let honest = windows(rows.clone(), false);
         let forged = windows(rows, true);
         let (m0, h0) = gate_residuals(&honest);
-        assert!(m0.iter().all(|b| *b == 0), "the honest residual matrix is all zero");
+        assert!(
+            m0.iter().all(|b| *b == 0),
+            "the honest residual matrix is all zero"
+        );
         assert_eq!(h0, [0, 0, 0, 0]);
         let (m1, h1) = gate_residuals(&forged);
         assert_eq!(
