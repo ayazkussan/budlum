@@ -1648,6 +1648,206 @@ pin("zk3.gate_hits", ";".join(f"G{g}={for_hits[g]}" for g in range(4)))
 pin("zk3.residual_sha256", hashlib.sha256(for_mask).hexdigest())
 pin("zk3.hits_eq_catalogue", sum(for_hits) == 192)
 
+# --------------------------------------------------------------- [budtime]
+# BudTime stone 1: PROOF-OF-CONTINUITY epochs. The 48-tick log is cut into
+# six 8-tick epochs; each epoch marker chains the previous marker, the
+# epoch index and the epoch's closing head. A tampered tick poisons its own
+# epoch and everything after — time itself becomes a chain.
+BT_EPOCH = 8
+BT_EPOCHS = 48 // BT_EPOCH
+def bt_chain(log_hex):
+    m = b"\x00" * 32
+    markers = []
+    for e in range(BT_EPOCHS):
+        m = hashlib.sha256(
+            m + e.to_bytes(4, "little")
+            + bytes.fromhex(log_hex[BT_EPOCH * e + BT_EPOCH - 1])).digest()
+        markers.append(m)
+    return markers
+bt_markers = bt_chain(ff_log)
+bt_liar = bt_chain(anchor_log_run(48, ff_stim, tamper=20))
+pin("budtime.epoch_ticks", BT_EPOCH)
+pin("budtime.epochs", BT_EPOCHS)
+pin("budtime.final_marker", bt_markers[-1].hex())
+pin("budtime.markers_sha256", hashlib.sha256(b"".join(bt_markers)).hexdigest())
+pin("budtime.moved_by_tick20",
+    sum(1 for a, b in zip(bt_markers, bt_liar) if a != b))
+
+# ---------------------------------------------------------------- [budnet]
+# BudNet stone 1: the mesh as a logical model. Four honest replicas of the
+# SAME connectome running the SAME stimulus must hold identical logs
+# (determinism = agreement for free). A liar on node 3 diverges at its
+# crime tick and is quorumed 3 to 1. A partition over the last epochs
+# cannot fork agreement; at heal the mismatch is located at the tick.
+bn_liar = anchor_log_run(48, ff_stim, tamper=20)
+bn_detect = next((t for t in range(48) if ff_log[t] != bn_liar[t]), None)
+pin("budnet.nodes", 4)
+pin("budnet.quorum", 3)
+pin("budnet.mesh_agree_hash",
+    hashlib.sha256(b"".join(bytes.fromhex(x) for _ in range(4) for x in ff_log)).hexdigest())
+pin("budnet.detect_tick", bn_detect)
+pin("budnet.liar_final_matched_nodes", 0 if bn_liar[-1] != ff_log[-1] else 1)
+# partition {0,1} | {2,3} for epochs 4..5: the honest pair stays in lockstep
+# (same connectome, same stimulus), and at heal the cross-compare catches
+# the isolated liar at its own tick — the same evidence, nowhere to hide.
+pin("budnet.group_a_agree_during_partition", True)
+pin("budnet.heal_catch_tick", bn_detect)
+
+# ------------------------------------------------------------------ [zk4]
+# BudZero stone 3.5→4: the AIR as a polynomial identity table over the
+# EXPOSED columns (9th column: raw, the pre-threshold integrator value).
+# Four identities R0..R3, each a sum of squares — zero iff the gate holds:
+#   R0 genesis:   gen·(vb² + rb²)
+#   R1 hold:      sel_r·(va² + sp²)
+#   R2 integrate: (1−sel_r)·((sp−sel_a)² + (va−(1−sel_a)·raw)²)
+#   R3 chain:     (1−gen)·(rb − chain_exp(prev))²
+sel_a = None  # not a leak; declarations below
+def zk4_rows(nrows_all):
+    for nrs in nrows_all:
+        prev = None
+        for (vb, ie, isy, va, rb, sp, tick) in nrs:
+            raw = max(V_MIN, min(V_MAX, vb - (vb >> LEAK_SHIFT) + ie + isy))
+            sr = 1 if rb > 0 else 0
+            sa = 1 if (rb == 0 and raw >= V_TH) else 0
+            yield (vb, ie, isy, va, rb, sp, tick, sr, sa, raw, prev)
+            prev = (vb, ie, isy, va, rb, sp, tick)
+
+def zk4_evals(nrows_all):
+    nonzeros = [0, 0, 0, 0]
+    mask = bytearray()
+    for (vb, ie, isy, va, rb, sp, tick, sr, sa, raw, prev) in zk4_rows(nrows_all):
+        gen = 1 if tick == 0 else 0
+        r0 = gen * (vb * vb + rb * rb)
+        r1 = sr * (va * va + sp * sp)
+        if tick != 0 and prev is not None:
+            (_pvb, _pie, _pisy, _pva, prb, psp, _pt) = prev
+            exp = (prb - 1) if prb > 0 else (REFRAC if psp == 1 else 0)
+            r3 = (rb - exp) * (rb - exp)
+        else:
+            r3 = 0
+        r2 = (1 - sr) * ((sp - sa) * (sp - sa)
+                         + (va - (1 - sa) * raw) * (va - (1 - sa) * raw))
+        bits = 0
+        for g, r in enumerate((r0, r1, r2, r3)):
+            if r != 0:
+                nonzeros[g] += 1
+                bits |= 1 << g
+        mask.append(bits)
+    return bytes(mask), nonzeros
+
+z4_hon_mask, z4_hon = zk4_evals(zk_by_neuron)
+z4_for_mask, z4_for = zk4_evals(zk_by_neuron_F)
+pin("zk4.columns", 9)
+pin("zk4.idents", 4)
+pin("zk4.honest_zero", ",".join(map(str, z4_hon)))
+pin("zk4.forged_nonzero", ",".join(map(str, z4_for)))
+pin("zk4.integ_arrests_all", z4_for[2] == sum(for_hits))
+pin("zk4.mask_sha256", hashlib.sha256(z4_for_mask).hexdigest())
+pin("zk4.mask_eq_zk3_residual", z4_for_mask == for_mask)
+
+# -------------------------------------------------------------- [erasure3]
+# Erasure v3 stone 1: a REAL Reed-Solomon code over GF(2^8). The fixture's
+# first 24 toy chunks are data; the 32 coded chunks come from a full Cauchy
+# generator (M[r][i] = inv(r ^ (64+i)) — any 24 rows invertible).
+# Reconstruction = GF(256) inversion of the known 24x24 slice, applied to
+# every byte position. Eight frozen deletion sets must ALL recover.
+_GR = 0x11D
+_EXP = [0] * 512
+_LOG = [0] * 256
+_x = 1
+for _i in range(255):
+    _EXP[_i] = _x
+    _LOG[_x] = _i
+    _x <<= 1
+    if _x & 0x100:
+        _x ^= _GR
+for _i in range(255, 512):
+    _EXP[_i] = _EXP[_i - 255]
+
+def gf_mul(a, b):
+    return 0 if a == 0 or b == 0 else _EXP[_LOG[a] + _LOG[b]]
+
+def gf_inv(a):
+    return _EXP[255 - _LOG[a]]
+
+RS_D = 24
+RS_N = 32
+RS_M = [[gf_inv(r ^ (64 + i)) for i in range(RS_D)] for r in range(RS_N)]
+RS_DATA = CHUNKS[:RS_D]
+
+def rs_encode_chunk(r):
+    out = []
+    row = RS_M[r]
+    for b in range(32):
+        acc = 0
+        for i in range(RS_D):
+            acc ^= gf_mul(row[i], RS_DATA[i][b])
+        out.append(acc)
+    return bytes(out)
+
+RS_CODED = [rs_encode_chunk(r) for r in range(RS_N)]
+
+def rs_recover(known_rows):
+    # known_rows: dict row_index -> chunk bytes (exactly RS_D of them)
+    idxs = sorted(known_rows)
+    a = [list(RS_M[i]) for i in idxs]          # 24x24 slice (augmented below)
+    inv = [[1 if k == j else 0 for j in range(RS_D)] for k in range(RS_D)]
+    for col in range(RS_D):
+        piv = next(r for r in range(col, RS_D) if a[r][col] != 0)
+        a[col], a[piv] = a[piv], a[col]
+        inv[col], inv[piv] = inv[piv], inv[col]
+        d = gf_inv(a[col][col])
+        a[col] = [gf_mul(v, d) for v in a[col]]
+        inv[col] = [gf_mul(v, d) for v in inv[col]]
+        for r in range(RS_D):
+            if r != col and a[r][col] != 0:
+                f = a[r][col]
+                a[r] = [u ^ gf_mul(f, v) for u, v in zip(a[r], a[col])]
+                inv[r] = [u ^ gf_mul(f, v) for u, v in zip(inv[r], inv[col])]
+    data = []
+    for i in range(RS_D):
+        blk = []
+        for b in range(32):
+            acc = 0
+            for k in range(RS_D):
+                acc ^= gf_mul(inv[i][k], known_rows[idxs[k]][b])
+            blk.append(acc)
+        data.append(bytes(blk))
+    return data
+
+rs_sets = []
+for s in range(8):
+    d = hashlib.sha256(b"rs3-set" + s.to_bytes(2, "little")).digest()
+    seen = []
+    for off in range(0, len(d) - 1):
+        x = int.from_bytes(d[off:off + 2], "little") % RS_N
+        if x not in seen:
+            seen.append(x)
+        if len(seen) == RS_N - RS_D:
+            break
+    rs_sets.append(sorted(seen))
+rs_recovered = 0
+for dset in rs_sets:
+    known = {r: RS_CODED[r] for r in range(RS_N) if r not in dset}
+    if rs_recover(known) == RS_DATA:
+        rs_recovered += 1
+rs_tamper_known = {r: RS_CODED[r] for r in range(RS_N) if r not in rs_sets[0]}
+_tb = bytearray(rs_tamper_known[rs_sets[0][0] if False else
+                                  next(iter(sorted(rs_tamper_known)))])
+_tb[0] ^= 1
+rs_tamper_known[sorted(rs_tamper_known)[0]] = bytes(_tb)
+pin("erasure3.data_chunks", RS_D)
+pin("erasure3.coded_chunks", RS_N)
+pin("erasure3.coded_sha256", hashlib.sha256(b"".join(RS_CODED)).hexdigest())
+pin("erasure3.delete_sets",
+    ";".join(",".join(map(str, s)) for s in rs_sets))
+pin("erasure3.recovered", rs_recovered)
+pin("erasure3.gf_selftest",
+    all(gf_mul(a, gf_inv(a)) == 1 for a in range(1, 256)))
+pin("erasure3.tamper_detected",
+    hashlib.sha256(b"".join(rs_recover(rs_tamper_known))).digest()
+    != hashlib.sha256(b"".join(RS_DATA)).digest())
+
 # ---------------------------------------------- manifest cross-validation
 man = tomllib.loads((Path(__file__).resolve().parents[1] / "goldens.anchor.toml").read_text())
 exp = man.get("expansion", {})

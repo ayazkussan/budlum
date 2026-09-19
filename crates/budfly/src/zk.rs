@@ -85,6 +85,69 @@ fn gate_bad(prev: Option<&TraceRow>, row: &TraceRow) -> bool {
 /// Bytes per witness row: five 4-byte fields plus three selector/spike bytes.
 pub const WITNESS_STRIDE: usize = 23;
 
+/// Stone 4 column count (adds `raw`, the pre-threshold integrator value).
+pub const COLUMNS4: usize = 9;
+
+/// Number of polynomial identities.
+pub const IDENTS: usize = 4;
+
+/// The AIR as four polynomial identities, one integer evaluation per
+/// identity per row, compressed to a per-row bit mask (`1 << g` iff
+/// identity `g` evaluated nonzero) plus the per-identity nonzero histogram:
+///   R0 genesis:   gen·(vb² + rb²)
+///   R1 hold:      sel_r·(va² + sp²)
+///   R2 integrate: (1−sel_r)·((sp−sel_a)² + (va−(1−sel_a)·raw)²)
+///   R3 chain:     (1−gen)·(rb − chain_exp(prev))²
+/// Every identity is a sum of squares — zero iff the underlying gate holds.
+#[must_use]
+pub fn ident_evals(rows: &[Vec<TraceRow>]) -> (Vec<u8>, [usize; 4]) {
+    let mut mask = Vec::with_capacity(rows.iter().map(Vec::len).sum::<usize>());
+    let mut nonzeros = [0usize; 4];
+    for neuron_rows in rows {
+        for (i, row) in neuron_rows.iter().enumerate() {
+            let vb = i64::from(row.v_before);
+            let raw_unclamped = i64::from(
+                row.v_before - (row.v_before >> LEAK_SHIFT) + row.i_ext + row.i_syn,
+            );
+            let raw = raw_unclamped.clamp(i64::from(V_MIN), i64::from(V_MAX));
+            let rb = i64::from(row.r_before);
+            let sp = i64::from(row.spike);
+            let va = i64::from(row.v_after);
+            let sel_r = i64::from(u8::from(row.r_before > 0));
+            let sel_a = i64::from(u8::from(row.r_before == 0 && raw >= i64::from(V_TH)));
+            let gen = i64::from(u8::from(row.tick == 0));
+            let r0 = gen * (vb * vb + rb * rb);
+            let r1 = sel_r * (va * va + sp * sp);
+            let mut r3 = 0i64;
+            if row.tick != 0 && i > 0 {
+                let p = &neuron_rows[i - 1];
+                let exp = if p.r_before > 0 {
+                    i64::from(p.r_before - 1)
+                } else if p.spike == 1 {
+                    i64::from(REFRAC)
+                } else {
+                    0
+                };
+                let d = rb - exp;
+                r3 = d * d;
+            }
+            let d_sp = sp - sel_a;
+            let d_va = va - (1 - sel_a) * raw;
+            let r2 = (1 - sel_r) * (d_sp * d_sp + d_va * d_va);
+            let mut bits = 0u8;
+            for (g, r) in [r0, r1, r2, r3].iter().enumerate() {
+                if *r != 0 {
+                    nonzeros[g] += 1;
+                    bits |= 1 << g;
+                }
+            }
+            mask.push(bits);
+        }
+    }
+    (mask, nonzeros)
+}
+
+
 /// Gate-residual table: one byte per trace row (`1 << g` iff gate `g`
 /// arrested that row, else 0) plus the per-gate hit histogram. The honest
 /// matrix is all zero BY PIN; the forged matrix's hit count must equal the
@@ -296,6 +359,32 @@ mod tests {
         assert_eq!(h1.iter().sum::<usize>(), 192);
         assert_eq!(h1.iter().sum::<usize>(), count_violations(&forged));
         assert_eq!(h1.iter().sum::<usize>(), skeleton_violations(&forged));
+        assert_eq!(
+            crate::sha256::hex32(&crate::sha256::sha256(&m1)),
+            "4f437d300ce039c0bf8e815d6f31d52895f04ce78507ad7e25f3e42df185f436"
+        );
+    }
+
+    #[test]
+    fn the_polynomial_identities_arrest_the_same_rows_as_the_tree() {
+        assert_eq!(COLUMNS4, 9);
+        assert_eq!(IDENTS, 4);
+        let c = generate(1, 16, DEFAULT_SEED);
+        let stim = sentinel_stimulus(&c, &[0xffu8; 32]);
+        let audited = run(&c, SENTINEL_TICKS, &stim, true);
+        let rows = audited.rows.clone().unwrap_or_default();
+        let honest = windows(rows.clone(), false);
+        let forged = windows(rows, true);
+        let (m0, n0) = ident_evals(&honest);
+        assert!(m0.iter().all(|b| *b == 0), "honest identities all vanish");
+        assert_eq!(n0, [0, 0, 0, 0]);
+        let (m1, n1) = ident_evals(&forged);
+        assert_eq!(n1, [0, 0, 192, 0], "all 192 arrests are R2 (integrate)");
+        assert_eq!(n1[2], count_violations(&forged));
+        // the polynomial table arrests the SAME rows as the decision tree,
+        // byte for byte — not merely the same count:
+        let (tree_mask, _) = gate_residuals(&forged);
+        assert_eq!(m1, tree_mask);
         assert_eq!(
             crate::sha256::hex32(&crate::sha256::sha256(&m1)),
             "4f437d300ce039c0bf8e815d6f31d52895f04ce78507ad7e25f3e42df185f436"

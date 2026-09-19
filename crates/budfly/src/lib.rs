@@ -27,6 +27,7 @@
 #![forbid(unsafe_code)]
 
 pub mod air;
+pub mod budtime;
 pub mod analysis;
 pub mod attest;
 pub mod canary;
