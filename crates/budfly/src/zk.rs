@@ -106,9 +106,8 @@ pub fn ident_evals(rows: &[Vec<TraceRow>]) -> (Vec<u8>, [usize; 4]) {
     for neuron_rows in rows {
         for (i, row) in neuron_rows.iter().enumerate() {
             let vb = i64::from(row.v_before);
-            let raw_unclamped = i64::from(
-                row.v_before - (row.v_before >> LEAK_SHIFT) + row.i_ext + row.i_syn,
-            );
+            let raw_unclamped =
+                i64::from(row.v_before - (row.v_before >> LEAK_SHIFT) + row.i_ext + row.i_syn);
             let raw = raw_unclamped.clamp(i64::from(V_MIN), i64::from(V_MAX));
             let rb = i64::from(row.r_before);
             let sp = i64::from(row.spike);
@@ -146,7 +145,6 @@ pub fn ident_evals(rows: &[Vec<TraceRow>]) -> (Vec<u8>, [usize; 4]) {
     }
     (mask, nonzeros)
 }
-
 
 /// Gate-residual table: one byte per trace row (`1 << g` iff gate `g`
 /// arrested that row, else 0) plus the per-gate hit histogram. The honest
