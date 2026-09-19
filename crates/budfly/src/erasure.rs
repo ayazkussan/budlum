@@ -405,7 +405,7 @@ mod tests {
             buf.extend_from_slice(c);
         }
         assert_eq!(
-            sha256::hex32(&sha256(&buf)),
+            crate::sha256::hex32(&sha256(&buf)),
             "8a0d21d902da911ac276dc89d2e2ce5427561fe69efd8b950a54567ff1dab179"
         );
         // the frozen deletion sets (python-pinned):
