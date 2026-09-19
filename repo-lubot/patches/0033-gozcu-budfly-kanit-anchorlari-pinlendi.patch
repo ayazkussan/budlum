@@ -1,0 +1,546 @@
+From 3b10d20d0926e759dccdc9759fa74ef4cee89752 Mon Sep 17 00:00:00 2001
+From: arena-agent <arena@budlum.xyz>
+Date: Thu, 17 Sep 2026 03:52:56 +0000
+Subject: [PATCH] =?UTF-8?q?lubot=20yetenek:=20gozcu=20-=20BudFly=20kanit?=
+ =?UTF-8?q?=20anchorlari=20pinlendi=20(g=C3=B6zc=C3=BC=20masasi)?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+The sentinel validator proposed for budlum (SENTINEL, RoleId 10) carries
+BudFly's frozen 48-tick anchors as audit evidence. Lubot's side of that
+contract is a pure byte table it can check claims against with zero
+simulation and zero I/O:
+
+- GOLDEN_PINS: the four externally frozen sentinel cases, bytes copied
+  verbatim from crates/budfly/goldens.anchor.toml (BudFly PR #5)
+- BUDFLY_MANIFEST_ROOT_SHA256: sha256 of that manifest at pinning time;
+  a reviewer re-hashes the upstream file instead of trusting this copy
+- RING_BUMP_ANCHOR: the pinned compass-attractor bump (64 ticks)
+- pinned_anchor / evidence_matches / ring_bump_matches: fail-closed
+  only (unknown digest -> None; one flipped bit -> false)
+- digest binding documented: bytes 10..16 and 20..32 carry no signal in
+  the frozen stimulus, and the crate says so next to the table
+
+CRATES.md gains its fourteenth row.
+---
+ ...zcu-BudFly-kanit-anchorlari-pinlendi.patch | 269 ++++++++++++++++++
+ Cargo.toml                                    |   1 +
+ crates/gozcu/Cargo.toml                       |  13 +
+ crates/gozcu/src/lib.rs                       | 181 ++++++++++++
+ docs/CRATES.md                                |   3 +-
+ 5 files changed, 466 insertions(+), 1 deletion(-)
+ create mode 100644 0001-lubot-yetenek-gozcu-BudFly-kanit-anchorlari-pinlendi.patch
+ create mode 100644 crates/gozcu/Cargo.toml
+ create mode 100644 crates/gozcu/src/lib.rs
+
+diff --git a/0001-lubot-yetenek-gozcu-BudFly-kanit-anchorlari-pinlendi.patch b/0001-lubot-yetenek-gozcu-BudFly-kanit-anchorlari-pinlendi.patch
+new file mode 100644
+index 0000000..7113fc9
+--- /dev/null
++++ b/0001-lubot-yetenek-gozcu-BudFly-kanit-anchorlari-pinlendi.patch
+@@ -0,0 +1,269 @@
++From 888129184f37a39d12080b8b03313c48e5ec4fd6 Mon Sep 17 00:00:00 2001
++From: arena-agent <arena@budlum.xyz>
++Date: Thu, 17 Sep 2026 03:52:56 +0000
++Subject: [PATCH] =?UTF-8?q?lubot=20yetenek:=20gozcu=20-=20BudFly=20kanit?=
++ =?UTF-8?q?=20anchorlari=20pinlendi=20(g=C3=B6zc=C3=BC=20masasi)?=
++MIME-Version: 1.0
++Content-Type: text/plain; charset=UTF-8
++Content-Transfer-Encoding: 8bit
++
++The sentinel validator proposed for budlum (SENTINEL, RoleId 10) carries
++BudFly's frozen 48-tick anchors as audit evidence. Lubot's side of that
++contract is a pure byte table it can check claims against with zero
++simulation and zero I/O:
++
++- GOLDEN_PINS: the four externally frozen sentinel cases, bytes copied
++  verbatim from crates/budfly/goldens.anchor.toml (BudFly PR #5)
++- BUDFLY_MANIFEST_ROOT_SHA256: sha256 of that manifest at pinning time;
++  a reviewer re-hashes the upstream file instead of trusting this copy
++- RING_BUMP_ANCHOR: the pinned compass-attractor bump (64 ticks)
++- pinned_anchor / evidence_matches / ring_bump_matches: fail-closed
++  only (unknown digest -> None; one flipped bit -> false)
++- digest binding documented: bytes 10..16 and 20..32 carry no signal in
++  the frozen stimulus, and the crate says so next to the table
++
++CRATES.md gains its fourteenth row.
++---
++ Cargo.toml              |   1 +
++ crates/gozcu/Cargo.toml |  13 +++
++ crates/gozcu/src/lib.rs | 181 ++++++++++++++++++++++++++++++++++++++++
++ docs/CRATES.md          |   3 +-
++ 4 files changed, 197 insertions(+), 1 deletion(-)
++ create mode 100644 crates/gozcu/Cargo.toml
++ create mode 100644 crates/gozcu/src/lib.rs
++
++diff --git a/Cargo.toml b/Cargo.toml
++index 96aa7f6..2967a1e 100644
++--- a/Cargo.toml
+++++ b/Cargo.toml
++@@ -22,6 +22,7 @@ members = [
++     "crates/anlama",
++     "crates/esik",
++     "crates/usl",
+++    "crates/gozcu",
++ ]
++ 
++ # The panic limit: a reader that panics is a reader that stops answering.
++diff --git a/crates/gozcu/Cargo.toml b/crates/gozcu/Cargo.toml
++new file mode 100644
++index 0000000..ffbb6b3
++--- /dev/null
+++++ b/crates/gozcu/Cargo.toml
++@@ -0,0 +1,13 @@
+++[package]
+++name = "lubot-gozcu"
+++version.workspace = true
+++edition.workspace = true
+++rust-version.workspace = true
+++license-file.workspace = true
+++
+++# Self-contained: carries the BudFly evidence pins as a pure byte table
+++# (no simulation, no I/O, no clock). Checking a claimed anchor against the
+++# pins is a reviewer-rerun operation on two byte strings.
+++
+++[lints]
+++workspace = true
++diff --git a/crates/gozcu/src/lib.rs b/crates/gozcu/src/lib.rs
++new file mode 100644
++index 0000000..f6fe262
++--- /dev/null
+++++ b/crates/gozcu/src/lib.rs
++@@ -0,0 +1,181 @@
+++//! BudFly evidence pins for the Lubot sentinel (gozcu = watcher).
+++//!
+++//! BudFly (`budlum/crates/budfly`) replays a frozen fruit-fly micro-circuit
+++//! deterministically and commits each 48-tick run to a SHA-256 anchor chain.
+++//! The budlum validator proposal (SENTINEL, RoleId 10) uses exactly that
+++//! anchor as audit evidence. This crate carries the PINNED side of that
+++//! contract for Lubot: a pure byte table claims can be checked against,
+++//! with no simulation and no I/O - the checker a reviewer can re-run.
+++//!
+++//! HOW THE BYTES WERE PINNED
+++//! -------------------------
+++//! Taken verbatim from `crates/budfly/goldens.anchor.toml` in
+++//! `ayazkussan/budlum` (BudFly PR #5). That manifest binds four sentinel
+++//! cases plus the compass-ring bump to their recomputed anchors and its
+++//! own self-check runs in BudFly CI on every push (`reference_check.py`
+++//! recomputes every value and fails on drift). The manifest file hash at
+++//! pinning time is exported as `BUDFLY_MANIFEST_ROOT_SHA256` below: hash
+++//! the upstream file and compare - no trust in this copy required.
+++//!
+++//! FAILS-CLOSED RULES
+++//! ------------------
+++//! * A digest not in the pinned table yields `None`, never a guess.
+++//! * A claimed anchor differing bit-for-bit is `false`, never "close".
+++//! * Only digest bytes the frozen stimulus actually reads carry signal
+++//!   (`goldens.anchor.toml [digest_binding]`): bytes 10..16 and 20..32 are
+++//!   documented as unbound, so equality off those ranges must not be read
+++//!   as evidence binding. Compare bound ranges only when extending.
+++
+++/// Sentinel descending verdict vocabulary (mirrors `budfly::oracle::Verdict`
+++/// without the crate; the labels are the contract).
+++#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+++pub enum Verdict {
+++    /// DNa02-like left race won.
+++    Affirm,
+++    /// DNa02-like right race won.
+++    Reject,
+++    /// MDN veto or tie: ambiguity never resolves to an affirmative.
+++    Abstain,
+++}
+++
+++/// One pinned (digest, 48-tick anchor, verdict) row.
+++#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+++pub struct GoldenPin {
+++    /// Which external fixture produced this row (all_zero, all_ones_ff, ...).
+++    pub label: &'static str,
+++    /// The 32-byte evidence digest that drove the sentinel stimulus.
+++    pub digest: [u8; 32],
+++    /// The frozen 48-tick anchor-chain head.
+++    pub anchor: [u8; 32],
+++    /// The frozen verdict.
+++    pub verdict: Verdict,
+++}
+++
+++/// sha256 of `crates/budfly/goldens.anchor.toml` at pinning time. Anyone
+++/// can fetch the upstream file and re-hash; a mismatch means the upstream
+++/// table moved and this crate must be re-pinned through review, never
+++/// through a drive-by edit.
+++pub const BUDFLY_MANIFEST_ROOT_SHA256: &str =
+++    "96e0a47e7b3c4cc2ce2a030120ca882807e0ead0e781974f7d90ef7741fe3931";
+++
+++/// The frozen compass-ring bump anchor (64 ticks, quarter-EB bump for the
+++/// first 8 ticks). Pinned separately: the bump scenario has no digest input.
+++pub const RING_BUMP_ANCHOR: [u8; 32] = 0xAE, 0xDF, 0xD9, 0x42, 0x6F, 0xD3, 0xD9, 0xF0, 0xE7, 0x9A, 0xFA, 0x1A, 0x88, 0x9C, 0xB7, 0xBF, 0xB8, 0x8E, 0x1E, 0x7A, 0x8C, 0xC0, 0xC3, 0x3B, 0x35, 0x61, 0x71, 0x8E, 0xA1, 0x27, 0xAE, 0xA3;
+++
+++/// Tick count of the ring bump run (part of the pinned contract).
+++pub const RING_BUMP_TICKS: u64 = 64;
+++
+++/// The four externally frozen sentinel cases.
+++pub const GOLDEN_PINS: [GoldenPin; 4] = [
+++    GoldenPin {
+++        label: "all_zero",
+++        digest: [0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00],
+++        anchor: [0x50, 0xF5, 0xF2, 0xAB, 0x0F, 0x73, 0x42, 0xFB, 0x41, 0x2C, 0x7B, 0x78, 0x1E, 0xA3, 0xB9, 0xDE, 0xE5, 0xF4, 0x51, 0x60, 0xA8, 0xA5, 0xA2, 0x2A, 0xCE, 0x32, 0x83, 0xB7, 0x84, 0xD1, 0x81, 0x73],
+++        verdict: Verdict::Abstain,
+++    },
+++    GoldenPin {
+++        label: "all_ones_ff",
+++        digest: [0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF],
+++        anchor: [0x39, 0x8E, 0x12, 0x6A, 0x88, 0x77, 0x6B, 0x4F, 0x15, 0xF7, 0xDA, 0x9B, 0xFB, 0x7B, 0xD9, 0x27, 0xF4, 0x7F, 0xC3, 0x2E, 0x8A, 0x92, 0x12, 0x8A, 0x35, 0x43, 0x80, 0xCE, 0x8D, 0x42, 0x9C, 0xC3],
+++        verdict: Verdict::Affirm,
+++    },
+++    GoldenPin {
+++        label: "genesis",
+++        digest: [0xD9, 0xCB, 0xD5, 0xCB, 0x19, 0xD4, 0x02, 0x95, 0xD4, 0xF1, 0x94, 0xD4, 0x58, 0xDD, 0xC7, 0xEB, 0xF6, 0x29, 0x55, 0x44, 0xE3, 0x0D, 0x71, 0xE3, 0x77, 0x77, 0x4F, 0x33, 0xC1, 0xBF, 0xF2, 0x09],
+++        anchor: [0xAC, 0x4E, 0x80, 0x42, 0x23, 0x36, 0x58, 0xC3, 0x1A, 0xC1, 0x54, 0xF7, 0xEE, 0x7F, 0xD7, 0xEE, 0x07, 0x07, 0x95, 0x93, 0x73, 0xE0, 0x57, 0xF6, 0x07, 0x43, 0xE4, 0x1B, 0x68, 0xAE, 0x0E, 0xB4],
+++        verdict: Verdict::Affirm,
+++    },
+++    GoldenPin {
+++        label: "incrementing_00_to_1f",
+++        digest: [0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F, 0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1A, 0x1B, 0x1C, 0x1D, 0x1E, 0x1F],
+++        anchor: [0x01, 0xB3, 0xFF, 0x07, 0x6F, 0xA7, 0x85, 0x03, 0x17, 0xFF, 0x18, 0x83, 0xE1, 0x8B, 0x58, 0xF1, 0xE1, 0x7D, 0x77, 0xDD, 0x2E, 0xFA, 0xA1, 0x2E, 0xB2, 0x4B, 0x8D, 0xB9, 0x43, 0x69, 0x9C, 0xB2],
+++        verdict: Verdict::Reject,
+++    },
+++];
+++
+++/// Look up the pinned anchor for an evidence digest. Fails closed: an
+++/// unknown digest is `None`, never an approximation.
+++pub fn pinned_anchor(digest: &[u8; 32]) -> Option<(&'static str, [u8; 32], Verdict)> {
+++    GOLDEN_PINS
+++        .iter()
+++        .find(|p| &p.digest == digest)
+++        .map(|p| (p.label, p.anchor, p.verdict))
+++}
+++
+++/// Byte-check a claimed BudFly anchor against the pins. `false` on any bit
+++/// difference, `false` for unpinned digests.
+++pub fn evidence_matches(digest: &[u8; 32], claimed_anchor: &[u8; 32]) -> bool {
+++    matches!(pinned_anchor(digest), Some((_, a, _)) if &a == claimed_anchor)
+++}
+++
+++/// Claimed ring-bump anchor check (bump scenario has no digest input).
+++pub fn ring_bump_matches(claimed_anchor: &[u8; 32]) -> bool {
+++    claimed_anchor == &RING_BUMP_ANCHOR
+++}
+++
+++#[cfg(test)]
+++mod tests {
+++    use super::*;
+++
+++    fn digest_of(kind: &str) -> [u8; 32] {
+++        GOLDEN_PINS
+++            .iter()
+++            .find(|p| p.label == kind)
+++            .map(|p| p.digest)
+++            .expect("pinned case exists")
+++    }
+++
+++    #[test]
+++    fn table_has_four_unique_digests() {
+++        assert_eq!(GOLDEN_PINS.len(), 4);
+++        for (i, a) in GOLDEN_PINS.iter().enumerate() {
+++            for b in GOLDEN_PINS.iter().skip(i + 1) {
+++                assert_ne!(a.digest, b.digest);
+++            }
+++        }
+++    }
+++
+++    #[test]
+++    fn known_digest_resolves_to_its_pin() {
+++        let d = digest_of("all_ones_ff");
+++        let (label, anchor, verdict) = pinned_anchor(&d).expect("pinned");
+++        assert_eq!(label, "all_ones_ff");
+++        assert_eq!(verdict, Verdict::Affirm);
+++        assert!(evidence_matches(&d, &anchor));
+++        assert!(anchor.iter().any(|b| *b != 0));
+++    }
+++
+++    #[test]
+++    fn unknown_digest_fails_closed() {
+++        let mut d = digest_of("all_zero");
+++        d[5] ^= 0x55;
+++        assert!(pinned_anchor(&d).is_none());
+++        assert!(!evidence_matches(&d, &GOLDEN_PINS[0].anchor));
+++    }
+++
+++    #[test]
+++    fn wrong_anchor_is_rejected_bitwise() {
+++        let d = digest_of("genesis");
+++        let (_, anchor, _) = pinned_anchor(&d).expect("pinned");
+++        let mut wrong = anchor;
+++        wrong[31] ^= 1;
+++        assert!(!evidence_matches(&d, &wrong));
+++    }
+++
+++    #[test]
+++    fn ring_pin_is_frozen() {
+++        assert!(ring_bump_matches(&RING_BUMP_ANCHOR));
+++        let mut wrong = RING_BUMP_ANCHOR;
+++        wrong[0] ^= 1;
+++        assert!(!ring_bump_matches(&wrong));
+++        assert_eq!(RING_BUMP_TICKS, 64);
+++    }
+++
+++    #[test]
+++    fn manifest_root_is_a_real_sha256_hex() {
+++        assert_eq!(BUDFLY_MANIFEST_ROOT_SHA256.len(), 64);
+++        assert!(BUDFLY_MANIFEST_ROOT_SHA256
+++            .bytes()
+++            .all(|c| c.is_ascii_hexdigit() && !c.is_ascii_uppercase()));
+++    }
+++}
++diff --git a/docs/CRATES.md b/docs/CRATES.md
++index dea9850..6687376 100644
++--- a/docs/CRATES.md
+++++ b/docs/CRATES.md
++@@ -15,7 +15,8 @@
++ | `anlama` | what each word of the command contributed, and what had to be added to get there | a scope no word supports, a loose match with no correction on record, an assumption nobody listed, an instruction read out of attached text |
++ | `esik` | the activation schedule: plans, the flags inside them, and the epoch each opens at | an activation at genesis, a change whose epoch is not its plan's, a flag the plan never promised, a plan opened twice at one epoch, a due change nobody ratified, a retirement that never ran, a rewritten epoch |
++ | `usl` | the settlement envelope a cold wallet reads off the media: canonical payout lines, fee, window, sealed on `muhur` | a media whose entries no longer hash to the seal it carries; a non-canonical amount; a window that does not open after genesis; a duplicate payout line |
+++| `gozcu` | pinned BudFly evidence anchors (digest -> anchor -> verdict) the sentinel audits claims against | a claimed anchor that differs bitwise, an unpinned digest answered anyway, a pin table edit without the manifest-root hash changing |
++ 
++-None of the twelve depends on another. All are `std` only, no I/O, no clock, no
+++None of the thirteen depends on another. All are `std` only, no I/O, no clock, no
++ randomness: a run that reads them can be reproduced from its inputs, which is
++ the only property that makes a review finding reviewable a second time.
++-- 
++2.39.5
++
+diff --git a/Cargo.toml b/Cargo.toml
+index 96aa7f6..2967a1e 100644
+--- a/Cargo.toml
++++ b/Cargo.toml
+@@ -22,6 +22,7 @@ members = [
+     "crates/anlama",
+     "crates/esik",
+     "crates/usl",
++    "crates/gozcu",
+ ]
+ 
+ # The panic limit: a reader that panics is a reader that stops answering.
+diff --git a/crates/gozcu/Cargo.toml b/crates/gozcu/Cargo.toml
+new file mode 100644
+index 0000000..ffbb6b3
+--- /dev/null
++++ b/crates/gozcu/Cargo.toml
+@@ -0,0 +1,13 @@
++[package]
++name = "lubot-gozcu"
++version.workspace = true
++edition.workspace = true
++rust-version.workspace = true
++license-file.workspace = true
++
++# Self-contained: carries the BudFly evidence pins as a pure byte table
++# (no simulation, no I/O, no clock). Checking a claimed anchor against the
++# pins is a reviewer-rerun operation on two byte strings.
++
++[lints]
++workspace = true
+diff --git a/crates/gozcu/src/lib.rs b/crates/gozcu/src/lib.rs
+new file mode 100644
+index 0000000..f6fe262
+--- /dev/null
++++ b/crates/gozcu/src/lib.rs
+@@ -0,0 +1,181 @@
++//! BudFly evidence pins for the Lubot sentinel (gozcu = watcher).
++//!
++//! BudFly (`budlum/crates/budfly`) replays a frozen fruit-fly micro-circuit
++//! deterministically and commits each 48-tick run to a SHA-256 anchor chain.
++//! The budlum validator proposal (SENTINEL, RoleId 10) uses exactly that
++//! anchor as audit evidence. This crate carries the PINNED side of that
++//! contract for Lubot: a pure byte table claims can be checked against,
++//! with no simulation and no I/O - the checker a reviewer can re-run.
++//!
++//! HOW THE BYTES WERE PINNED
++//! -------------------------
++//! Taken verbatim from `crates/budfly/goldens.anchor.toml` in
++//! `ayazkussan/budlum` (BudFly PR #5). That manifest binds four sentinel
++//! cases plus the compass-ring bump to their recomputed anchors and its
++//! own self-check runs in BudFly CI on every push (`reference_check.py`
++//! recomputes every value and fails on drift). The manifest file hash at
++//! pinning time is exported as `BUDFLY_MANIFEST_ROOT_SHA256` below: hash
++//! the upstream file and compare - no trust in this copy required.
++//!
++//! FAILS-CLOSED RULES
++//! ------------------
++//! * A digest not in the pinned table yields `None`, never a guess.
++//! * A claimed anchor differing bit-for-bit is `false`, never "close".
++//! * Only digest bytes the frozen stimulus actually reads carry signal
++//!   (`goldens.anchor.toml [digest_binding]`): bytes 10..16 and 20..32 are
++//!   documented as unbound, so equality off those ranges must not be read
++//!   as evidence binding. Compare bound ranges only when extending.
++
++/// Sentinel descending verdict vocabulary (mirrors `budfly::oracle::Verdict`
++/// without the crate; the labels are the contract).
++#[derive(Debug, Clone, Copy, PartialEq, Eq)]
++pub enum Verdict {
++    /// DNa02-like left race won.
++    Affirm,
++    /// DNa02-like right race won.
++    Reject,
++    /// MDN veto or tie: ambiguity never resolves to an affirmative.
++    Abstain,
++}
++
++/// One pinned (digest, 48-tick anchor, verdict) row.
++#[derive(Debug, Clone, Copy, PartialEq, Eq)]
++pub struct GoldenPin {
++    /// Which external fixture produced this row (all_zero, all_ones_ff, ...).
++    pub label: &'static str,
++    /// The 32-byte evidence digest that drove the sentinel stimulus.
++    pub digest: [u8; 32],
++    /// The frozen 48-tick anchor-chain head.
++    pub anchor: [u8; 32],
++    /// The frozen verdict.
++    pub verdict: Verdict,
++}
++
++/// sha256 of `crates/budfly/goldens.anchor.toml` at pinning time. Anyone
++/// can fetch the upstream file and re-hash; a mismatch means the upstream
++/// table moved and this crate must be re-pinned through review, never
++/// through a drive-by edit.
++pub const BUDFLY_MANIFEST_ROOT_SHA256: &str =
++    "96e0a47e7b3c4cc2ce2a030120ca882807e0ead0e781974f7d90ef7741fe3931";
++
++/// The frozen compass-ring bump anchor (64 ticks, quarter-EB bump for the
++/// first 8 ticks). Pinned separately: the bump scenario has no digest input.
++pub const RING_BUMP_ANCHOR: [u8; 32] = 0xAE, 0xDF, 0xD9, 0x42, 0x6F, 0xD3, 0xD9, 0xF0, 0xE7, 0x9A, 0xFA, 0x1A, 0x88, 0x9C, 0xB7, 0xBF, 0xB8, 0x8E, 0x1E, 0x7A, 0x8C, 0xC0, 0xC3, 0x3B, 0x35, 0x61, 0x71, 0x8E, 0xA1, 0x27, 0xAE, 0xA3;
++
++/// Tick count of the ring bump run (part of the pinned contract).
++pub const RING_BUMP_TICKS: u64 = 64;
++
++/// The four externally frozen sentinel cases.
++pub const GOLDEN_PINS: [GoldenPin; 4] = [
++    GoldenPin {
++        label: "all_zero",
++        digest: [0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00],
++        anchor: [0x50, 0xF5, 0xF2, 0xAB, 0x0F, 0x73, 0x42, 0xFB, 0x41, 0x2C, 0x7B, 0x78, 0x1E, 0xA3, 0xB9, 0xDE, 0xE5, 0xF4, 0x51, 0x60, 0xA8, 0xA5, 0xA2, 0x2A, 0xCE, 0x32, 0x83, 0xB7, 0x84, 0xD1, 0x81, 0x73],
++        verdict: Verdict::Abstain,
++    },
++    GoldenPin {
++        label: "all_ones_ff",
++        digest: [0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF],
++        anchor: [0x39, 0x8E, 0x12, 0x6A, 0x88, 0x77, 0x6B, 0x4F, 0x15, 0xF7, 0xDA, 0x9B, 0xFB, 0x7B, 0xD9, 0x27, 0xF4, 0x7F, 0xC3, 0x2E, 0x8A, 0x92, 0x12, 0x8A, 0x35, 0x43, 0x80, 0xCE, 0x8D, 0x42, 0x9C, 0xC3],
++        verdict: Verdict::Affirm,
++    },
++    GoldenPin {
++        label: "genesis",
++        digest: [0xD9, 0xCB, 0xD5, 0xCB, 0x19, 0xD4, 0x02, 0x95, 0xD4, 0xF1, 0x94, 0xD4, 0x58, 0xDD, 0xC7, 0xEB, 0xF6, 0x29, 0x55, 0x44, 0xE3, 0x0D, 0x71, 0xE3, 0x77, 0x77, 0x4F, 0x33, 0xC1, 0xBF, 0xF2, 0x09],
++        anchor: [0xAC, 0x4E, 0x80, 0x42, 0x23, 0x36, 0x58, 0xC3, 0x1A, 0xC1, 0x54, 0xF7, 0xEE, 0x7F, 0xD7, 0xEE, 0x07, 0x07, 0x95, 0x93, 0x73, 0xE0, 0x57, 0xF6, 0x07, 0x43, 0xE4, 0x1B, 0x68, 0xAE, 0x0E, 0xB4],
++        verdict: Verdict::Affirm,
++    },
++    GoldenPin {
++        label: "incrementing_00_to_1f",
++        digest: [0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F, 0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1A, 0x1B, 0x1C, 0x1D, 0x1E, 0x1F],
++        anchor: [0x01, 0xB3, 0xFF, 0x07, 0x6F, 0xA7, 0x85, 0x03, 0x17, 0xFF, 0x18, 0x83, 0xE1, 0x8B, 0x58, 0xF1, 0xE1, 0x7D, 0x77, 0xDD, 0x2E, 0xFA, 0xA1, 0x2E, 0xB2, 0x4B, 0x8D, 0xB9, 0x43, 0x69, 0x9C, 0xB2],
++        verdict: Verdict::Reject,
++    },
++];
++
++/// Look up the pinned anchor for an evidence digest. Fails closed: an
++/// unknown digest is `None`, never an approximation.
++pub fn pinned_anchor(digest: &[u8; 32]) -> Option<(&'static str, [u8; 32], Verdict)> {
++    GOLDEN_PINS
++        .iter()
++        .find(|p| &p.digest == digest)
++        .map(|p| (p.label, p.anchor, p.verdict))
++}
++
++/// Byte-check a claimed BudFly anchor against the pins. `false` on any bit
++/// difference, `false` for unpinned digests.
++pub fn evidence_matches(digest: &[u8; 32], claimed_anchor: &[u8; 32]) -> bool {
++    matches!(pinned_anchor(digest), Some((_, a, _)) if &a == claimed_anchor)
++}
++
++/// Claimed ring-bump anchor check (bump scenario has no digest input).
++pub fn ring_bump_matches(claimed_anchor: &[u8; 32]) -> bool {
++    claimed_anchor == &RING_BUMP_ANCHOR
++}
++
++#[cfg(test)]
++mod tests {
++    use super::*;
++
++    fn digest_of(kind: &str) -> [u8; 32] {
++        GOLDEN_PINS
++            .iter()
++            .find(|p| p.label == kind)
++            .map(|p| p.digest)
++            .expect("pinned case exists")
++    }
++
++    #[test]
++    fn table_has_four_unique_digests() {
++        assert_eq!(GOLDEN_PINS.len(), 4);
++        for (i, a) in GOLDEN_PINS.iter().enumerate() {
++            for b in GOLDEN_PINS.iter().skip(i + 1) {
++                assert_ne!(a.digest, b.digest);
++            }
++        }
++    }
++
++    #[test]
++    fn known_digest_resolves_to_its_pin() {
++        let d = digest_of("all_ones_ff");
++        let (label, anchor, verdict) = pinned_anchor(&d).expect("pinned");
++        assert_eq!(label, "all_ones_ff");
++        assert_eq!(verdict, Verdict::Affirm);
++        assert!(evidence_matches(&d, &anchor));
++        assert!(anchor.iter().any(|b| *b != 0));
++    }
++
++    #[test]
++    fn unknown_digest_fails_closed() {
++        let mut d = digest_of("all_zero");
++        d[5] ^= 0x55;
++        assert!(pinned_anchor(&d).is_none());
++        assert!(!evidence_matches(&d, &GOLDEN_PINS[0].anchor));
++    }
++
++    #[test]
++    fn wrong_anchor_is_rejected_bitwise() {
++        let d = digest_of("genesis");
++        let (_, anchor, _) = pinned_anchor(&d).expect("pinned");
++        let mut wrong = anchor;
++        wrong[31] ^= 1;
++        assert!(!evidence_matches(&d, &wrong));
++    }
++
++    #[test]
++    fn ring_pin_is_frozen() {
++        assert!(ring_bump_matches(&RING_BUMP_ANCHOR));
++        let mut wrong = RING_BUMP_ANCHOR;
++        wrong[0] ^= 1;
++        assert!(!ring_bump_matches(&wrong));
++        assert_eq!(RING_BUMP_TICKS, 64);
++    }
++
++    #[test]
++    fn manifest_root_is_a_real_sha256_hex() {
++        assert_eq!(BUDFLY_MANIFEST_ROOT_SHA256.len(), 64);
++        assert!(BUDFLY_MANIFEST_ROOT_SHA256
++            .bytes()
++            .all(|c| c.is_ascii_hexdigit() && !c.is_ascii_uppercase()));
++    }
++}
+diff --git a/docs/CRATES.md b/docs/CRATES.md
+index dea9850..811a64f 100644
+--- a/docs/CRATES.md
++++ b/docs/CRATES.md
+@@ -15,7 +15,8 @@
+ | `anlama` | what each word of the command contributed, and what had to be added to get there | a scope no word supports, a loose match with no correction on record, an assumption nobody listed, an instruction read out of attached text |
+ | `esik` | the activation schedule: plans, the flags inside them, and the epoch each opens at | an activation at genesis, a change whose epoch is not its plan's, a flag the plan never promised, a plan opened twice at one epoch, a due change nobody ratified, a retirement that never ran, a rewritten epoch |
+ | `usl` | the settlement envelope a cold wallet reads off the media: canonical payout lines, fee, window, sealed on `muhur` | a media whose entries no longer hash to the seal it carries; a non-canonical amount; a window that does not open after genesis; a duplicate payout line |
++| `gozcu` | pinned BudFly evidence anchors (digest -> anchor -> verdict) the sentinel audits claims against | a claimed anchor that differs bitwise, an unpinned digest answered anyway, a pin table edit without the manifest-root hash changing |
+ 
+-None of the twelve depends on another. All are `std` only, no I/O, no clock, no
++None of the fourteen depends on another. All are `std` only, no I/O, no clock, no
+ randomness: a run that reads them can be reproduced from its inputs, which is
+ the only property that makes a review finding reviewable a second time.
+-- 
+2.39.5
+

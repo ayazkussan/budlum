@@ -1,0 +1,332 @@
+# BudFly anchor manifest — machine-checkable list of every frozen anchor.
+#
+# Source of truth: the crate's test-suite (tests/goldens.rs) and the Python
+# mirror (scripts/reference_check.py) recompute every value below from the
+# frozen dynamics. This file is the EXTERNALLY PINNABLE view: a consumer
+# (sentinel, auditor, Lubot gate) that does not want to run the dynamics
+# can pin sha256(goldens.anchor.toml) as the "anchor manifest root".
+#
+# If any digest here changes, the crate's dynamics changed. That is a
+# governance event, never a drive-by refactor. Every entry exists verbatim
+# in tests/goldens.rs — there is exactly one table, twice.
+
+manifest_version = 1
+crate = "budfly"
+crate_version = "0.1.0"
+toolchain = "1.97.1"
+canonical_connectome_scale = "scale_num=1, scale_den=16, DEFAULT_SEED"
+
+# Mirror self-check: sha256(b"budlum-genesis") — used as case 3 input below.
+[genesis]
+digest = "d9cbd5cb19d40295d4f194d458ddc7ebf6295544e30d71e377774f33c1bff209"
+
+# ---------------------------------------------------- sentinel goldens
+# sentinel_verdict(digest): 48 ticks; verdict semantics (Affirm/Reject/
+# Abstain) follow the DNa02 left/right race with the MDN veto, fails closed
+# on ties. digest_kind names how the 32 input bytes were produced.
+[[sentinel_case]]
+digest_kind = "all_zero"
+digest = "0000000000000000000000000000000000000000000000000000000000000000"
+verdict = "Abstain"
+dnavo_l = 0
+dnavo_r = 0
+mdn = 0
+anchor = "50f5f2ab0f7342fb412c7b781ea3b9dee5f45160a8a5a22ace3283b784d18173"
+
+[[sentinel_case]]
+digest_kind = "all_ones_ff"
+digest = "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+verdict = "Affirm"
+dnavo_l = 7
+dnavo_r = 6
+mdn = 1
+anchor = "398e126a88776b4f15f7da9bfb7bd927f47fc32e8a92128a354380ce8d429cc3"
+
+[[sentinel_case]]
+digest_kind = "genesis"
+digest = "d9cbd5cb19d40295d4f194d458ddc7ebf6295544e30d71e377774f33c1bff209"
+verdict = "Affirm"
+dnavo_l = 5
+dnavo_r = 3
+mdn = 6
+anchor = "ac4e8042233658c31ac154f7ee7fd7ee0707959373e057f60743e41b68ae0eb4"
+
+[[sentinel_case]]
+digest_kind = "incrementing_00_to_1f"
+digest = "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f"
+verdict = "Reject"
+dnavo_l = 1
+dnavo_r = 3
+mdn = 0
+anchor = "01b3ff076fa7850317ff1883e18b58f1e17d77dd2efaa12eb24b8db943699cb2"
+
+# -------------------------------------------------------- ring bump
+# Compass-bump scenario: a quarter of the EB ring is stimulated for the
+# first 8 ticks, the run lasts 64 ticks; anchor must hold. The bump must
+# actually fire: EB spike count > 0 is part of the pinned behaviour.
+[ring_bump]
+ticks = 64
+bump_ticks = "0..8"
+bump_width_fraction = "1/4 of CxEb"
+anchor = "aedfd9426fd3d9f0e79afa1a889cb7bfb88e1e7a8cc0c33b3561718ea127aea3"
+eb_spikes_positive = true
+
+# -------------------------------------------------- tamper property
+# One-bit avalanche: flipping byte 20 of the all_ones_ff digest by XOR 0x01
+# MUST change the 48-tick anchor. Verified by reference_check.py (oracle
+# sentinel path) and pinned in oracle.rs unit tests.
+[tamper]
+base_digest = "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+flip_byte = 19
+flip_xor = 1
+property = "anchor(base) != anchor(base ^ flip)"
+
+# Which of the 32 digest bytes the sentinel stimulus actually reads
+# (frozen dynamics; both implementations were audited to agree):
+#   bytes 0..8   little-endian SplitMix64 seed
+#   bytes 8..10  u16 compass sector start
+#   bytes 10..16 IGNORED (unused)
+#   bytes 16..20 lobula tickle bits 0..31 (left population first)
+#   bytes 20..32 IGNORED (unused)
+# FAILS-CLOSED CONSUMER RULE: a digest is only bound to the verdict through
+# the used ranges above. Consumers anchoring evidence-identity to the whole
+# 32 bytes must hash the resolved anchor themselves; BudFly never claims
+# the ignored ranges carry signal. anchor(bytes 20..32 tampered) ==
+# anchor(original) is the documented, pinned property.
+[digest_binding]
+rng_seed = "bytes0_8_le"
+compass_sector = "bytes8_10_u16"
+lobula_bits = "bytes16_20_bits0_31"
+unused = ["bytes10_16", "bytes20_32"]
+# ------------------------------------------------------- [expansion]
+# Frozen pins for the expansion probes (scripts/expansion_check.py recomputes
+# every value). Honestly includes pinned NEGATIVES: a probe that refuted its
+# naive claim is recorded with the refutation, not removed.
+[expansion]
+"census.reached_from_laml" = "413"
+"census.dnl" = "6 4 40 4"
+"census.dnr" = "6 4 41 5"
+"census.mdn" = "4 4 40 4"
+"census.degsum_sha256" = "dd38f2c532e4dfbb1d888606451768d1bb3c42067aa156bcbcaafa7a3b0fb60f"
+"lesion.base.anchor" = "f3d639395fce7e866b3f564d52a90b22c104faa7325351626a3ad08faa51d8e8"
+"lesion.base.spikes" = "32,0,38,0,32,0,517,98,103,254,32,4,15,10,7,5"
+"lesion.no_apl.spikes" = "32,0,38,0,32,0,517,98,103,254,32,0,15,10,7,5"
+"lesion.no_apl.anchor" = "75660cb05f2ee5d0384e8517d3a9343596637a296f7bf21c64bfa962bd65ae65"
+"lesion.no_apl.mbon_delta" = "0"
+"lesion.no_eb.spikes" = "32,0,38,0,32,0,0,4,0,254,32,4,15,10,7,0"
+"lesion.no_eb.anchor" = "80ed2517a96a3813bb5534cad1dce3d05199f49fdb5544dd1dc9e7d553e087cb"
+"lesion.no_eb.mbon_delta" = "0"
+"lesion.no_mdn.spikes" = "32,0,38,0,32,0,517,98,103,254,32,4,15,10,7,0"
+"lesion.no_mdn.anchor" = "56a0e023689c415d3a664e3c867f2fa994dab19390e0213b402c624145c28ec7"
+"lesion.no_mdn.mbon_delta" = "0"
+"compass.v4.anchor" = "438a58bf5c4869d355d810fb0954ce1e786002fd9e17521fb5cbd5a2496dc299"
+"compass.v4.hold_sector0_of64" = "0"
+"compass.v4.any_spike_of64" = "64"
+"compass.v4.t40_histogram" = "0:2,1:2,3:3,4:1,5:2,11:1,12:2,13:1,14:3"
+"compass.v4.verdict" = "bump wanders; single-sector lock absent"
+"learn.v3.mbon_per_tick" = "0,0,0,0,0,0,0,0,0,8,0,8,0,8,0,5,0,6,0,4,0,6,0,3,0,0,0,0,0,0,0,0"
+"learn.v3.changed" = "63"
+"learn.v3.floor_min" = "128"
+"learn.v3.ceil_max" = "1024"
+"learn.v3.pre_mbon_8_12" = "16"
+"learn.v3.post_mbon_20_24" = "9"
+"learn.v3.run_anchor" = "4d1fd0233a966f7eba2c3841984e93987f471e98490a6742a86a07024893a79d"
+"learn.v3.learn_anchor" = "f3b1581dffc5da17b48ff93569e85aaeaa197455b99cc31505fcdf8ef6df5016"
+"fault.k0" = "0 3123 3 333333333 576782"
+"fault.k1" = "1 3122 3 333333333 576782"
+"fault.k8" = "8 3115 3 333333333 576782"
+"fault.k64" = "64 3059 3 333333333 576782"
+"fault.k256" = "256 2867 3 333333333 576782"
+"fault.k1024" = "1024 2099 4 250000000 576782"
+"dispute.honest_final" = "f3d639395fce7e866b3f564d52a90b22c104faa7325351626a3ad08faa51d8e8"
+"dispute.dishonest_final" = "f38c4daa094052394adc9a53253c9a1de6cf0cb58af9a6a55161463907e178e4"
+"dispute.divergence_tick" = "23"
+"dispute.bisect_queries_max" = "6"
+"reflex.first_spike_tick" = "LamL:0,LamR:-1,MedL:1,MedR:-1,LobL:2,LobR:-1,CxEb:10,CxFb:9,CxInh:13,MbKc:5,MbMbon:-1,MbApl:-1,Lh:5,DnL:6,DnR:-1,Mdn:22"
+"reflex.latency_dnl" = "6"
+"reflex.latency_mdn" = "22"
+"reflex.dnr_silent" = "True"
+"canary.allones.tick1" = "6c221c70ef0a411e5ceaafc8c31109fec44b21684585e31bd4bea1ae2f11db62"
+"canary.allones.chain_end" = "398e126a88776b4f15f7da9bfb7bd927f47fc32e8a92128a354380ce8d429cc3"
+"canary.self_consistent" = "True"
+"replay.fork_tick" = 10
+"replay.base_anchor_at_fork" = "090600fb1189fe4e74805461610ba01b18a9f4db6b125c6b0f174a9df613d69a"
+"replay.prefix_bound" = true
+"replay.base_counters" = "7,6,1"
+"replay.base_verdict" = "Affirm"
+"replay.mdn10_branch_final" = "62cfbd0f6769cf555005034d4ee34d1229d32a9b0fe043c69df17a2f3df96148"
+"replay.mdn10_counters" = "7,6,5"
+"replay.mdn10_verdict" = "Affirm"
+"divan.seat0_verdict" = "Abstain"
+"divan.seat0_anchor" = "ae3aa8d0afc6a7db9a9bb222b8c6917aefad1dc32dea271da827be696112e5ed"
+"divan.seat1_verdict" = "Affirm"
+"divan.seat1_anchor" = "6b14cece457976715767da61b2cb48ef8ff27cb06b2fb9840887aa2c67a1d1fb"
+"divan.seat2_verdict" = "Abstain"
+"divan.seat2_anchor" = "5400ce9c2b1f00a8159c178b618fc363f3ccddcb9bab3f22ce2c50f6d40612ec"
+"divan.unanimous" = false
+"divan.council" = "Abstain"
+"divan.liar_seat" = 2
+"divan.liar_divergence" = 23
+"divan.liar_final" = "f690c9384e793d80af7e0f2327764d358b7814aff87bb5bcc4eb98823da456e7"
+"divan.seat2_honest_final" = "5400ce9c2b1f00a8159c178b618fc363f3ccddcb9bab3f22ce2c50f6d40612ec"
+"tournament.panel" = 8
+"tournament.abstains_a" = 7
+"tournament.abstains_b" = 5
+"tournament.survivor" = "B"
+"envelope.len" = 136
+"envelope.hex" = "425345314242424242424242424242424242424242424242424242424242424242424242ae3aa8d0afc6a7db9a9bb222b8c6917aefad1dc32dea271da827be696112e5ed6b14cece457976715767da61b2cb48ef8ff27cb06b2fb9840887aa2c67a1d1fb5400ce9c2b1f00a8159c178b618fc363f3ccddcb9bab3f22ce2c50f6d40612ec00010000"
+"envelope.cheap_consistent" = true
+"envelope.selfcheck" = true
+"envelope2.ff_seat_verdicts" = "Abstain,Affirm,Affirm"
+"envelope2.ff_unanimous" = false
+"envelope2.ff_council" = "Abstain"
+"envelope2.len" = 204
+"envelope2.hex" = "42534532ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffb8cd253a0904fc4c472dd5aa7342dcd1fcde767b5cdc51d7f5aa3f16fc4e53b2135aa1433e5c9db08cdd427258847bacc3047c4ed2945343d5abc4f7b0dc299c02a6d3844703acb43f41fd3075d625bed6ef9c556d50fa56517e5e047d8bda51000101000a000000090600fb1189fe4e74805461610ba01b18a9f4db6b125c6b0f174a9df613d69a62cfbd0f6769cf555005034d4ee34d1229d32a9b0fe043c69df17a2f3df96148"
+"envelope2.fork" = 10
+"envelope2.cheap_replay" = true
+"envelope2.nocard_tail" = "0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+"act.tick" = 23
+"act.rows" = 1176
+"act.tape_len" = 24708
+"act.sha256" = "5ddaf94829af4cbb21983e0c14c8e30c8cd8b618135bc1c8f451ba613e95bd30"
+"act.violations_honest" = 0
+"act.fold_honest_ok" = true
+"act.violations_forged" = 192
+"act.fold_forged_still_ok" = false
+"act.sha256_forged" = "d29ee09013792abaf8207d72a195af2501c48aad9c671dbd5281594d7893e097"
+"attest.peer" = "fly-peer-01"
+"attest.epoch" = 7
+"attest.challenge" = "4c707cec26a238c9a256fb06269db732783227b9917e91349b3ceb338fec33cb"
+"attest.l1_canary" = "1ead39dfb6c14294dbb9bc996350ec86d666a956c5e35c17e8fb118f1a085894"
+"attest.l1_prefix_of_l2" = true
+"attest.l2_chain_end" = "d5f675bc1c7d4167ab4bc1ccae7079ea153f1c5967fcbf5fd2fee98a34fa4c45"
+"attest.l3_verdict" = "Abstain"
+"attest.l3_counters" = "4,4,0"
+"attest.epoch_moves_l2" = true
+"d1.honest_tape_sha256" = "5ddaf94829af4cbb21983e0c14c8e30c8cd8b618135bc1c8f451ba613e95bd30"
+"d1.liar_tape_sha256" = "d29ee09013792abaf8207d72a195af2501c48aad9c671dbd5281594d7893e097"
+"d1.honest_expect_violations" = 0
+"d1.liar_expect_violations" = 192
+"d1.fixtures_contract" = "budfly-fixtures-v1"
+"league.seeds" = "0xb0df17,0xb0df18,0xb0df19,0xb0df1a"
+"league.abstains" = "7,5,5,3"
+"league.standing" = "0xb0df1a,0xb0df19,0xb0df18,0xb0df17"
+"league.champion" = "0xb0df1a"
+"erasure.root" = "760e6ebf071924799ffa45d18583101b6cde8650fa92457356ca6ef0f5b9c0c2"
+"erasure.k" = 8
+"erasure.answers" = "755eaa75a8310b12,5a87f98ab7f9396c,868ad8cc550102bf,7135b2308f2f1b16,a4f173125bdac2e7,c193223592a507b0,b123631e2baefe83,cc8aef423b239a96"
+"erasure.bitflip_moves_all" = true
+"erasure.proves_possession" = false
+"hard.tape.mutations" = 24708
+"hard.tape.malformed" = 8
+"hard.tape.viol_caught" = 24300
+"hard.tape.fold_caught" = 4
+"hard.tape.escaped" = 396
+"hard.tape.escape_offsets_sha256" = "52bc5976361948cd0c125cd4f86e78963ed7e2b4efd152d7f1b15c332c1f08a0"
+"hard.tape.escape_classes" = "f16:rb0sp0=396"
+"hard.tape.trunc_decodable" = 0
+"hard.tape.append_decodable" = 0
+"hard.erasure.chunk_avalanche" = 32
+"hard.erasure.epoch_moves" = 8
+"hard.attest.nonce_avalanche" = 32
+"hard.attest.ladder_robust" = 32
+"hard.attest.peer_binding" = true
+"hard.league.council_replay_identical" = true
+"hard.league.shuffle_stable" = true
+"hard.league.tie_engaged" = true
+"hard.league.table_total_order" = true
+"hard.league.total_councils" = 32
+"hard.league.abstain_sum" = 20
+"act2.sha256" = "448c04114d0c88c8263cbfbaa8cbb245c3bc706ce9663abed71d6e5a3878d0d0"
+"act2.violations_honest" = 0
+"act2.fold2_ok" = true
+"act2.head2_tm1" = "a874e27e0a2277a1e6484dfe5e969839dacece50a8c8aca9d645c003b7be6dd9"
+"act2.head2_t" = "6fad2f4c983d0134ebe06b422907a4d065766bfb0d61ab6ea08c5dd8a631c527"
+"act2.violations_forged" = 192
+"act2.forged_fold2_ok" = false
+"act2.sweep_mutations" = 24708
+"act2.sweep_malformed" = 8
+"act2.sweep_viol" = 24300
+"act2.sweep_fold2" = 400
+"act2.sweep_escaped" = 0
+"act2.sweep_escape_hash" = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+"act2.ghosts_retired" = true
+"envelope3.len" = 273
+"envelope3.cards" = 2
+"envelope3.hex" = "42534533ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffb8cd253a0904fc4c472dd5aa7342dcd1fcde767b5cdc51d7f5aa3f16fc4e53b2135aa1433e5c9db08cdd427258847bacc3047c4ed2945343d5abc4f7b0dc299c02a6d3844703acb43f41fd3075d625bed6ef9c556d50fa56517e5e047d8bda5100010100020a000000090600fb1189fe4e74805461610ba01b18a9f4db6b125c6b0f174a9df613d69a62cfbd0f6769cf555005034d4ee34d1229d32a9b0fe043c69df17a2f3df961480400000098f5e3a7de07f4b37b5474c601ac8ec6dd619baf278d7a61c0c3a5883f3025e0e0216bec6461444448ea7ae8647f18c0e7da8c0071dc4f08f46be1bcf5dc599b"
+"envelope3.forks" = "10,4"
+"envelope3.branch2_final" = "e0216bec6461444448ea7ae8647f18c0e7da8c0071dc4f08f46be1bcf5dc599b"
+"envelope3.cheap_replay_all" = true
+"erasure2.rounds" = 4
+"erasure2.schedule" = "12,21,22,28,2,1,7,5;0,15,3,29,24,9,13,17;16,8,23,10,31,19,18,14;26,6,30,4,25,11,27,20"
+"erasure2.coverage_unique" = 32
+"erasure2.round_avalanche" = 4
+"erasure2.answers_sha256" = "75ceca8bbc7d744979276fb3668cdee870cd120c34d0b7eee5078672a2ea41d1"
+"zk.columns" = 8
+"zk.gates" = 4
+"zk.degree_max" = 3
+"zk.window_rows" = 1176
+"zk.honest_violations" = 0
+"zk.forged_violations" = 192
+"league2.s1.abstains" = "7,6,7,5,7,2,6,6"
+"league2.s1.standing" = "0xb0df1c,0xb0df1a,0xb0df1d,0xb0df18,0xb0df1e,0xb0df17,0xb0df1b,0xb0df19"
+"league2.s2.abstains" = "7,5,6,6,8,4,6,7"
+"league2.s2.standing" = "0xb0df1c,0xb0df18,0xb0df1d,0xb0df19,0xb0df1a,0xb0df17,0xb0df1e,0xb0df1b"
+"league2.s3.abstains" = "8,5,7,4,6,2,7,4"
+"league2.s3.standing" = "0xb0df1c,0xb0df1a,0xb0df1e,0xb0df18,0xb0df1b,0xb0df1d,0xb0df19,0xb0df17"
+"league2.seeds" = "0xb0df17,0xb0df18,0xb0df19,0xb0df1a,0xb0df1b,0xb0df1c,0xb0df1d,0xb0df1e"
+"league2.seasons" = 3
+"league2.champions" = "0xb0df1c,0xb0df1c,0xb0df1c"
+"league2.archive_head_final" = "50073d6867b11a3e286d6eb032477c05411b7b5a47faa93e53391c695a59355b"
+"pros.ticks" = 48
+"pros.convicted" = 48
+"pros.divergence_exact" = true
+"pros.viol_min" = 1
+"pros.viol_max" = 241
+"pros.viol_sum" = 8989
+"pros.viol_hash" = "229cc4eb178dd6c88ae88255d8ae24d574cf64ef546ecf3bbd43e471d43b5e67"
+"bse3cheap.mutations" = 273
+"bse3cheap.rejected" = 79
+"bse3cheap.accepted" = 194
+"bse3cheap.accepted_offsets_sha256" = "77d2a278f1f6ac5879aa96eadcc810cced859aef992c01176ad66264824e8a49"
+"bse3cheap.accepted_classes" = "anchors=96;card0.branch_final=32;card1.branch_final=32;digest=32;verdicts=2"
+"zk2.witness_rows" = 1176
+"zk2.witness_sha256" = "bb23c67e50eb155e744b5a1df4a2009a54c210436d41d6af29d3ab6f91b37fc2"
+"zk2.sel_refrac_ones" = 0
+"zk2.sel_above_ones" = 0
+"zk2.gate_g3_rows" = 588
+"zk2.liar_witness_differs" = true
+"zk2.probe_refrac_ones" = 37
+"zk2.probe_above_ones" = 26
+"zk3.window_rows" = 1176
+"zk3.honest_residual_zero" = true
+"zk3.forged_residual_hits" = 192
+"zk3.gate_hits" = "G0=0;G1=0;G2=192;G3=0"
+"zk3.residual_sha256" = "4f437d300ce039c0bf8e815d6f31d52895f04ce78507ad7e25f3e42df185f436"
+"zk3.hits_eq_catalogue" = true
+"budtime.epoch_ticks" = 8
+"budtime.epochs" = 6
+"budtime.final_marker" = "ba41052b32cc1772398dc51cd97fe0fdda2ffefe73e7da7e88f702100927bb74"
+"budtime.markers_sha256" = "1c1847f66d93a92a78a6d04428f56a0ef55ab2511df584d5ad900ad9165bfc3b"
+"budtime.moved_by_tick20" = 4
+"budnet.nodes" = 4
+"budnet.quorum" = 3
+"budnet.mesh_agree_hash" = "2b3000d5ce47057a78e45d12d306c981483affb1a4ead6dbcd3e802208b81b96"
+"budnet.detect_tick" = 20
+"budnet.liar_final_matched_nodes" = 0
+"budnet.group_a_agree_during_partition" = true
+"budnet.heal_catch_tick" = 20
+"zk4.columns" = 9
+"zk4.idents" = 4
+"zk4.honest_zero" = "0,0,0,0"
+"zk4.forged_nonzero" = "0,0,192,0"
+"zk4.integ_arrests_all" = true
+"zk4.mask_sha256" = "4f437d300ce039c0bf8e815d6f31d52895f04ce78507ad7e25f3e42df185f436"
+"zk4.mask_eq_zk3_residual" = true
+"erasure3.data_chunks" = 24
+"erasure3.coded_chunks" = 32
+"erasure3.coded_sha256" = "8a0d21d902da911ac276dc89d2e2ce5427561fe69efd8b950a54567ff1dab179"
+"erasure3.delete_sets" = "2,4,9,12,14,16,17,23;1,4,9,12,13,22,28,29;3,4,7,16,17,22,24,28;11,12,14,18,21,24,25,27;1,3,10,12,17,22,24,26;5,6,10,12,13,22,25,27;3,4,9,13,16,22,27,29;5,6,8,16,19,22,24,31"
+"erasure3.recovered" = 8
+"erasure3.gf_selftest" = true
+"erasure3.tamper_detected" = true

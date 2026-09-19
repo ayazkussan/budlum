@@ -16,7 +16,12 @@ git -C <lubot-clone> -c core.hooksPath=/dev/null show --stat HEAD   # eyeball th
 git push -u origin lubot-series && gh pr create --fill   # the 403 stops the bot, not you
 ```
 
-Verified, not asserted: a clean clone of `main` @ `37d32c9` takes all 32 files
+The 33rd file (`0033-gozcu-...`) is the cross-repo handoff: it pins BudFly
+(budlum) evidence anchors into a pure Lubot-side byte table (`crates/gozcu`).
+Verification ran twice (authoring clone + fresh verify clone, strict `git am -3`
+on all 33, then `diff -r` tree equality: identical).
+
+Verified, not asserted: a clean clone of `main` @ `37d32c9` takes all 33 files
 with strict `git am -3` - no `--reject`, no fallback - and the resulting tree
 has `Cargo.toml` members equal to the 21 directories under `crates/`, and
 `docs/CRATES.md` with one row per crate the series adds (13). The 0029 am ran

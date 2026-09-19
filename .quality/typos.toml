@@ -27,6 +27,10 @@ extend-exclude = [
                           # hand-edited here. A typo inside it is fixed upstream in
                           # the crate, never by editing the mirror and calling it
                           # an export.
+  "01a08674-f696-72cd-b135-24e6cc8e1539 (2).patch", # archived export artifact at
+                          # repo root: diff context lines and quoted crate names
+                          # (`flate2`, `tha`, `Objec`) are verbatim records, not
+                          # hand-edited prose. Same policy as repo-lubot/patches/.
 ]
 
 [default]
@@ -36,9 +40,25 @@ extend-ignore-re = [
   "\\b12D3Koo[A-Za-z0-9]+\\b",          # libp2p PeerID
   "sha256:[0-9a-f]+",                   # docker digest
   "(?i)\\bbud1[a-z0-9]+\\b",            # bech32-style Budlum addresses
+  "\\bflate2\\b",
+  "\\bBSE1\\b",                       # the envelope magic: a frozen wire token,
+                                       # bytes are pinned in goldens, not prose.                       # the crate name from Cargo.toml: an
+                                       # identifier that pins the dep, not prose.
+                                       # Region-ignore (not word map) so a typo'd
+                                       # bare "flate" in prose still fails.
 ]
 
 [default.extend-words]
+# -- BudFly (fly neuromorphic) domain terms -------------------------------------
+BSE = "BSE"
+bse = "bse"
+AER = "AER"
+Inh = "Inh"
+inh = "inh"
+INH = "INH"
+EB = "EB"
+transkript = "transkript"
+Transkript = "Transkript"
 # -- Turkish words (false positives), removed as the migration proceeds --------
 # Each maps to itself = "this spelling is correct, do not suggest a fix".
 blok = "blok"

@@ -110,7 +110,32 @@ jobs:
             --lockfile=xtask/tools/Cargo.lock \
             --lockfile=crates/ai-inference/Cargo.lock \
             --lockfile=crates/budscan/Cargo.lock \
-            --lockfile=bud/Cargo.lock
+            --lockfile=crates/budfly/Cargo.lock \
+            --lockfile=bud/Cargo.lock 2>&1 | tee /tmp/osv-scan.txt
+          exit "${PIPESTATUS[0]}"
+
+      # Same philosophy as the typos step "failure surface": when the gate
+      # fires, the finding must be visible WITHOUT downloading the raw job
+      # log (CI consumers, and sandboxes behind blob-host egress blocks,
+      # see the check annotations but not <run>/logs). Re-surface the first
+      # few scan lines as check annotations, capped so the gate stays quiet
+      # when green and readable when red.
+      - name: OSV failure surface (annotations)
+        if: failure()
+        run: |
+          # filter lines also carry advisory ids; the real finding sits
+          # BEHIND them. Hunt the non-filter lines first, then the tail.
+          scan_out="$(grep -aE 'CVE-|GHSA-|RUSTSEC-' /tmp/osv-scan.txt | grep -av 'filtered out' | head -6 || true)"
+          if [ -n "$scan_out" ]; then
+            echo "::error file=osv-scan.txt,line=1::non-filtered advisory lines:"
+            while IFS= read -r line; do
+              echo "::error file=osv-scan.txt,line=1::${line}"
+            done <<< "$scan_out"
+          fi
+          echo "::error file=osv-scan.txt,line=1::tail of the scan output:"
+          while IFS= read -r line; do
+            echo "::error file=osv-scan.txt,line=1::${line}"
+          done <<< "$(tail -6 /tmp/osv-scan.txt || true)"
 
       # So the list above never shrinks: every Cargo.lock in the repository must
       # be scanned. If a new sub-crate is added and its lock silently stays out

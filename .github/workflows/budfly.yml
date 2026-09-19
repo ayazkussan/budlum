@@ -1,0 +1,159 @@
+name: BudFly
+
+# Crate-scoped validation for `crates/budfly` (connectome-native provable
+# neuromorphic substrate; see docs/BUDFLY.md). Kept separate from ci.yml on
+# purpose: the crate is zero-dependency and standalone, so its gate is small,
+# fast (~2 min) and fails loudly on its own page instead of being lost in a
+# 2,000-line matrix. Same conventions as the other workflows: pinned action
+# SHAs, dtolnay toolchain, rust-cache, least-privilege permissions.
+#
+# Diagnostics discipline: every gate step mirrors its failing output into
+# checks annotations (readable through the Checks API), because runner logs
+# and artifacts sit behind hosts some review environments cannot reach.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: budfly-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+permissions:
+  contents: read
+
+jobs:
+  fmt-apply:
+    # Applies rustfmt in CI and commits the result back when drifted: runner
+    # logs/artifacts are unreadable from some review environments, so rustfmt
+    # itself is the only reliable source of canonical formatting. The gate
+    # job stays the source of truth for PASS/FAIL; this job only repairs.
+    name: apply rustfmt
+    if: ${{ github.event_name == 'pull_request' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      # Checkout the PR head BRANCH (not the detached merge ref): the repair
+      # commit must land on the branch itself.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@6c977a6ca4077a0ceb28ffbe03f59d46e9ac8772 # master 2026-07-16
+        with:
+          toolchain: "1.97.1"
+          components: rustfmt
+      - name: cargo fmt + commit if drifted
+        run: |
+          cargo fmt --manifest-path crates/budfly/Cargo.toml --all
+          git config user.email "budfly-ci@users.noreply.github.com"
+          git config user.name "budfly-ci"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "already formatted"
+          else
+            git commit -m "chore(budfly): cargo fmt applied in CI" 2>&1 | tail -2
+            git push
+          fi
+
+  gate:
+    name: fmt + clippy + tests + goldens + example
+    needs: fmt-apply
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@6c977a6ca4077a0ceb28ffbe03f59d46e9ac8772 # master 2026-07-16
+        with:
+          toolchain: "1.97.1"
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          shared-key: budfly
+
+      - name: fmt
+        run: |
+          out=$(cargo fmt --manifest-path crates/budfly/Cargo.toml --all -- --check 2>&1) || {
+            { echo '### fmt diff (rustfmt --check)'; echo '```diff'; echo "${out}"; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+            echo "${out}" | tail -30 | while IFS= read -r l; do echo "::error::[fmt] ${l}"; done
+            exit 1
+          }
+      # House panic gate: clippy with the crate-level lint table
+      # (unwrap_used/expect_used = deny) under the same -D warnings flag the
+      # root crate lives under.
+      - name: clippy
+        run: |
+          out=$(cargo clippy --manifest-path crates/budfly/Cargo.toml --all-targets -- -D warnings 2>&1) || {
+            { echo '### clippy -D warnings'; echo '```'; echo "${out}"; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+            echo "${out}" | tail -40 | while IFS= read -r l; do echo "::error::[clippy] ${l}"; done
+            exit 1
+          }
+      - name: tests (goldens + scenarios + unit)
+        run: |
+          out=$(cargo test --manifest-path crates/budfly/Cargo.toml 2>&1) || {
+            { echo '### cargo test'; echo '```'; echo "${out}"; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+            # panic lines first: annotation storage is capped, the verdict
+            # must survive the cap before padding lines crowd it out
+            echo "${out}" | grep -E "panicked|assertion|FAILED|failures:|left ==|mismatch|left.*right" | head -25 | while IFS= read -r l; do echo "::error::[tests] ${l}"; done
+            echo "${out}" | tail -12 | while IFS= read -r l; do echo "::error::[tests-tail] ${l}"; done
+            exit 1
+          }
+          echo "${out}" | tail -5
+      - name: chip report example runs
+        run: |
+          out=$(cargo run --manifest-path crates/budfly/Cargo.toml --example fly_chip_report 2>&1) || {
+            echo "${out}" | tail -30 | while IFS= read -r l; do echo "::error::[example] ${l}"; done
+            exit 1
+          }
+
+      - name: fly court example runs
+        run: |
+          out=$(cargo run --manifest-path crates/budfly/Cargo.toml --example fly_court_report 2>&1) || {
+            echo "${out}" | tail -30 | while IFS= read -r l; do echo "::error::[court-example] ${l}"; done
+            exit 1
+          }
+          echo "${out}"
+      # The Python reference is the provenance oracle: it recomputed every
+      # golden anchor committed in tests/goldens.rs. If this passes while the
+      # Rust tests pass, the two implementations agree bit-for-bit.
+      - name: python reference + expansion checks
+        run: |
+          out=$(python3 crates/budfly/scripts/reference_check.py 2>&1) || {
+            echo "${out}" | tail -20 | while IFS= read -r l; do echo "::error::[python] ${l}"; done
+            exit 1
+          }
+          echo "${out}"
+          out=$(python3 crates/budfly/scripts/expansion_check.py 2>&1) || {
+            echo "${out}" | tail -30 | while IFS= read -r l; do echo "::error::[expansion] ${l}"; done
+            exit 1
+          }
+          echo "${out}"
+          # fixture bytes are canonical circuit test vectors: the verifier
+          # recomputes their sha256 from the mirror pins and kills drift
+          out=$(python3 crates/budfly/scripts/dump_fixtures.py 2>&1) || {
+            echo "${out}" | tail -20 | while IFS= read -r l; do echo "::error::[fixtures] ${l}"; done
+            exit 1
+          }
+          echo "${out}"
+
+  determinism-smoke:
+    # Determinism is not just a unit property here, it is the product: compile
+    # twice is unnecessary (no build inputs), but the golden anchors must hold
+    # on a second, pristine runner with a cold cache as well.
+    name: goldens on a cold runner
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@6c977a6ca4077a0ceb28ffbe03f59d46e9ac8772 # master 2026-07-16
+        with:
+          toolchain: "1.97.1"
+      - name: golden anchors reproduce cold
+        run: cargo test --manifest-path crates/budfly/Cargo.toml --test goldens
